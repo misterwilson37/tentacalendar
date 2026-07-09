@@ -8,19 +8,20 @@
 // ============================================================
 
 export const FIREBASE_CONFIG = {
-  apiKey: "PASTE_ME",
-  authDomain: "PASTE_ME.firebaseapp.com",
-  projectId: "PASTE_ME",
-  storageBucket: "PASTE_ME.appspot.com",
-  messagingSenderId: "PASTE_ME",
-  appId: "PASTE_ME"
+  apiKey: "AIzaSyAT6GFOGDQxFk-UpNfrAjTLWXNUxFV7LX4",
+  authDomain: "tentacalendar.firebaseapp.com",
+  projectId: "tentacalendar",
+  storageBucket: "tentacalendar.firebasestorage.app",
+  messagingSenderId: "1046548387495",
+  appId: "1:1046548387495:web:823c563e2474f1a757ad82"
 };
+
 
 // Only these Google accounts may sign in and read/write.
 // Must match the emails in firestore.rules.
 export const ALLOWED_EMAILS = [
   "jacob.v.wilson@gmail.com",
-  "KATIE_EMAIL_HERE@gmail.com"
+  "katie.wilson.bynac@gmail.com"
 ];
 
 // v1 ships with exactly one workspace (HANDOFF D12).
