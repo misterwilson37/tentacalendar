@@ -1,0 +1,28 @@
+rules_version = '2';
+// ============================================================
+// Tentacalendar — firestore.rules
+// Version 0.1.0
+// Allowlist security: only the two emails below may touch data.
+// KEEP IN SYNC with ALLOWED_EMAILS in config.js.
+// Paste into: Firebase Console → Firestore Database → Rules → Publish
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isFamily() {
+      return request.auth != null &&
+        request.auth.token.email in [
+          "jacob.v.wilson@gmail.com",
+          "KATIE_EMAIL_HERE@gmail.com"
+        ];
+    }
+
+    match /workspaces/{wsId} {
+      allow read, write: if isFamily();
+
+      match /{subcollection}/{docId} {
+        allow read, write: if isFamily();
+      }
+    }
+  }
+}
