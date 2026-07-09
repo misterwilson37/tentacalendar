@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     Tentacalendar — index.html
+     Version 0.2.0
+     Adds: project pipeline panel (Katie req #1), new-project form,
+     stage template editor in settings. Year/week views = phase 2.
+     ============================================================ -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tentacalendar</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.2.0">
+</head>
+<body>
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="logo">🐙</div>
+      <h1>Tentacalendar</h1>
+      <p class="tagline">The to-do list that refuses to let go.</p>
+      <button id="signin-btn" class="primary">Sign in with Google</button>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app-screen" hidden>
+    <header>
+      <div class="brand">🐙 Tentacalendar <span id="version" class="version"></span></div>
+      <div class="header-right">
+        <span id="user-label" class="user"></span>
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+        <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- ===== Queue column ===== -->
+      <section id="queue-panel">
+        <div class="day-nav">
+          <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
+          <h2 id="day-label">Today</h2>
+          <button id="day-next" class="icon-btn" title="Next day">▶</button>
+          <button id="day-today" class="mini" hidden>back to today</button>
+        </div>
+
+        <div id="pinned" hidden></div>
+        <div id="queue"></div>
+
+        <div id="waiting" hidden>
+          <h3>Waiting on…</h3>
+          <div id="waiting-list"></div>
+        </div>
+
+        <div id="done" hidden>
+          <h3>Done today <span id="done-count" class="badge-done"></span></h3>
+          <div id="done-list"></div>
+        </div>
+      </section>
+
+      <!-- ===== Projects column (Katie's pipeline) ===== -->
+      <section id="projects-panel">
+        <h3>Projects</h3>
+        <p id="projects-empty" class="hint">No projects yet. Create one on the right — its whole pipeline comes with it.</p>
+        <div id="projects-list"></div>
+      </section>
+
+      <!-- ===== Forms column ===== -->
+      <section id="form-panel">
+        <h3>New task</h3>
+        <form id="task-form">
+          <input id="task-title" type="text" placeholder="What needs doing?" required>
+          <label>Tier
+            <select id="task-tier"></select>
+          </label>
+          <div class="form-row">
+            <label>Due date <input id="task-date" type="date" required></label>
+            <label>Time <input id="task-time" type="time" value="09:00"></label>
+          </div>
+          <label class="esc-label">If ignored, nag again every
+            <span class="esc-inputs">
+              <input id="task-esc-n" type="number" min="1" value="1">
+              <select id="task-esc-unit">
+                <option value="minutes">minutes</option>
+                <option value="hours" selected>hours</option>
+                <option value="days">days</option>
+                <option value="weeks">weeks</option>
+                <option value="months">months</option>
+              </select>
+            </span>
+          </label>
+          <button type="submit" class="primary">Add to the tentacles</button>
+        </form>
+        <p class="hint">↳ on any task adds a follow-up that schedules itself relative to when you actually finish.</p>
+
+        <h3>New project</h3>
+        <form id="project-form">
+          <input id="project-name" type="text" placeholder="Project name (e.g. Alabama Farmers)" required>
+          <div class="form-row">
+            <label>Color <input id="project-color" type="color" value="#4dabf7"></label>
+            <label>Stage tier <select id="project-tier"></select></label>
+          </div>
+          <div class="form-row">
+            <label>Starts <input id="project-start" type="date" required></label>
+            <label>Ends <input id="project-end" type="date" required></label>
+          </div>
+          <button type="submit" class="primary">Launch pipeline</button>
+        </form>
+        <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============ SETTINGS MODAL ============ -->
+  <div id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>⚙️ Settings</h2>
+        <button id="settings-close" class="icon-btn">✕</button>
+      </div>
+
+      <h3>Tiers (priority queue)</h3>
+      <p class="hint">Rank 1 sorts first. "Calendar" tiers hold appointments pulled from Google Calendar; "Tasks" tiers hold checkable items. ❗ carryover tiers get written to tomorrow's calendar if unfinished at midnight.</p>
+      <div id="tier-editor"></div>
+      <button id="tier-add" class="mini">+ Add tier</button>
+
+      <h3>Project stage template</h3>
+      <p class="hint">The universal pipeline copied into every NEW project (existing projects keep their own copy). "Before start" stages activate that many days ahead of the project; "after end" stages trail it.</p>
+      <div id="stage-template-editor"></div>
+      <button id="stage-add" class="mini">+ Add stage</button>
+
+      <h3>Timing</h3>
+      <div class="form-row">
+        <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00</label>
+      </div>
+      <div class="form-row">
+        <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00</label>
+        <label>until <input id="cfg-sleep-end" type="number" min="0" max="23"> :00</label>
+      </div>
+      <div class="form-row">
+        <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
+      </div>
+      <p class="hint" id="poll-cost-hint"></p>
+
+      <h3>Google Calendars <span class="hint-inline">(used in phase 3 — safe to leave blank)</span></h3>
+      <label>Home calendar ID <input id="cfg-home-cal" type="text" placeholder="e.g. family123@group.calendar.google.com"></label>
+      <label>Business calendar ID <input id="cfg-biz-cal" type="text" placeholder=""></label>
+
+      <div class="modal-foot">
+        <button id="settings-save" class="primary">Save settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js?v=0.2.0"></script>
+</body>
+</html>
