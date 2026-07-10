@@ -1,14 +1,15 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.5.0
-// THE PRIORITY ENGINE v2 (D43): sort = expired → chronological →
-// remaining-pipeline × workload → tier → alphabet. Stage timing =
-// direction(before/after) × anchor(start/end) × WEEKDAY offset
-// (D44/D45). Projects surface only within their pipeline window
-// (D48). Pure logic: no DOM, no Firebase.
+// Version 0.6.0
+// 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
+// Most pipeline steps are weight, not deadlines; only dated stages
+// (real offsets or hard dues) drive chronology. Legacy phase
+// "during" now reads as UNDATED (this un-overdues Katie's data with
+// zero migration). Deadline fallback = project end.
+// Priority engine v2 (D43), weekday math (D45), windows (D48).
 // ============================================================
 
-export const QUEUE_VERSION = "0.5.0";
+export const QUEUE_VERSION = "0.6.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEADLINE_HOUR = 17; // computed (date-only) deadlines are "by 5 PM"
@@ -60,21 +61,29 @@ export function weekendNeighbors(ts) {
 
 // ---------- Stage timing (D44) ----------
 
-/** Legacy migration: pre-0.5.0 stages used phase before/during/after. */
+/** Legacy migration: pre-0.5.0 stages used phase before/during/after.
+ *  D50: "during" meant "sometime during the project" — UNDATED. */
 export function normalizeStage(s) {
-  if (s.anchor && s.direction) return s;
+  if (s.direction) return s;
   const phase = s.phase || "during";
   const map = {
     before: { anchor: "start", direction: "before" },
-    during: { anchor: "start", direction: "after" },
+    during: { anchor: "start", direction: "none" },
     after:  { anchor: "end",   direction: "after" }
   };
   return { ...s, ...(map[phase] || map.during) };
 }
 
-/** Computed target date: anchor(start|end) ± offsetDays WEEKDAYS, at 5 PM. */
+export function stageIsDated(s) {
+  const n = normalizeStage(s);
+  return n.dueAt != null || n.direction !== "none";
+}
+
+/** Computed target date: anchor(start|end) ± offsetDays WEEKDAYS, at 5 PM.
+ *  Returns null for undated stages (D50). */
 export function stageScheduledAt(project, stage) {
   const s = normalizeStage(stage);
+  if (s.direction === "none") return null;
   const base = s.anchor === "end" ? (project.endDate || 0) : (project.startDate || 0);
   const dated = addWeekdays(base, s.direction === "before" ? -(s.offsetDays || 0) : (s.offsetDays || 0));
   const d = new Date(dated);
@@ -82,17 +91,21 @@ export function stageScheduledAt(project, stage) {
   return d.getTime();
 }
 
-/** A stage's real deadline: manual hard due wins; else the computed target. */
+/** A stage's real deadline: manual hard due wins; else the computed target;
+ *  null when the stage is undated (it's weight, not a deadline). */
 export function stageEffectiveDate(project, stage) {
   return stage.dueAt ?? stageScheduledAt(project, stage);
 }
 
+function atFivePM(ts) { const d = new Date(ts); d.setHours(17, 0, 0, 0); return d.getTime(); }
+
 /** [first, last] effective dates across ALL stages — the pipeline window (D48). */
 export function projectPipelineWindow(project) {
-  const st = project.stages || [];
-  if (!st.length) return [project.startDate || 0, project.endDate || 0];
-  const ds = st.map(s => stageEffectiveDate(project, s));
-  return [Math.min(...ds), Math.max(...ds)];
+  const start = project.startDate || 0, end = project.endDate || 0;
+  const dated = (project.stages || [])
+    .map(s => stageEffectiveDate(project, s))
+    .filter(d => d != null);
+  return [Math.min(start, ...dated), Math.max(end, ...dated)];
 }
 
 /** The NEXT dated commitment: earliest effective date among incomplete stages. */
@@ -102,9 +115,10 @@ export function nextDeadline(project) {
   st.forEach((s, i) => {
     if (s.completedAt) return;
     const date = stageEffectiveDate(project, s);
+    if (date == null) return; // undated = weight, not deadline (D50)
     if (!best || date < best.date) best = { date, stage: s, index: i };
   });
-  return best; // null when project complete
+  return best; // null = no dated incomplete stages (caller falls back to project end)
 }
 
 export function projectProgress(project) {
@@ -226,7 +240,8 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
       : (dayEnd > startOfDay(first) && dayStart <= last);
     if (!inWindow) continue;
     const nd = nextDeadline(p);
-    const expired = viewingToday && nd && now > nd.date;
+    const deadline = nd ? nd.date : atFivePM(p.endDate || last);
+    const expired = viewingToday && now > deadline;
     const prog = projectProgress(p);
     active.push({
       kind: "stage",
@@ -240,13 +255,13 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
       progressPct: prog.pct,
       workload: p.workload || 2,
       remainingWork: remainingWork(p),
-      deadlineStageName: nd ? nd.stage.name : "",
+      deadlineStageName: nd ? nd.stage.name : "project end",
       deadlineStageIndex: nd ? nd.index : activeIdx,
       deadlineManual: nd ? nd.stage.dueAt != null : false,
-      deadline: nd ? nd.date : last,
-      sortTime: nd ? nd.date : last,
-      time: nd ? nd.date : last,
-      originalDue: nd ? nd.date : last,
+      deadline,
+      sortTime: deadline,
+      time: deadline,
+      originalDue: deadline,
       expired, overdue: expired,
       dueAt: stages[activeIdx].dueAt ?? null
     });
