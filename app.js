@@ -1,6 +1,8 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.6.1
+// Version 0.6.2
+// 0.6.2 (D50): "No date" timing option — most pipeline stages are
+// weight, not deadlines. Project card header wrap fix.
 // 0.6.1: internal module imports are now version-queried (D49) —
 // ?v= on <script> tags does NOT cache-bust ES module imports, so a
 // stale cached config.js (missing CONFIG_VERSION) killed the whole
@@ -20,15 +22,15 @@ import {
   addTask, addFollowUp, setTaskDone, deleteTask, updateTask,
   addProject, deleteProject, updateProject, setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js?v=0.6.1";
+} from "./store.js?v=0.6.2";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage,
   isWeekend, addWeekdays, weekendNeighbors,
   fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.5.0";
+} from "./queue.js?v=0.6.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.6.1";
+export const APP_VERSION = "0.6.2";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -64,7 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#project-cancel").addEventListener("click", cancelProjectEdit);
   $("#project-color").addEventListener("input", checkProjectColor);
   $("#tier-add").addEventListener("click", () => tierEditorRow({}, true));
-  $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "after", anchor: "start", offsetDays: 0 }, true));
+  $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
   $("#settings-save").addEventListener("click", onSaveSettings);
   $("#cfg-poll").addEventListener("input", updatePollCostHint);
   $("#due-save").addEventListener("click", dueSave);
@@ -73,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#stages-save").addEventListener("click", stagesSave);
   $("#stages-cancel").addEventListener("click", () => { $("#stages-modal").hidden = true; });
   $("#stage-proj-add").addEventListener("click", () =>
-    projStageRow({ name: "", direction: "after", anchor: "start", offsetDays: 0, completedAt: null, dueAt: null }, -1, true));
+    projStageRow({ name: "", direction: "none", anchor: "start", offsetDays: 0, completedAt: null, dueAt: null }, -1, true));
   $("#decision-close").addEventListener("click", () => { $("#decision-modal").hidden = true; });
 
   // Tap-to-reveal ⓘ popovers (phones can't hover).
@@ -440,7 +442,7 @@ function renderProjects(now) {
       label.textContent = st.name;
       row.append(label);
 
-      if (st.offsetDays || st.anchor === "end") {
+      if (st.direction && st.direction !== "none") {
         const code = `${st.direction === "before" ? "−" : "+"}${st.offsetDays}wd ${st.anchor === "end" ? "end" : "start"}`;
         row.append(badge(code, `${st.offsetDays} weekday(s) ${st.direction} project ${st.anchor}`));
       }
@@ -524,16 +526,25 @@ function openStagesDialog(p) {
 }
 
 function timingSelects(st) {
+  const dir = st.direction || "none";
+  const undated = dir === "none";
   return `
-    <select class="st-dir" title="Before or after the anchor date">
-      <option value="before" ${st.direction === "before" ? "selected" : ""}>Before</option>
-      <option value="after" ${st.direction !== "before" ? "selected" : ""}>After</option>
+    <select class="st-dir" title="No date: this stage is pipeline weight — it just has to happen before the next dated thing. Before/After: this stage has a real target date.">
+      <option value="none" ${undated ? "selected" : ""}>No date</option>
+      <option value="before" ${dir === "before" ? "selected" : ""}>Before</option>
+      <option value="after" ${dir === "after" ? "selected" : ""}>After</option>
     </select>
-    <select class="st-anchor" title="Counted from project start or project end">
+    <select class="st-anchor" title="Counted from project start or project end" ${undated ? "hidden" : ""}>
       <option value="start" ${st.anchor !== "end" ? "selected" : ""}>start</option>
       <option value="end" ${st.anchor === "end" ? "selected" : ""}>end</option>
     </select>
-    <label class="st-off-label" title="Weekday offset — weekends never count."><input class="st-off" type="number" min="0" value="${st.offsetDays || 0}">wd</label>`;
+    <label class="st-off-label" title="Weekday offset — weekends never count." ${undated ? "hidden" : ""}><input class="st-off" type="number" min="0" value="${st.offsetDays || 0}">wd</label>`;
+}
+
+function syncTimingRow(row) {
+  const undated = row.querySelector(".st-dir").value === "none";
+  row.querySelector(".st-anchor").hidden = undated;
+  row.querySelector(".st-off-label").hidden = undated;
 }
 
 function projStageRow(st, origIndex, isNew) {
@@ -900,6 +911,7 @@ function tierEditorRow(t, isNew) {
 }
 
 function wireTmplRow(row, box) {
+  row.querySelector(".st-dir").addEventListener("change", () => syncTimingRow(row));
   row.querySelector(".st-up").addEventListener("click", () => {
     if (row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
   });
