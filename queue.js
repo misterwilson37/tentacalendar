@@ -1,10 +1,12 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.3.0 ("during" stage offset = days AFTER project start)
+// Version 0.4.0 (version export; stage items carry pipeline progress)
 // Pure logic: escalation math, tier sorting, anchor pinning.
 // No DOM. No Firebase. Everything here is testable in isolation.
 // See HANDOFF.md D3, D6, D7.
 // ============================================================
+
+export const QUEUE_VERSION = "0.4.0";
 
 const UNIT_MS = {
   minutes: 60 * 1000,
@@ -180,9 +182,11 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay }
     if (!showThisDay) continue;
     const hasDue = s.dueAt != null;
     const pseudo = { dueAt: s.dueAt, completedAt: null, escalation: { every: 1, unit: "hours" } };
+    const prog = projectProgress(p);
     active.push({
       kind: "stage",
       id: `${p.id}#${idx}`,
+      progressPct: prog.pct,
       projectId: p.id,
       stageIndex: idx,
       title: s.name,
