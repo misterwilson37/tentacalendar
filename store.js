@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.6.0 (workload on projects; anchor/direction stage seed)
+// Version 0.6.1 (versioned internal imports, D49)
 // All Firebase interaction lives here: auth, seeding, live
 // subscriptions, CRUD. Nothing in here touches the DOM.
 // Schema per HANDOFF.md §3.
@@ -15,9 +15,9 @@ import {
   onSnapshot, query, where, getDocs, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js";
+import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.6.0";
+export const STORE_VERSION = "0.6.1";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
