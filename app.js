@@ -1,8 +1,8 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.2.0
-// UI wiring only. New in 0.2.0: project pipeline panel, stage
-// template editor, celebrations, staleness glow.
+// Version 0.3.0
+// 0.3.0: calendar IDs on anchor tiers (D33), smart new-tier defaults,
+// clamp-honest poll hint, tooltips. (The [hidden] fix is in the CSS.)
 // Logic lives in queue.js; Firebase lives in store.js.
 // ============================================================
 
@@ -440,8 +440,6 @@ function openSettings() {
   $("#cfg-sleep-end").value = c.sleepEnd ?? 6;
   $("#cfg-poll").value = c.pollIntervalMinutes ?? 60;
   updatePollCostHint();
-  $("#cfg-home-cal").value = c.homeCalendarId ?? "";
-  $("#cfg-biz-cal").value = c.businessCalendarId ?? "";
   const box = $("#tier-editor");
   box.innerHTML = "";
   for (const t of S.tiers) tierEditorRow(t, false);
@@ -450,21 +448,42 @@ function openSettings() {
   for (const s of S.stageTemplate) stageTemplateRow(s, false);
 }
 
+const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b197fc", "#f783ac", "#63e6be", "#ffc9c9", "#a5d8ff"];
+
 function tierEditorRow(t, isNew) {
   const box = $("#tier-editor");
+  if (isNew) {
+    // Smart defaults: next rank after the highest currently in the editor,
+    // and a color not already in use (random palette fallback).
+    const ranks = [...box.querySelectorAll(".t-rank")].map(el => parseInt(el.value, 10) || 0);
+    const used = new Set([...box.querySelectorAll(".t-color")].map(el => el.value.toLowerCase()));
+    const fresh = TIER_PALETTE.filter(c => !used.has(c));
+    t = {
+      rank: (ranks.length ? Math.max(...ranks) : 0) + 1,
+      color: (fresh.length ? fresh : TIER_PALETTE)[Math.floor(Math.random() * (fresh.length ? fresh.length : TIER_PALETTE.length))],
+      kind: "task"
+    };
+  }
   const row = document.createElement("div");
   row.className = "tier-row";
   row.dataset.id = t.id || "";
   row.innerHTML = `
-    <input class="t-rank" type="number" min="1" value="${t.rank ?? S.tiers.length + 1}" title="Rank (1 = highest)">
+    <input class="t-rank" type="number" min="1" value="${t.rank ?? 1}" title="Priority rank: 1 sorts first in the to-do queue">
     <input class="t-name" type="text" value="${esc(t.name || "")}" placeholder="Tier name">
-    <input class="t-color" type="color" value="${t.color || "#4dabf7"}">
-    <select class="t-kind">
+    <input class="t-color" type="color" value="${t.color || "#4dabf7"}" title="Tier color (chips in the queue)">
+    <select class="t-kind" title="Tasks = checkable items you create here. Calendar = appointments pulled from a Google Calendar (they pin near their start time and never nag).">
       <option value="task" ${t.kind !== "anchor" ? "selected" : ""}>Tasks</option>
       <option value="anchor" ${t.kind === "anchor" ? "selected" : ""}>Calendar</option>
     </select>
-    <label class="t-carry-label"><input class="t-carry" type="checkbox" ${t.midnightCarryover ? "checked" : ""}> ❗ carryover</label>
-    <button class="t-del" title="Delete tier">✕</button>`;
+    <label class="t-carry-label" title="If tasks in this tier are still unchecked at midnight, they get written onto tomorrow's Google Calendar with a ❗ at the carryover hour below. (Phase 3 feature.)"><input class="t-carry" type="checkbox" ${t.midnightCarryover ? "checked" : ""}> ❗ carryover</label>
+    <button class="t-del" title="Delete tier">✕</button>
+    <input class="t-cal" type="text" value="${esc(t.gcalCalendarId || "")}"
+      placeholder="Google Calendar ID — GCal ⚙️ Settings → pick the calendar → 'Integrate calendar' → Calendar ID (looks like xyz@group.calendar.google.com)"
+      title="Which Google Calendar feeds this tier. Find it: calendar.google.com → ⚙️ Settings → click the calendar in the left list → scroll to 'Integrate calendar' → copy Calendar ID. Your main personal calendar's ID is just your Gmail address."
+      ${t.kind === "anchor" ? "" : "hidden"}>`;
+  row.querySelector(".t-kind").addEventListener("change", ev => {
+    row.querySelector(".t-cal").hidden = ev.target.value !== "anchor";
+  });
   row.querySelector(".t-del").addEventListener("click", () => {
     if (row.dataset.id) {
       if (!confirm(`Delete tier "${t.name}"? Tasks in it will show as "?" until re-tiered.`)) return;
@@ -506,19 +525,19 @@ function onSaveSettings() {
     carryoverWriteHour: clampInt($("#cfg-carryover").value, 0, 23, 9),
     pollIntervalMinutes: clampInt($("#cfg-poll").value, 5, 1440, 60),
     sleepStart: clampInt($("#cfg-sleep-start").value, 0, 23, 22),
-    sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6),
-    homeCalendarId: $("#cfg-home-cal").value.trim(),
-    businessCalendarId: $("#cfg-biz-cal").value.trim()
+    sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6)
   });
   for (const row of document.querySelectorAll(".tier-row")) {
+    const kind = row.querySelector(".t-kind").value;
     const data = {
       rank: clampInt(row.querySelector(".t-rank").value, 1, 99, 99),
       name: row.querySelector(".t-name").value.trim() || "Untitled",
       color: row.querySelector(".t-color").value,
-      kind: row.querySelector(".t-kind").value,
-      midnightCarryover: row.querySelector(".t-carry").checked
+      kind,
+      midnightCarryover: row.querySelector(".t-carry").checked,
+      gcalCalendarId: kind === "anchor" ? row.querySelector(".t-cal").value.trim() : ""
     };
-    if (data.kind === "anchor") data.defaultLeadWindowMinutes = 30;
+    if (kind === "anchor") data.defaultLeadWindowMinutes = 30;
     saveTier(row.dataset.id || null, data);
   }
   const stages = [...document.querySelectorAll(".stage-tmpl-row")].map(row => ({
@@ -535,11 +554,14 @@ function closeSettings() {
 }
 
 function updatePollCostHint() {
+  const raw = parseInt($("#cfg-poll").value, 10);
   const mins = clampInt($("#cfg-poll").value, 5, 1440, 60);
-  const runs = Math.round((60 / mins) * 24 * 30.4);
+  const runs = Math.round((60 / mins) * 24 * 30.4); // 30.4 = avg days/month
+  const clampNote = (!isNaN(raw) && raw !== mins) ? `Minimum is 5 minutes, so I'm using ${mins}. ` : "";
   $("#poll-cost-hint").textContent =
-    `≈ ${runs.toLocaleString()} calendar checks/month. Free tier covers 2,000,000. ` +
-    `Realistic cost at this setting: $0.00. (Phase 3 feature — has no effect yet.)`;
+    `${clampNote}Checking every ${mins} min ≈ ${runs.toLocaleString()} checks/month ` +
+    `(avg 30.4 days). Google charges nothing until 2,000,000/month — unreachable here. ` +
+    `(Phase 3 feature — has no effect yet.)`;
 }
 
 // ---------- Utils ----------
