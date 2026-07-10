@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.5.1 (app.js ?v= bump for the D49 module-cache fix)
+     Version 0.5.3
+     0.5.3: banner/version resync (0.5.2 bumped the data attribute but
+     not this comment — both must move together, always).
+     0.5.2: app.js ?v= → 0.6.2 (D50). 0.5.1: D49 module-cache bump.
      0.5.0: tier filter chips, workload select, due/stages/weekend/
      decision modals + shared popover (all OUTSIDE #drift-wrap, D37).
      ============================================================ -->
@@ -13,7 +16,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
   <link rel="stylesheet" href="tentacalendar.css?v=0.5.1">
 </head>
-<body data-html-version="0.5.2">
+<body data-html-version="0.5.3">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
