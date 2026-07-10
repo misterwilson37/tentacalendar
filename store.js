@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.6.1 (versioned internal imports, D49)
+// Version 0.6.2 (seed template uses dated/undated mix per D50)
 // All Firebase interaction lives here: auth, seeding, live
 // subscriptions, CRUD. Nothing in here touches the DOM.
 // Schema per HANDOFF.md §3.
@@ -17,7 +17,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.6.1";
+export const STORE_VERSION = "0.6.2";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -71,14 +71,14 @@ const SEED_TIERS = [
 //        "after"  = activates offsetDays after project end.
 const SEED_STAGES = [
   { name: "Engagement letter",        direction: "before", anchor: "start", offsetDays: 14 },
-  { name: "Data request",             direction: "after",  anchor: "start", offsetDays: 0 },
-  { name: "Excel setup",              direction: "after",  anchor: "start", offsetDays: 0 },
-  { name: "Word setup",               direction: "after",  anchor: "start", offsetDays: 0 },
-  { name: "Graphic setup",            direction: "after",  anchor: "start", offsetDays: 0 },
+  { name: "Data request",             direction: "after",  anchor: "start", offsetDays: 0 },   // day one
+  { name: "Excel setup",              direction: "none",   anchor: "start", offsetDays: 0 },
+  { name: "Word setup",               direction: "none",   anchor: "start", offsetDays: 0 },
+  { name: "Graphic setup",            direction: "none",   anchor: "start", offsetDays: 0 },
   { name: "Loss data processing",     direction: "after",  anchor: "start", offsetDays: 2 },
   { name: "Non-loss data processing", direction: "after",  anchor: "start", offsetDays: 3 },
-  { name: "Data input",               direction: "after",  anchor: "start", offsetDays: 5 },
-  { name: "Selections",               direction: "before", anchor: "end",   offsetDays: 4 },
+  { name: "Data input",               direction: "none",   anchor: "start", offsetDays: 0 },
+  { name: "Selections",               direction: "none",   anchor: "start", offsetDays: 0 },
   { name: "Proofing",                 direction: "before", anchor: "end",   offsetDays: 3 },
   { name: "Peer review",              direction: "before", anchor: "end",   offsetDays: 2 },
   { name: "Publication",              direction: "before", anchor: "end",   offsetDays: 0 },
