@@ -1,5 +1,7 @@
 # SETUP.md — Tentacalendar Phase 1 Setup Guide
-**Version 0.1.0** | Everything here is doable in ~20 minutes, costs $0, and needs no credit card.
+**Version 0.2.0** | Everything here is doable in ~20 minutes, costs $0, and needs no credit card.
+
+> **v0.2.0 notes:** config.js now ships with BOTH allowlist emails already filled in (Jake + Katie) — only the Firebase config values still need pasting. **Recommended browser: Google Chrome, signed into your PERSONAL Google account** (the app is wall-to-wall Google auth; your sumnerk12.net account isn't on the allowlist). Calendar IDs now live on each Calendar-type tier in ⚙️ Settings, with the where-to-find-it instructions in the field itself.
 
 You've already done step 0 (repo + CNAME). Gold star. 🐙
 
@@ -42,7 +44,7 @@ You've already done step 0 (repo + CNAME). Gold star. 🐙
 2. Nickname: `tentacalendar-web`. Do **NOT** check Firebase Hosting (GitHub Pages is our host).
 3. **Register app.** It shows a `firebaseConfig` code block.
 4. Copy the six values (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId) into the matching fields in **config.js**.
-5. While you're in config.js: replace `KATIE_EMAIL_HERE@gmail.com` in ALLOWED_EMAILS with Katie's real Gmail. **It must exactly match what you put in firestore.rules.**
+5. ALLOWED_EMAILS already contains both of your addresses as of v0.3.0 — just confirm they match firestore.rules exactly.
 
 ## Part 5 — Deploy
 
@@ -65,5 +67,6 @@ First sign-in by either of you auto-seeds the workspace: your six tiers (Home, B
 
 - **Popup opens & closes instantly** → Part 2 step 4 (authorized domains).
 - **"Missing or insufficient permissions"** → rules email doesn't exactly match the signed-in account (check for typos, or you published rules before editing Katie's email).
+- **Settings modal is open on page load, covering the sign-in screen** → you're running cached pre-0.3.0 CSS. Hard-refresh (Cmd+Shift+R). If it persists, verify tentacalendar.css?v=0.3.0 in index.html actually deployed.
 - **Version number in the header doesn't match what you shipped** → hard-refresh (Ctrl+Shift+R); the ?v= query strings on script/css tags handle most cache-busting, but the browser can cling to index.html itself.
 - **Signed in but bounced back to the sign-in screen** → the account you picked isn't in ALLOWED_EMAILS in config.js.
