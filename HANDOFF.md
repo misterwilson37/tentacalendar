@@ -1,5 +1,5 @@
 # HANDOFF.md — Tentacalendar
-**Document version: 0.5.0** | Last updated: 2026-07-09 | Last session: v0.3.0 — first deploy bug fixed ([hidden] vs display), calendar-per-tier redesign
+**Document version: 0.6.0** | Last updated: 2026-07-10 | Last session: v0.4.0 'The Katie Release' — LIVE AND IN DAILY USE (Katie: 6 projects, tasks, follow-ups, phone + Safari)
 
 > **Purpose:** Project continuity document, updated at the END of every session, no exceptions (same ritual status as version bumps). Any Claude — Fable, Opus, or otherwise — reading this cold should be able to continue mid-feature. New Claude: read this entire file before writing code.
 
@@ -52,7 +52,12 @@ Interim displays: home-theater 60" 4K TV and possibly a 1080p projector (see D27
 | D33 | **(NEW v0.3.0) Calendar IDs live ON anchor tiers** (`gcalCalendarId` field, shown in tier editor when kind=Calendar), replacing the separate homeCalendarId/businessCalendarId config fields (REMOVED from settings/config and UI). Phase 3 pollCalendars iterates anchor tiers with non-empty gcalCalendarId. | Jake's setup feedback: the tier IS the calendar mapping; separate section created an ordering/linkage gap. |
 | D34 | **(NEW v0.3.0) "During" stage offset = N days AFTER project start** (0 = day one), still gated on predecessors. Previously the offset was silently ignored for during-phase. | Jake: "what does during do if I set it for 7?" — now it does the obvious thing. |
 | D35 | **(NEW v0.3.0) CSS must contain `[hidden] { display: none !important; }`** — the hidden attribute is UA-stylesheet priority and ANY author display rule silently overrides it. This caused the first-deploy failure (settings modal permanently rendered over the sign-in screen; all Firestore writes fired unauthenticated → permission errors). NEVER remove this rule; when an element with hidden won't hide, check for a display rule on it. | First-deploy post-mortem. |
-| D36 | **(NEW v0.3.0) Recommended browser: Google Chrome on the Mac, signed into personal accounts.** Firefox has a popup-loop history for Jake; the school Safari session (sumnerk12.net) isn't allowlisted. | |
+| D36 | **(REVISED v0.4.0) Recommended browser: Microsoft Edge** (Mac+PC, Chromium, no OAuth-eating shields) — Chrome is county-managed on Jake's machines. Safari confirmed working. Firefox still banned (popup-loop history). Personal Google accounts only. | |
+| D37 | **(NEW v0.4.0) NEVER apply CSS transform to <body> or any ancestor of position:fixed elements** — a transformed ancestor becomes the containing block for fixed descendants (this made the settings modal center against full PAGE height, appearing far below the fold once Katie had 6 projects). The pixel drift lives on #drift-wrap; the settings modal and the celebrate.js canvas MUST stay outside it. Second CSS-platform landmine after D35. | Found by Jake changing a tier color. |
+| D38 | **(NEW v0.4.0 — Katie) Everything is editable.** ✎ on queue tasks loads the task form in edit mode (title/tier/due/escalation, Save/Cancel); ✎ on project cards loads the project form in edit mode (name/color/tier/dates); ✎ on waiting follow-ups edits title/offset via prompts. Editing project dates reflows stage activations automatically (computed, D3-style). Stage hard dues already editable via 📅 (blank clears). | "Us humans make mistakes — we need to be able to make changes to everything." |
+| D39 | **(NEW v0.4.0 — Katie) Queue progress wash:** stage rows' backgrounds fill left-to-right with a translucent tint (16%) of the project color by pipeline completion %, so today's list shows step AND depth per project at a glance. | Her at-a-glance request, queue edition of D30a. |
+| D40 | **(NEW v0.4.0 — Katie) Color conflict assistant:** project form pre-suggests the pool color maximally distant from existing project colors (never stomps a human-picked value); live warning when chosen color is within RGB distance 25 ("same as") or 60 ("very close to") of another project, naming that project and its date range, plus a suggestion. | Several of her 6 projects currently share colors. |
+| D41 | **(NEW v0.4.0) Per-file versioning:** only files that actually changed get bumps; versions drift apart by design. Every JS module self-declares (APP_VERSION in app.js — moved OUT of config.js; STORE_VERSION; QUEUE_VERSION; CELEBRATE_VERSION), CSS declares --tc-version, index.html declares body[data-html-version]. Header badge = app.js version; hovering it and the settings-modal footer show the full per-file report. Fix-dominant releases bump z; feature releases bump y. | Jake's correction of my blanket-bump habit. |
 
 ## 3. Firestore Schema (implemented v0.2.0)
 
@@ -74,9 +79,11 @@ Cloud Functions (phase 3, none exist): `mirrorTask`, `pollCalendars` (+manual tr
 
 (1) ✅ accountability core; **(1.5) ✅ Katie's pipeline + celebrations (v0.2.0)**; (2) year view: quarter-aligned grid, 3 anchor modes (D31), project bars w/ progress ghost-fill (D30a), drag/resize (D32), legend/compact (D27), month zoom (D18); (3) Cloud Functions; (4) week view + kiosk polish.
 
-**Files: config.js 0.3.0 (BOTH allowlist emails now filled in) · store.js 0.3.0 · queue.js 0.3.0 · app.js 0.3.0 · index.html 0.3.0 · tentacalendar.css 0.3.0 · celebrate.js 0.1.0 · firestore.rules 0.1.0 (deployed by Jake with both emails — matches config) · SETUP.md 0.2.0.**
+**Files: app.js 0.4.0 · store.js 0.4.0 · queue.js 0.4.0 · index.html 0.4.0 · tentacalendar.css 0.4.0 · config.js 0.3.1 (APP_VERSION removed per D41) · celebrate.js 0.1.1 · firestore.rules 0.1.0 · SETUP.md 0.2.1.**
 
-**Deploy status:** Firebase project + rules are LIVE (Jake). First deploy of v0.2.0 failed before sign-in — see D35 post-mortem. v0.3.0 fixes it; Jake redeploys all files and retests in Chrome with his personal account. Firestore is still unseeded (no successful sign-in has occurred yet), so the v0.3.0 seed changes (gcalCalendarId on anchors, config field removal) apply cleanly with no migration.
+**Deploy status: LIVE AND IN USE.** v0.3.0 deployed successfully; Katie onboarded herself from her phone: 6 projects created, stages ticked to reality, tasks + a follow-up created, confetti approved ("she liked her little confetti"). Verified working: sign-in both accounts, seeding, overdue red styling, day-nav placement of future tasks, follow-up waiting state, phone layout, Safari layout. v0.4.0 awaiting Jake's deploy. NOTE: v0.4.0 removes nothing from the DB; config's old homeCalendarId/businessCalendarId fields (if seeded pre-0.3.0 — they were NOT, seeding happened on 0.3.0) are moot.
+
+**Expectation set with Katie:** phase 1 has NO notifications — a due task simply becomes due, then escalates/glows. Real phone notifications arrive in phase 3 via the GCal mirror.
 
 **Additional smoke tests for v0.2.0 (after SETUP.md Part 6):**
 7. ⚙️ → confirm the 13-stage template is seeded; reorder something with ▲▼, save, reopen, verify.
@@ -91,11 +98,14 @@ Cloud Functions (phase 3, none exist): `mirrorTask`, `pollCalendars` (+manual tr
 
 1. ~~Katie's Gmail~~ RESOLVED: katie.wilson.bynac@gmail.com is in firestore.rules (deployed) and config.js v0.3.0.
 2. Kiosk PC/Chromebook, Chrome (D36). Sleep-mode implementation at phase 4.
-3. Year view: bar-lane packing + label threshold + drag/resize interaction details — phase 2 build.
+3. Year view: bar-lane packing + label threshold + drag/resize interaction details — phase 2 build. **PHASE 2 IS THE NEXT SESSION** (Jake asked "is it calendar view time?" — answer: yes, next session; v0.4.0 was the editing/polish release).
 4. Months-unit escalation clamping (Jan 31→Feb 28) — confirm in real use.
 5. Un-completing a parent doesn't rewind materialized follow-ups — watch in use.
 6. Per-project stage editing is currently: check/uncheck, set/clear hard due date. Renaming/reordering/adding stages WITHIN an existing project = not yet built; template edits don't retrofit. Revisit when Katie hits it.
-7. Stage items use the project's `tierId` for queue ranking (defaults selectable at creation). Confirm Katie wants them in Work tier or wants a dedicated "Projects" tier.
+7. Stage items use the project's `tierId` for queue ranking. Confirm Katie wants Work tier or a dedicated "Projects" tier.
+8. Renaming/reordering/adding stages WITHIN an existing project still not built (template edits don't retrofit). Katie hasn't hit it yet.
+9. Tooltips are native title attributes (hover-only, no touch). If Katie does setup from her phone and misses them, build ⓘ tap-popovers.
+10. Tier color changes could get the same conflict assistant as projects (D40) — not yet wired.
 
 ## 6. Standing Meta-Rules (ALL sessions)
 
@@ -115,3 +125,4 @@ Cloud Functions (phase 3, none exist): `mirrorTask`, `pollCalendars` (+manual tr
 | 2026-07-09 | Claude Fable 5 | PHASE 1 BUILD: 8 files @ v0.1.0 incl. SETUP.md. Spark-first, adjustable poll. HANDOFF 0.3.0. |
 | 2026-07-09 | Claude Fable 5 | KATIE'S REQUESTS (pre-deploy, so no migration): D28 pipelines (13-stage template, before/during/after activation, early-completion skipping, per-stage hard dues), D29 celebration engine + wave, D30 gradient split (progress fills + staleness glow, both partly shipped), D31 quarter-aligned year view spec, D32 drag/resize spec. Shipped v0.2.0 across all app files + new celebrate.js. Smoke tests 7–13 added. HANDOFF 0.4.0. |
 | 2026-07-09 | Claude Fable 5 | FIRST DEPLOY BUG + SETUP FEEDBACK. Diagnosis: settings modal rendered over sign-in screen because author `display:flex` overrides the `hidden` attribute (D35); unauthenticated Save clicks caused all the permission errors — rules were correct. Fixed with `[hidden]{display:none!important}` (also latently fixed #auth-screen). Jake's feedback shipped: calendar IDs moved onto anchor tiers w/ where-to-find ⓘ (D33), during-offset semantics (D34), smart new-tier defaults (rank max+1, unused random color), clamp-honest poll hint (his "8,755 mystery" = silent clamp of 1→5 min), 24-hr clock labels, tooltips throughout, Chrome recommendation (D36), Katie's email into config.js. All app files → 0.3.0; SETUP.md → 0.2.0. HANDOFF 0.5.0.
+| 2026-07-10 | Claude Fable 5 | v0.4.0 "THE KATIE RELEASE." App is live + in daily use (6 real projects). Shipped her feedback: edit-everything (D38), queue progress wash (D39), color conflict assistant (D40). Fixed her modal bug — transform-on-body broke position:fixed → #drift-wrap (D37). Jake's process correction adopted: per-file versioning w/ full version report in header tooltip + settings footer (D41); APP_VERSION moved out of config.js. Browser dart re-thrown: Edge (D36 rev — county manages Chrome). Set Katie's expectation: no notifications until phase 3. NEXT SESSION = PHASE 2 YEAR VIEW (D11/D27/D30a/D31/D32). HANDOFF 0.6.0.
