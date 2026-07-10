@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.2.0
-     Adds: project pipeline panel (Katie req #1), new-project form,
-     stage template editor in settings. Year/week views = phase 2.
+     Version 0.3.0
+     0.3.0: calendar IDs move onto anchor tiers (Calendars section
+     removed), 24-hr clock labels, tooltip hints throughout.
      ============================================================ -->
 <html lang="en">
 <head>
@@ -11,7 +11,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.2.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.3.0">
 </head>
 <body>
 
@@ -122,21 +122,21 @@
       </div>
 
       <h3>Tiers (priority queue)</h3>
-      <p class="hint">Rank 1 sorts first. "Calendar" tiers hold appointments pulled from Google Calendar; "Tasks" tiers hold checkable items. ❗ carryover tiers get written to tomorrow's calendar if unfinished at midnight.</p>
+      <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. Hover anything in a row for an explanation.</p>
       <div id="tier-editor"></div>
       <button id="tier-add" class="mini">+ Add tier</button>
 
       <h3>Project stage template</h3>
-      <p class="hint">The universal pipeline copied into every NEW project (existing projects keep their own copy). "Before start" stages activate that many days ahead of the project; "after end" stages trail it.</p>
+      <p class="hint">The universal pipeline copied into every NEW project (existing projects keep their own copy). Offset days: <em>Before start</em> = activates N days ahead of the project (engagement letter −14). <em>During</em> = activates N days after the project starts (0 = day one). <em>After end</em> = N days past the finish. A stage never surfaces before its predecessors are checked, whatever its date.</p>
       <div id="stage-template-editor"></div>
       <button id="stage-add" class="mini">+ Add stage</button>
 
       <h3>Timing</h3>
       <div class="form-row">
-        <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00</label>
+        <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr clock: 9 = 9 AM, 21 = 9 PM)</span></label>
       </div>
       <div class="form-row">
-        <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00</label>
+        <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
         <label>until <input id="cfg-sleep-end" type="number" min="0" max="23"> :00</label>
       </div>
       <div class="form-row">
@@ -144,16 +144,12 @@
       </div>
       <p class="hint" id="poll-cost-hint"></p>
 
-      <h3>Google Calendars <span class="hint-inline">(used in phase 3 — safe to leave blank)</span></h3>
-      <label>Home calendar ID <input id="cfg-home-cal" type="text" placeholder="e.g. family123@group.calendar.google.com"></label>
-      <label>Business calendar ID <input id="cfg-biz-cal" type="text" placeholder=""></label>
-
       <div class="modal-foot">
         <button id="settings-save" class="primary">Save settings</button>
       </div>
     </div>
   </div>
 
-  <script type="module" src="app.js?v=0.2.0"></script>
+  <script type="module" src="app.js?v=0.3.0"></script>
 </body>
 </html>
