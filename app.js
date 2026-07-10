@@ -1,38 +1,45 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.4.0
-// 0.4.0 ("The Katie Release"): edit-everything (tasks, projects,
-// waiting follow-ups), queue progress wash on stage rows, color
-// conflict assistant, drift-wrap fix (transform vs position:fixed,
-// D37), per-file version reporting.
+// Version 0.6.0
+// 0.6.0 ("Priority Engine v2"): D43 sort wired, workload select,
+// next-deadline labels, tier filter chips (D47), grouped overdue
+// decision modal (D46), weekend-date interception (D45), plus the
+// 0.5.x features: due-date dialog, per-project stage surgery,
+// tap popovers, numbered project-tier dropdown.
 // ============================================================
 
+import { CONFIG_VERSION } from "./config.js";
 import {
   watchAuth, signIn, signOutUser, STORE_VERSION,
   subscribeTiers, subscribeTasks, subscribeEvents, subscribeConfig,
   subscribeProjects, subscribeStageTemplate,
   addTask, addFollowUp, setTaskDone, deleteTask, updateTask,
-  addProject, deleteProject, updateProject, setStageDone, setStageDue,
+  addProject, deleteProject, updateProject, setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
 } from "./store.js";
-import { buildQueue, projectProgress, fmtTime, fmtDay, QUEUE_VERSION } from "./queue.js";
+import {
+  buildQueue, projectProgress, remainingWork, normalizeStage,
+  isWeekend, addWeekdays, weekendNeighbors,
+  fmtTime, fmtDay, QUEUE_VERSION
+} from "./queue.js";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js";
 
-export const APP_VERSION = "0.4.0";
+export const APP_VERSION = "0.6.0";
 const $ = sel => document.querySelector(sel);
+const DAY_MS = 86400000;
 
 // ---------- State ----------
 const S = {
   user: null,
-  tiers: [],
-  tasks: [],
-  events: [],
-  projects: [],
-  stageTemplate: [],
+  tiers: [], tasks: [], events: [], projects: [], stageTemplate: [],
   config: null,
   viewDay: Date.now(),
   editingTaskId: null,
   editingProjectId: null,
+  dueTarget: null,          // {projectId, stageIndex}
+  stagesTarget: null,       // projectId
+  weekendPending: null,     // {payload, field} mid-validation project save
+  hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
   lastSuggestedColor: "#4dabf7",
   unsubs: []
 };
@@ -53,13 +60,37 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#project-cancel").addEventListener("click", cancelProjectEdit);
   $("#project-color").addEventListener("input", checkProjectColor);
   $("#tier-add").addEventListener("click", () => tierEditorRow({}, true));
-  $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", phase: "during", offsetDays: 0 }, true));
+  $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "after", anchor: "start", offsetDays: 0 }, true));
   $("#settings-save").addEventListener("click", onSaveSettings);
   $("#cfg-poll").addEventListener("input", updatePollCostHint);
+  $("#due-save").addEventListener("click", dueSave);
+  $("#due-clear").addEventListener("click", dueClear);
+  $("#due-cancel").addEventListener("click", () => { $("#due-modal").hidden = true; });
+  $("#stages-save").addEventListener("click", stagesSave);
+  $("#stages-cancel").addEventListener("click", () => { $("#stages-modal").hidden = true; });
+  $("#stage-proj-add").addEventListener("click", () =>
+    projStageRow({ name: "", direction: "after", anchor: "start", offsetDays: 0, completedAt: null, dueAt: null }, -1, true));
+  $("#decision-close").addEventListener("click", () => { $("#decision-modal").hidden = true; });
+
+  // Tap-to-reveal ⓘ popovers (phones can't hover).
+  document.addEventListener("click", ev => {
+    const dot = ev.target.closest(".info-dot");
+    const pop = $("#popover");
+    if (dot && dot.dataset.info) {
+      pop.textContent = dot.dataset.info;
+      pop.hidden = false;
+      const r = dot.getBoundingClientRect();
+      pop.style.top = `${r.bottom + 6}px`;
+      pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8))}px`;
+      ev.stopPropagation();
+    } else if (!ev.target.closest("#popover")) {
+      pop.hidden = true;
+    }
+  });
 
   watchAuth(onSignedIn, onSignedOut);
-  setInterval(tick, 60 * 1000);       // D22: 1-minute tick
-  setInterval(drift, 5 * 1000);       // D21: slow sinusoidal pixel drift
+  setInterval(tick, 60 * 1000);
+  setInterval(drift, 5 * 1000);
 });
 
 function reportVersions() {
@@ -68,7 +99,7 @@ function reportVersions() {
   const htmlVersion = document.body.dataset.htmlVersion || "?";
   const report =
     `app.js ${APP_VERSION} · store.js ${STORE_VERSION} · queue.js ${QUEUE_VERSION} · ` +
-    `celebrate.js ${CELEBRATE_VERSION} · css ${cssVersion} · html ${htmlVersion}`;
+    `celebrate.js ${CELEBRATE_VERSION} · config.js ${CONFIG_VERSION} · css ${cssVersion} · html ${htmlVersion}`;
   $("#version").textContent = "v" + APP_VERSION;
   $("#version").title = report;
   const line = $("#versions-line");
@@ -80,10 +111,10 @@ function onSignedIn(user) {
   $("#auth-screen").hidden = true;
   $("#app-screen").hidden = false;
   $("#user-label").textContent = user.email;
-  S.unsubs.push(subscribeTiers(t => { S.tiers = t; refreshTierSelects(); render(); }));
-  S.unsubs.push(subscribeTasks(t => { S.tasks = t; render(); }));
+  S.unsubs.push(subscribeTiers(t => { S.tiers = t; refreshTierSelects(); renderFilters(); render(); }));
+  S.unsubs.push(subscribeTasks(t => { S.tasks = t; render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeEvents(e => { S.events = e; render(); }));
-  S.unsubs.push(subscribeProjects(p => { S.projects = p; suggestProjectColor(); render(); }));
+  S.unsubs.push(subscribeProjects(p => { S.projects = p; suggestProjectColor(); render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
   S.unsubs.push(subscribeConfig(c => { S.config = c; }));
 }
@@ -101,29 +132,54 @@ let lastTickDay = new Date().getDate();
 
 function tick() {
   const d = new Date();
-  if (d.getDate() !== lastTickDay) {        // midnight rollover (D22)
+  if (d.getDate() !== lastTickDay) {
     lastTickDay = d.getDate();
     S.viewDay = Date.now();
+    maybeDecisionTime();
   }
   render();
 }
 
-// D37: the drift transform lives on #drift-wrap, NEVER on <body> —
-// a transform on an ancestor becomes the containing block for
-// position:fixed descendants (the settings-modal-centered-way-
-// downpage bug). Modal + confetti canvas live OUTSIDE the wrap.
+// D37: drift transforms #drift-wrap, NEVER <body>.
 let driftT = 0;
 function drift() {
   driftT += 0.03;
-  const x = Math.sin(driftT) * 2;
-  const y = Math.cos(driftT * 0.7) * 2;
   const wrap = $("#drift-wrap");
-  if (wrap) wrap.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+  if (wrap) wrap.style.transform =
+    `translate(${(Math.sin(driftT) * 2).toFixed(2)}px, ${(Math.cos(driftT * 0.7) * 2).toFixed(2)}px)`;
 }
 
-function shiftDay(n) {
-  S.viewDay += n * 24 * 60 * 60 * 1000;
-  render();
+function shiftDay(n) { S.viewDay += n * DAY_MS; render(); }
+
+// ---------- Tier filters (D47) ----------
+
+function persistHidden() {
+  localStorage.setItem("tc-hidden-tiers", JSON.stringify([...S.hiddenTierIds]));
+}
+
+function renderFilters() {
+  const box = $("#tier-filters");
+  if (!box) return;
+  box.innerHTML = "";
+  for (const t of S.tiers) {
+    const chip = document.createElement("button");
+    const hidden = S.hiddenTierIds.has(t.id);
+    chip.className = "filter-chip" + (hidden ? " chip-off" : "");
+    chip.textContent = (hidden ? "○ " : "● ") + t.name;
+    chip.style.borderColor = t.color;
+    if (!hidden) chip.style.background = hexToRgba(t.color, 0.18);
+    chip.title = hidden ? `Show ${t.name} in the queue` : `Hide ${t.name} from the queue (this device only)`;
+    chip.addEventListener("click", () => {
+      if (!hidden && (t.rank ?? 99) <= 4) {
+        if (!confirm(`"${t.name}" is a top-priority tier (rank ${t.rank}). Hide it from this device's queue anyway?\n\nHidden tiers are also excluded from overdue check-ins until you show them again.`)) return;
+      }
+      if (hidden) S.hiddenTierIds.delete(t.id); else S.hiddenTierIds.add(t.id);
+      persistHidden();
+      renderFilters();
+      render();
+    });
+    box.append(chip);
+  }
 }
 
 // ---------- Rendering ----------
@@ -132,8 +188,8 @@ function render() {
   if (!S.user) return;
   const now = Date.now();
   const q = buildQueue({
-    tasks: S.tasks, events: S.events, tiers: S.tiers,
-    projects: S.projects, now, viewDay: S.viewDay
+    tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
+    now, viewDay: S.viewDay, hiddenTierIds: S.hiddenTierIds
   });
 
   const sameDay = new Date(S.viewDay).toDateString() === new Date(now).toDateString();
@@ -174,13 +230,17 @@ function renderPinned(pinned, now) {
   }
 }
 
-/** Katie's aging glow: the longer something festers, the harder it is to ignore. */
-function staleGlow(row, originalDue, now) {
-  const days = (now - originalDue) / 86400000;
+function staleGlow(row, deadline, now) {
+  const days = (now - deadline) / DAY_MS;
   if (days <= 0) return;
   const blur = Math.min(3 + days * 3.5, 16);
   const alpha = Math.min(0.25 + days * 0.12, 0.7);
   row.style.boxShadow = `0 0 ${blur.toFixed(0)}px rgba(255,107,107,${alpha.toFixed(2)})`;
+}
+
+/** Time + date, date omitted only when it's the viewed day (the Bonnie fix). */
+function whenLabel(ts) {
+  return sameDayAsView(ts) ? fmtTime(ts) : `${fmtTime(ts)} ${fmtDay(ts)}`;
 }
 
 function renderQueue(items, now) {
@@ -192,16 +252,14 @@ function renderQueue(items, now) {
   }
   for (const it of items) {
     const row = document.createElement("div");
-    row.className = "row" + (it.overdue ? " overdue" : "") + (it.kind === "event" ? " event-row" : "");
+    row.className = "row" + (it.expired ? " overdue" : "") + (it.kind === "event" ? " event-row" : "");
     if (it.kind === "stage") {
       row.style.borderLeft = `4px solid ${it.projectColor || "#4dd0c4"}`;
-      // Katie's progress wash: pale fill of the project color, left-to-right
-      // by pipeline completion, so the glance shows step AND depth.
       const pct = Math.round((it.progressPct || 0) * 100);
       row.style.background =
         `linear-gradient(90deg, ${hexToRgba(it.projectColor || "#4dd0c4", 0.16)} ${pct}%, transparent ${pct}%)`;
     }
-    if (it.overdue) staleGlow(row, it.originalDue, now);
+    if (it.expired) staleGlow(row, it.kind === "stage" ? it.deadline : it.originalDue, now);
 
     if (it.kind === "task") {
       const cb = document.createElement("input");
@@ -214,6 +272,7 @@ function renderQueue(items, now) {
     } else if (it.kind === "stage") {
       const cb = document.createElement("input");
       cb.type = "checkbox";
+      cb.title = `Mark "${it.title}" done`;
       cb.addEventListener("change", ev => onStageToggle(it.projectId, it.stageIndex, cb.checked, ev));
       row.append(cb);
     } else {
@@ -227,20 +286,22 @@ function renderQueue(items, now) {
 
     const main = document.createElement("div");
     main.className = "row-main";
-    let timeLabel;
+    let sub;
     if (it.kind === "event") {
-      timeLabel = fmtTime(it.time) + (it.end ? "–" + fmtTime(it.end) : "");
-    } else if (it.kind === "stage" && !it.hasDue) {
-      timeLabel = sameDayAsView(it.activatedAt)
-        ? `active today`
-        : `active since ${fmtDay(it.activatedAt)}`;
-    } else if (it.overdue) {
-      timeLabel = `<s>${fmtTime(it.originalDue)}${sameDayAsView(it.originalDue) ? "" : " " + fmtDay(it.originalDue)}</s> → ${fmtTime(it.time)}`;
+      sub = fmtTime(it.time) + (it.end ? "–" + fmtTime(it.end) : "");
+    } else if (it.kind === "stage") {
+      const dl = `${esc(it.deadlineStageName)} — ${fmtDay(it.deadline)}${it.deadlineManual ? " " + fmtTime(it.deadline) : ""}`;
+      sub = it.expired
+        ? `<s>${dl}</s> <span class="badge">❗ missed</span>`
+        : `next: ${dl}` + (it.workload !== 2 ? ` · ${it.workload === 3 ? "heavy" : "light"}` : "");
+    } else if (it.expired) {
+      sub = `<s>${whenLabel(it.originalDue)}</s> → ${fmtTime(it.time)} <span class="badge">❗ overdue</span>`;
     } else {
-      timeLabel = fmtTime(it.time);
+      sub = whenLabel(it.originalDue);
     }
-    const stagePrefix = it.kind === "stage" ? `<span class="stage-proj" style="color:${it.projectColor}">${esc(it.projectName)}</span> · ` : "";
-    main.innerHTML = `<strong>${stagePrefix}${esc(it.title)}</strong><span class="sub">${timeLabel}${it.overdue ? ' <span class="badge">❗ overdue</span>' : ""}</span>`;
+    const stagePrefix = it.kind === "stage"
+      ? `<span class="stage-proj" style="color:${it.projectColor}">${esc(it.projectName)}</span> · ` : "";
+    main.innerHTML = `<strong>${stagePrefix}${esc(it.title)}</strong><span class="sub">${sub}</span>`;
     row.append(main);
 
     if (it.kind === "task") {
@@ -251,7 +312,8 @@ function renderQueue(items, now) {
       );
     }
     if (it.kind === "stage") {
-      row.append(iconBtn("📅", "Set/change this stage's hard due date", () => stageDuePrompt(it.projectId, it.stageIndex, it.title)));
+      row.append(iconBtn("⏰", "Set/change this stage's hard due date", () =>
+        openDueDialog(it.projectId, it.stageIndex, it.title, it.dueAt)));
     }
     list.append(row);
   }
@@ -328,9 +390,11 @@ function renderProjects(now) {
 
     const head = document.createElement("div");
     head.className = "project-head";
-    head.innerHTML = `<strong>${esc(p.name)}</strong><span class="sub">${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}</span>`;
+    const wl = p.workload === 3 ? " · heavy" : p.workload === 1 ? " · light" : "";
+    head.innerHTML = `<strong>${esc(p.name)}</strong><span class="sub">${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}${wl}</span>`;
     head.append(
-      iconBtn("✎", "Edit project (name, color, tier, dates)", () => startProjectEdit(p)),
+      iconBtn("✎", "Edit project (name, color, tier, dates, workload)", () => startProjectEdit(p)),
+      iconBtn("✎⋮", "Edit this project's stages (rename, reorder, add, remove)", () => openStagesDialog(p)),
       iconBtn("✕", "Delete project", () => {
         if (confirm(`Delete project "${p.name}" and its pipeline?`)) deleteProject(p.id);
       })
@@ -352,34 +416,37 @@ function renderProjects(now) {
     card.append(barWrap);
 
     const stages = p.stages || [];
-    const activeIdx = stages.findIndex(s => !s.completedAt);
+    const activeIdx = stages.findIndex(x => !x.completedAt);
     const list = document.createElement("div");
     list.className = "stage-list";
-    stages.forEach((s, i) => {
+    stages.forEach((sRaw, i) => {
+      const st = normalizeStage(sRaw);
       const row = document.createElement("div");
       row.className = "stage-row"
-        + (s.completedAt ? " stage-done" : "")
+        + (st.completedAt ? " stage-done" : "")
         + (i === activeIdx ? " stage-active" : "");
       const cb = document.createElement("input");
       cb.type = "checkbox";
-      cb.checked = !!s.completedAt;
+      cb.checked = !!st.completedAt;
       cb.addEventListener("change", ev => onStageToggle(p.id, i, cb.checked, ev));
       row.append(cb);
 
       const label = document.createElement("span");
       label.className = "stage-name";
-      label.textContent = s.name;
+      label.textContent = st.name;
       row.append(label);
 
-      if (s.phase === "before") row.append(badge(`B−${s.offsetDays}d`, "Activates before project start"));
-      if (s.phase === "after") row.append(badge(`A+${s.offsetDays}d`, "Activates after project end"));
-      if (s.dueAt) {
-        const due = badge(`📅 ${fmtDay(s.dueAt)}`, "Hard due date — click to change/clear");
+      if (st.offsetDays || st.anchor === "end") {
+        const code = `${st.direction === "before" ? "−" : "+"}${st.offsetDays}wd ${st.anchor === "end" ? "end" : "start"}`;
+        row.append(badge(code, `${st.offsetDays} weekday(s) ${st.direction} project ${st.anchor}`));
+      }
+      if (st.dueAt) {
+        const due = badge(`⏰ ${fmtDay(st.dueAt)}`, "Hard due date — click to change/clear");
         due.classList.add("clickable");
-        due.addEventListener("click", () => stageDuePrompt(p.id, i, s.name));
+        due.addEventListener("click", () => openDueDialog(p.id, i, st.name, st.dueAt));
         row.append(due);
-      } else if (!s.completedAt) {
-        const setDue = iconBtn("📅", "Set a hard due date", () => stageDuePrompt(p.id, i, s.name));
+      } else if (!st.completedAt) {
+        const setDue = iconBtn("⏰", "Set a hard due date", () => openDueDialog(p.id, i, st.name, null));
         setDue.classList.add("stage-due-btn");
         row.append(setDue);
       }
@@ -392,22 +459,7 @@ function renderProjects(now) {
 
 async function onStageToggle(projectId, stageIndex, done, ev) {
   const result = await setStageDone(projectId, stageIndex, done);
-  if (done && result) {
-    celebrate(result.allDone ? 3 : 2, clickPoint(ev));
-  }
-}
-
-function stageDuePrompt(projectId, stageIndex, stageName) {
-  const input = prompt(
-    `Hard due date for "${stageName}" (YYYY-MM-DD, optionally " HH:MM").\nLeave blank to clear.`,
-    ""
-  );
-  if (input === null) return;
-  if (input.trim() === "") { setStageDue(projectId, stageIndex, null); return; }
-  const parts = input.trim().split(/\s+/);
-  const ts = new Date(`${parts[0]}T${parts[1] || "09:00"}`).getTime();
-  if (isNaN(ts)) { alert("Couldn't read that date. Try YYYY-MM-DD."); return; }
-  setStageDue(projectId, stageIndex, ts);
+  if (done && result) celebrate(result.allDone ? 3 : 2, clickPoint(ev));
 }
 
 function badge(text, title) {
@@ -426,16 +478,160 @@ function clickPoint(ev) {
   return {};
 }
 
+// ---------- Due-date dialog ----------
+
+function openDueDialog(projectId, stageIndex, stageName, existingDueAt) {
+  S.dueTarget = { projectId, stageIndex };
+  $("#due-title").textContent = `Hard due date — ${stageName}`;
+  if (existingDueAt) {
+    const d = new Date(existingDueAt);
+    $("#due-date").value = toDateInput(d);
+    $("#due-time").value = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  } else {
+    $("#due-date").value = "";
+    $("#due-time").value = "17:00";
+  }
+  $("#due-clear").hidden = !existingDueAt;
+  $("#due-modal").hidden = false;
+}
+
+function dueSave() {
+  const date = $("#due-date").value;
+  if (!date || !S.dueTarget) { $("#due-modal").hidden = true; return; }
+  const time = $("#due-time").value || "17:00";
+  setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, new Date(`${date}T${time}`).getTime());
+  $("#due-modal").hidden = true;
+}
+
+function dueClear() {
+  if (S.dueTarget) setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, null);
+  $("#due-modal").hidden = true;
+}
+
+// ---------- Per-project stage surgery (D42) ----------
+
+function openStagesDialog(p) {
+  S.stagesTarget = p.id;
+  $("#stages-title").textContent = `✎ Stages — ${p.name}`;
+  const box = $("#stage-proj-editor");
+  box.innerHTML = "";
+  (p.stages || []).forEach((st, i) => projStageRow(normalizeStage(st), i, false));
+  $("#stages-modal").hidden = false;
+}
+
+function timingSelects(st) {
+  return `
+    <select class="st-dir" title="Before or after the anchor date">
+      <option value="before" ${st.direction === "before" ? "selected" : ""}>Before</option>
+      <option value="after" ${st.direction !== "before" ? "selected" : ""}>After</option>
+    </select>
+    <select class="st-anchor" title="Counted from project start or project end">
+      <option value="start" ${st.anchor !== "end" ? "selected" : ""}>start</option>
+      <option value="end" ${st.anchor === "end" ? "selected" : ""}>end</option>
+    </select>
+    <label class="st-off-label" title="Weekday offset — weekends never count."><input class="st-off" type="number" min="0" value="${st.offsetDays || 0}">wd</label>`;
+}
+
+function projStageRow(st, origIndex, isNew) {
+  const box = $("#stage-proj-editor");
+  const row = document.createElement("div");
+  row.className = "stage-tmpl-row" + (st.completedAt ? " proj-stage-done" : "");
+  row.dataset.orig = String(origIndex);
+  row.innerHTML = `
+    <span class="st-move"><button type="button" class="st-up" title="Move up">▲</button><button type="button" class="st-down" title="Move down">▼</button></span>
+    <input class="st-name" type="text" value="${esc(st.name || "")}" placeholder="Stage name">
+    ${timingSelects(st)}
+    <span class="st-flags">${st.completedAt ? "✓" : ""}${st.dueAt ? " ⏰" : ""}</span>
+    <button type="button" class="st-del" title="Remove stage from this project">✕</button>`;
+  wireTmplRow(row, box);
+  box.append(row);
+  if (isNew) row.querySelector(".st-name").focus();
+}
+
+function stagesSave() {
+  const p = S.projects.find(x => x.id === S.stagesTarget);
+  if (!p) { $("#stages-modal").hidden = true; return; }
+  const orig = p.stages || [];
+  const stages = [...document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")].map(row => {
+    const oi = parseInt(row.dataset.orig, 10);
+    const carried = (oi >= 0 && orig[oi]) ? orig[oi] : { completedAt: null, dueAt: null };
+    return {
+      name: row.querySelector(".st-name").value.trim() || "Untitled stage",
+      direction: row.querySelector(".st-dir").value,
+      anchor: row.querySelector(".st-anchor").value,
+      offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
+      completedAt: carried.completedAt ?? null,
+      dueAt: carried.dueAt ?? null
+    };
+  });
+  setProjectStages(S.stagesTarget, stages);
+  $("#stages-modal").hidden = true;
+}
+
+// ---------- Overdue decision modal (D46) ----------
+
+function decisionKey() {
+  const d = new Date();
+  return `tc-decision-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function maybeDecisionTime() {
+  if (!S.user) return;
+  if (localStorage.getItem(decisionKey())) return;
+  const now = Date.now();
+  const q = buildQueue({
+    tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
+    now, viewDay: now, hiddenTierIds: S.hiddenTierIds
+  });
+  const stale = q.items.filter(it =>
+    it.expired && (now - (it.kind === "stage" ? it.deadline : it.originalDue)) >= 2 * DAY_MS);
+  if (!stale.length) return;
+  localStorage.setItem(decisionKey(), "1"); // once per day per device
+  const list = $("#decision-list");
+  list.innerHTML = "";
+  for (const it of stale) {
+    const days = Math.floor((now - (it.kind === "stage" ? it.deadline : it.originalDue)) / DAY_MS);
+    const row = document.createElement("div");
+    row.className = "row decision-row";
+    const main = document.createElement("div");
+    main.className = "row-main";
+    const name = it.kind === "stage" ? `${it.projectName}: ${it.deadlineStageName}` : it.title;
+    main.innerHTML = `<strong>${esc(name)}</strong><span class="sub">${days} day${days === 1 ? "" : "s"} overdue</span>`;
+    row.append(main);
+    const nextWd = (() => { const t = addWeekdays(now, 1); const d = new Date(t); d.setHours(9, 0, 0, 0); return d.getTime(); })();
+    row.append(
+      iconBtn("✓", "Mark it done", ev => {
+        if (it.kind === "stage") onStageToggle(it.projectId, it.deadlineStageIndex, true, ev);
+        else { setTaskDone(it.id, true); celebrate(1, clickPoint(ev)); }
+        row.remove();
+      }),
+      iconBtn("↷", `Reschedule to ${fmtDay(nextWd)} 9:00 AM`, () => {
+        if (it.kind === "stage") setStageDue(it.projectId, it.deadlineStageIndex, nextWd);
+        else updateTask(it.id, { dueAt: nextWd });
+        row.remove();
+      })
+    );
+    list.append(row);
+  }
+  $("#decision-modal").hidden = false;
+}
+
 // ---------- Task form (create + edit) ----------
 
 function refreshTierSelects() {
-  const taskOpts = S.tiers.filter(t => t.kind !== "anchor")
-    .map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+  const taskTiers = S.tiers.filter(t => t.kind !== "anchor"); // rank-sorted upstream
+  const taskOpts = taskTiers.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+  const projOpts = taskTiers.map(t => `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
   const keep1 = $("#task-tier").value, keep2 = $("#project-tier").value;
   $("#task-tier").innerHTML = taskOpts;
-  $("#project-tier").innerHTML = taskOpts;
-  if (keep1) $("#task-tier").value = keep1;
-  if (keep2) $("#project-tier").value = keep2;
+  $("#project-tier").innerHTML = projOpts;
+  if (keep1 && taskTiers.some(t => t.id === keep1)) $("#task-tier").value = keep1;
+  if (keep2 && taskTiers.some(t => t.id === keep2)) {
+    $("#project-tier").value = keep2;
+  } else {
+    const work = taskTiers.find(t => t.name.toLowerCase() === "work");
+    if (work) $("#project-tier").value = work.id;
+  }
 }
 
 function startTaskEdit(task) {
@@ -474,14 +670,11 @@ function onTaskFormSubmit(ev) {
   if (!title || !tierId || !date) return;
   const dueAt = new Date(`${date}T${time}`).getTime();
   const payload = { title, tierId, dueAt, escalation: { every, unit } };
-  if (S.editingTaskId) {
-    updateTask(S.editingTaskId, payload).then(cancelTaskEdit);
-  } else {
-    addTask(payload).then(() => { $("#task-title").value = ""; });
-  }
+  if (S.editingTaskId) updateTask(S.editingTaskId, payload).then(cancelTaskEdit);
+  else addTask(payload).then(() => { $("#task-title").value = ""; });
 }
 
-// ---------- Project form (create + edit) ----------
+// ---------- Project form (create + edit) + weekend interception (D45) ----------
 
 function startProjectEdit(p) {
   S.editingProjectId = p.id;
@@ -491,6 +684,7 @@ function startProjectEdit(p) {
   $("#project-name").value = p.name;
   $("#project-color").value = p.color;
   $("#project-tier").value = p.tierId;
+  $("#project-workload").value = String(p.workload || 2);
   $("#project-start").value = toDateInput(new Date(p.startDate));
   $("#project-end").value = toDateInput(new Date(p.endDate));
   checkProjectColor();
@@ -503,6 +697,7 @@ function cancelProjectEdit() {
   $("#project-submit").textContent = "Launch pipeline";
   $("#project-cancel").hidden = true;
   $("#project-form").reset();
+  $("#project-workload").value = "2";
   suggestProjectColor(true);
   $("#project-color-hint").textContent = "";
 }
@@ -512,21 +707,65 @@ function onProjectFormSubmit(ev) {
   const name = $("#project-name").value.trim();
   const color = $("#project-color").value;
   const tierId = $("#project-tier").value;
+  const workload = parseInt($("#project-workload").value, 10) || 2;
   const start = $("#project-start").value;
   const end = $("#project-end").value;
   if (!name || !tierId || !start || !end) return;
-  const startDate = new Date(`${start}T00:00`).getTime();
-  const endDate = new Date(`${end}T00:00`).getTime();
-  if (endDate < startDate) { alert("Project can't end before it starts. (The octopus checked.)"); return; }
-  const payload = { name, color, tierId, startDate, endDate };
-  if (S.editingProjectId) {
-    updateProject(S.editingProjectId, payload).then(cancelProjectEdit);
-  } else {
-    addProject(payload).then(() => { $("#project-name").value = ""; suggestProjectColor(true); });
+  const payload = {
+    name, color, tierId, workload,
+    startDate: new Date(`${start}T00:00`).getTime(),
+    endDate: new Date(`${end}T00:00`).getTime()
+  };
+  if (payload.endDate < payload.startDate) {
+    alert("Project can't end before it starts. (The octopus checked.)");
+    return;
   }
+  validateWeekends(payload, "startDate");
 }
 
-// ---------- Color conflict assistant ----------
+/** D45: project start/end must be weekdays — everything else is computed
+ *  from them. Checks fields one at a time via the weekend modal. */
+function validateWeekends(payload, field) {
+  if (field === null) { commitProject(payload); return; }
+  const next = field === "startDate" ? "endDate" : null;
+  if (!isWeekend(payload[field])) { validateWeekends(payload, next); return; }
+  const { fri, mon } = weekendNeighbors(payload[field]);
+  S.weekendPending = { payload, field, next, fri, mon };
+  const which = field === "startDate" ? "start" : "end";
+  const dow = new Date(payload[field]).toLocaleDateString([], { weekday: "long" });
+  $("#weekend-text").textContent =
+    `${fmtDay(payload[field])} is a ${dow} — are you sure you want that as the project ${which} date? Pipeline math counts weekdays only.`;
+  $("#weekend-fri").textContent = `No — ${fmtDay(fri)}`;
+  $("#weekend-mon").textContent = `No — ${fmtDay(mon)}`;
+  $("#weekend-modal").hidden = false;
+}
+
+function weekendChoice(choice) {
+  const w = S.weekendPending;
+  $("#weekend-modal").hidden = true;
+  if (!w) return;
+  S.weekendPending = null;
+  if (choice === "back") return;
+  if (choice === "fri") w.payload[w.field] = w.fri;
+  if (choice === "mon") w.payload[w.field] = w.mon;
+  // "yes" keeps the weekend date as chosen
+  if (w.field === "startDate") $("#project-start").value = toDateInput(new Date(w.payload.startDate));
+  else $("#project-end").value = toDateInput(new Date(w.payload.endDate));
+  validateWeekends(w.payload, w.next);
+}
+document.addEventListener("DOMContentLoaded", () => {
+  $("#weekend-yes").addEventListener("click", () => weekendChoice("yes"));
+  $("#weekend-fri").addEventListener("click", () => weekendChoice("fri"));
+  $("#weekend-mon").addEventListener("click", () => weekendChoice("mon"));
+  $("#weekend-back").addEventListener("click", () => weekendChoice("back"));
+});
+
+function commitProject(payload) {
+  if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(cancelProjectEdit);
+  else addProject(payload).then(() => { $("#project-name").value = ""; suggestProjectColor(true); });
+}
+
+// ---------- Color conflict assistant (D40) ----------
 
 const COLOR_POOL = [
   "#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b197fc",
@@ -538,22 +777,16 @@ function hexToRgb(hex) {
   const h = hex.replace("#", "");
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
-
 function hexToRgba(hex, a) {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r},${g},${b},${a})`;
 }
-
 function colorDistance(h1, h2) {
   const [r1, g1, b1] = hexToRgb(h1), [r2, g2, b2] = hexToRgb(h2);
   return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
 }
-
-/** Pick the pool color farthest from every existing project color. */
 function bestFreeColor() {
-  const used = S.projects
-    .filter(p => p.id !== S.editingProjectId)
-    .map(p => p.color);
+  const used = S.projects.filter(p => p.id !== S.editingProjectId).map(p => p.color);
   if (!used.length) return COLOR_POOL[Math.floor(Math.random() * COLOR_POOL.length)];
   let best = COLOR_POOL[0], bestScore = -1;
   for (const c of COLOR_POOL) {
@@ -562,9 +795,6 @@ function bestFreeColor() {
   }
   return best;
 }
-
-/** Only auto-suggest while the field still holds our last suggestion —
- *  never stomp a color the human actually picked. */
 function suggestProjectColor(force = false) {
   const field = $("#project-color");
   if (!field || S.editingProjectId) return;
@@ -575,7 +805,6 @@ function suggestProjectColor(force = false) {
     checkProjectColor();
   }
 }
-
 function checkProjectColor() {
   const hint = $("#project-color-hint");
   if (!hint) return;
@@ -618,7 +847,7 @@ function openSettings() {
   for (const t of S.tiers) tierEditorRow(t, false);
   const stBox = $("#stage-template-editor");
   stBox.innerHTML = "";
-  for (const s of S.stageTemplate) stageTemplateRow(s, false);
+  for (const st of S.stageTemplate) stageTemplateRow(normalizeStage(st), false);
 }
 
 const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b197fc", "#f783ac", "#63e6be", "#ffc9c9", "#a5d8ff"];
@@ -639,7 +868,7 @@ function tierEditorRow(t, isNew) {
   row.className = "tier-row";
   row.dataset.id = t.id || "";
   row.innerHTML = `
-    <input class="t-rank" type="number" min="1" value="${t.rank ?? 1}" title="Priority rank: 1 sorts first in the to-do queue">
+    <input class="t-rank" type="number" min="1" value="${t.rank ?? 1}" title="Priority rank: only breaks ties in the queue now (D43), but orders the filter chips and dropdowns">
     <input class="t-name" type="text" value="${esc(t.name || "")}" placeholder="Tier name">
     <input class="t-color" type="color" value="${t.color || "#4dabf7"}" title="Tier color (chips in the queue)">
     <select class="t-kind" title="Tasks = checkable items you create here. Calendar = appointments pulled from a Google Calendar (they pin near their start time and never nag).">
@@ -649,8 +878,8 @@ function tierEditorRow(t, isNew) {
     <label class="t-carry-label" title="If tasks in this tier are still unchecked at midnight, they get written onto tomorrow's Google Calendar with a ❗ at the carryover hour below. (Phase 3 feature.)"><input class="t-carry" type="checkbox" ${t.midnightCarryover ? "checked" : ""}> ❗ carryover</label>
     <button class="t-del" title="Delete tier">✕</button>
     <input class="t-cal" type="text" value="${esc(t.gcalCalendarId || "")}"
-      placeholder="Google Calendar ID — GCal ⚙️ Settings → pick the calendar → 'Integrate calendar' → Calendar ID (looks like xyz@group.calendar.google.com)"
-      title="Which Google Calendar feeds this tier. Find it: calendar.google.com → ⚙️ Settings → click the calendar in the left list → scroll to 'Integrate calendar' → copy Calendar ID. Your main personal calendar's ID is just your Gmail address."
+      placeholder="Google Calendar ID — GCal ⚙️ → pick calendar → 'Integrate calendar' → Calendar ID"
+      title="Which Google Calendar feeds this tier. calendar.google.com → ⚙️ Settings → click the calendar → 'Integrate calendar' → Calendar ID. Your main personal calendar's ID is just your Gmail address."
       ${t.kind === "anchor" ? "" : "hidden"}>`;
   row.querySelector(".t-kind").addEventListener("change", ev => {
     row.querySelector(".t-cal").hidden = ev.target.value !== "anchor";
@@ -666,20 +895,7 @@ function tierEditorRow(t, isNew) {
   if (isNew) row.querySelector(".t-name").focus();
 }
 
-function stageTemplateRow(s, isNew) {
-  const box = $("#stage-template-editor");
-  const row = document.createElement("div");
-  row.className = "stage-tmpl-row";
-  row.innerHTML = `
-    <span class="st-move"><button class="st-up" title="Move up">▲</button><button class="st-down" title="Move down">▼</button></span>
-    <input class="st-name" type="text" value="${esc(s.name || "")}" placeholder="Stage name">
-    <select class="st-phase" title="Before start: activates N days before the project begins. During: activates N days after the project starts (0 = day one). After end: N days after the project ends. A stage never surfaces before its predecessors are checked.">
-      <option value="before" ${s.phase === "before" ? "selected" : ""}>Before start</option>
-      <option value="during" ${s.phase !== "before" && s.phase !== "after" ? "selected" : ""}>During</option>
-      <option value="after" ${s.phase === "after" ? "selected" : ""}>After end</option>
-    </select>
-    <label class="st-off-label" title="Day offset for the phase chosen at left.">±<input class="st-off" type="number" min="0" value="${s.offsetDays || 0}">d</label>
-    <button class="st-del" title="Remove stage">✕</button>`;
+function wireTmplRow(row, box) {
   row.querySelector(".st-up").addEventListener("click", () => {
     if (row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
   });
@@ -687,6 +903,18 @@ function stageTemplateRow(s, isNew) {
     if (row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
   });
   row.querySelector(".st-del").addEventListener("click", () => row.remove());
+}
+
+function stageTemplateRow(st, isNew) {
+  const box = $("#stage-template-editor");
+  const row = document.createElement("div");
+  row.className = "stage-tmpl-row";
+  row.innerHTML = `
+    <span class="st-move"><button class="st-up" title="Move up">▲</button><button class="st-down" title="Move down">▼</button></span>
+    <input class="st-name" type="text" value="${esc(st.name || "")}" placeholder="Stage name">
+    ${timingSelects(st)}
+    <button class="st-del" title="Remove stage">✕</button>`;
+  wireTmplRow(row, box);
   box.append(row);
   if (isNew) row.querySelector(".st-name").focus();
 }
@@ -711,23 +939,22 @@ function onSaveSettings() {
     if (kind === "anchor") data.defaultLeadWindowMinutes = 30;
     saveTier(row.dataset.id || null, data);
   }
-  const stages = [...document.querySelectorAll(".stage-tmpl-row")].map(row => ({
+  const stages = [...document.querySelectorAll("#stage-template-editor .stage-tmpl-row")].map(row => ({
     name: row.querySelector(".st-name").value.trim() || "Untitled stage",
-    phase: row.querySelector(".st-phase").value,
+    direction: row.querySelector(".st-dir").value,
+    anchor: row.querySelector(".st-anchor").value,
     offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0)
   }));
   saveStageTemplate(stages);
   closeSettings();
 }
 
-function closeSettings() {
-  $("#settings-modal").hidden = true;
-}
+function closeSettings() { $("#settings-modal").hidden = true; }
 
 function updatePollCostHint() {
   const raw = parseInt($("#cfg-poll").value, 10);
   const mins = clampInt($("#cfg-poll").value, 5, 1440, 60);
-  const runs = Math.round((60 / mins) * 24 * 30.4); // 30.4 = avg days/month
+  const runs = Math.round((60 / mins) * 24 * 30.4);
   const clampNote = (!isNaN(raw) && raw !== mins) ? `Minimum is 5 minutes, so I'm using ${mins}. ` : "";
   $("#poll-cost-hint").textContent =
     `${clampNote}Checking every ${mins} min ≈ ${runs.toLocaleString()} checks/month ` +
