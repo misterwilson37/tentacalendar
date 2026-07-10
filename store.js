@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.2.0 (adds projects + pipeline stages + stage template)
+// Version 0.3.0 (calendar IDs live ON anchor tiers — D33)
 // All Firebase interaction lives here: auth, seeding, live
 // subscriptions, CRUD. Nothing in here touches the DOM.
 // Schema per HANDOFF.md §3.
@@ -54,8 +54,8 @@ export function signOutUser() {
 // Dark-theme ROYGBIV, all editable in settings.
 
 const SEED_TIERS = [
-  { name: "Home",     rank: 1, color: "#ff6b6b", kind: "anchor", midnightCarryover: false, defaultLeadWindowMinutes: 30 },
-  { name: "Business", rank: 2, color: "#ffa94d", kind: "anchor", midnightCarryover: false, defaultLeadWindowMinutes: 30 },
+  { name: "Home",     rank: 1, color: "#ff6b6b", kind: "anchor", midnightCarryover: false, defaultLeadWindowMinutes: 30, gcalCalendarId: "" },
+  { name: "Business", rank: 2, color: "#ffa94d", kind: "anchor", midnightCarryover: false, defaultLeadWindowMinutes: 30, gcalCalendarId: "" },
   { name: "Work",     rank: 3, color: "#ffd43b", kind: "task",   midnightCarryover: true },
   { name: "Family",   rank: 4, color: "#69db7c", kind: "task",   midnightCarryover: true },
   { name: "Personal", rank: 5, color: "#4dabf7", kind: "task",   midnightCarryover: false },
@@ -92,8 +92,6 @@ async function ensureSeed(user) {
     batch.set(doc(col("tiers")), t);
   }
   batch.set(doc(db, "workspaces", WORKSPACE_ID, "settings", "config"), {
-    homeCalendarId: "",
-    businessCalendarId: "",
     carryoverWriteHour: 9,      // Jake: 9 AM, adjustable (open Q1 resolved)
     pollIntervalMinutes: 60,    // GCal poll cadence (phase 3); Jake: hourly default
     sleepStart: 22,             // 10 PM
