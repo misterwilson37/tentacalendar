@@ -1,9 +1,8 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.4.0
-   0.4.0: drift moves to #drift-wrap (D37: transform on <body> broke
-   position:fixed for the modal), form-action rows, color-warn hint,
-   version custom property.
+   Version 0.5.0
+   0.5.0: filter chips, modal-shell system (due/stages/weekend/
+   decision), popover, workload badge, decision rows.
    ============================================================ */
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
@@ -12,7 +11,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.4.0";
+  --tc-version: "0.5.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -177,14 +176,45 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 .hint { color: var(--ink-dim); font-size: .78rem; }
 .hint-inline { color: var(--ink-dim); font-size: .75rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 
-/* ---------- Settings modal ---------- */
-#settings-modal {
+/* ---------- Modal system ---------- */
+#settings-modal, .modal-shell {
   position: fixed; inset: 0;
   background: rgba(4, 8, 12, .75);
   display: flex; align-items: center; justify-content: center;
   z-index: 50;
   padding: 1rem;
 }
+.modal-sm { width: min(420px, 100%); }
+.flex-spring { flex: 1; }
+.weekend-choices { display: flex; flex-direction: column; gap: .5rem; margin-top: .8rem; }
+.decision-row .row-main strong { color: var(--danger); }
+
+/* Tier filter chips (D47) */
+#tier-filters { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+.filter-chip {
+  border: 1px solid var(--line); border-radius: 99px;
+  background: transparent; color: var(--ink);
+  font-size: .72rem; font-weight: 600; padding: .2rem .6rem;
+}
+.filter-chip.chip-off { color: var(--ink-dim); opacity: .55; border-style: dashed; }
+
+/* Shared tap popover */
+#popover {
+  position: fixed; z-index: 130;
+  max-width: 300px;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: .78rem;
+  padding: .5rem .65rem;
+  box-shadow: 0 4px 18px rgba(0,0,0,.5);
+}
+
+.proj-stage-done .st-name { text-decoration: line-through; opacity: .6; }
+.st-flags { font-size: .75rem; color: var(--accent); white-space: nowrap; }
+.stage-tmpl-row .st-dir { width: 5.2rem; }
+.stage-tmpl-row .st-anchor { width: 4.6rem; }
 .modal-card {
   background: var(--panel);
   border: 1px solid var(--line);
