@@ -1,23 +1,24 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.3.0
-// 0.3.0: calendar IDs on anchor tiers (D33), smart new-tier defaults,
-// clamp-honest poll hint, tooltips. (The [hidden] fix is in the CSS.)
-// Logic lives in queue.js; Firebase lives in store.js.
+// Version 0.4.0
+// 0.4.0 ("The Katie Release"): edit-everything (tasks, projects,
+// waiting follow-ups), queue progress wash on stage rows, color
+// conflict assistant, drift-wrap fix (transform vs position:fixed,
+// D37), per-file version reporting.
 // ============================================================
 
-import { APP_VERSION } from "./config.js";
 import {
-  watchAuth, signIn, signOutUser,
+  watchAuth, signIn, signOutUser, STORE_VERSION,
   subscribeTiers, subscribeTasks, subscribeEvents, subscribeConfig,
   subscribeProjects, subscribeStageTemplate,
-  addTask, addFollowUp, setTaskDone, deleteTask,
-  addProject, deleteProject, setStageDone, setStageDue,
+  addTask, addFollowUp, setTaskDone, deleteTask, updateTask,
+  addProject, deleteProject, updateProject, setStageDone, setStageDue,
   saveTier, deleteTier, saveConfig, saveStageTemplate
 } from "./store.js";
-import { buildQueue, projectProgress, stageActivation, fmtTime, fmtDay } from "./queue.js";
-import { celebrate } from "./celebrate.js";
+import { buildQueue, projectProgress, fmtTime, fmtDay, QUEUE_VERSION } from "./queue.js";
+import { celebrate, CELEBRATE_VERSION } from "./celebrate.js";
 
+export const APP_VERSION = "0.4.0";
 const $ = sel => document.querySelector(sel);
 
 // ---------- State ----------
@@ -30,12 +31,15 @@ const S = {
   stageTemplate: [],
   config: null,
   viewDay: Date.now(),
+  editingTaskId: null,
+  editingProjectId: null,
+  lastSuggestedColor: "#4dabf7",
   unsubs: []
 };
 
 // ---------- Boot ----------
 document.addEventListener("DOMContentLoaded", () => {
-  $("#version").textContent = "v" + APP_VERSION;
+  reportVersions();
   $("#signin-btn").addEventListener("click", () => signIn().catch(err => alert(err.message)));
   $("#signout-btn").addEventListener("click", () => signOutUser());
   $("#settings-btn").addEventListener("click", openSettings);
@@ -43,8 +47,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#day-prev").addEventListener("click", () => shiftDay(-1));
   $("#day-next").addEventListener("click", () => shiftDay(1));
   $("#day-today").addEventListener("click", () => { S.viewDay = Date.now(); render(); });
-  $("#task-form").addEventListener("submit", onAddTask);
-  $("#project-form").addEventListener("submit", onAddProject);
+  $("#task-form").addEventListener("submit", onTaskFormSubmit);
+  $("#task-cancel").addEventListener("click", cancelTaskEdit);
+  $("#project-form").addEventListener("submit", onProjectFormSubmit);
+  $("#project-cancel").addEventListener("click", cancelProjectEdit);
+  $("#project-color").addEventListener("input", checkProjectColor);
   $("#tier-add").addEventListener("click", () => tierEditorRow({}, true));
   $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", phase: "during", offsetDays: 0 }, true));
   $("#settings-save").addEventListener("click", onSaveSettings);
@@ -55,6 +62,19 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(drift, 5 * 1000);       // D21: slow sinusoidal pixel drift
 });
 
+function reportVersions() {
+  const cssVersion = getComputedStyle(document.documentElement)
+    .getPropertyValue("--tc-version").trim().replace(/"/g, "") || "?";
+  const htmlVersion = document.body.dataset.htmlVersion || "?";
+  const report =
+    `app.js ${APP_VERSION} · store.js ${STORE_VERSION} · queue.js ${QUEUE_VERSION} · ` +
+    `celebrate.js ${CELEBRATE_VERSION} · css ${cssVersion} · html ${htmlVersion}`;
+  $("#version").textContent = "v" + APP_VERSION;
+  $("#version").title = report;
+  const line = $("#versions-line");
+  if (line) line.textContent = report;
+}
+
 function onSignedIn(user) {
   S.user = user;
   $("#auth-screen").hidden = true;
@@ -63,7 +83,7 @@ function onSignedIn(user) {
   S.unsubs.push(subscribeTiers(t => { S.tiers = t; refreshTierSelects(); render(); }));
   S.unsubs.push(subscribeTasks(t => { S.tasks = t; render(); }));
   S.unsubs.push(subscribeEvents(e => { S.events = e; render(); }));
-  S.unsubs.push(subscribeProjects(p => { S.projects = p; render(); }));
+  S.unsubs.push(subscribeProjects(p => { S.projects = p; suggestProjectColor(); render(); }));
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
   S.unsubs.push(subscribeConfig(c => { S.config = c; }));
 }
@@ -88,12 +108,17 @@ function tick() {
   render();
 }
 
+// D37: the drift transform lives on #drift-wrap, NEVER on <body> —
+// a transform on an ancestor becomes the containing block for
+// position:fixed descendants (the settings-modal-centered-way-
+// downpage bug). Modal + confetti canvas live OUTSIDE the wrap.
 let driftT = 0;
 function drift() {
   driftT += 0.03;
   const x = Math.sin(driftT) * 2;
   const y = Math.cos(driftT * 0.7) * 2;
-  document.body.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+  const wrap = $("#drift-wrap");
+  if (wrap) wrap.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
 }
 
 function shiftDay(n) {
@@ -168,7 +193,14 @@ function renderQueue(items, now) {
   for (const it of items) {
     const row = document.createElement("div");
     row.className = "row" + (it.overdue ? " overdue" : "") + (it.kind === "event" ? " event-row" : "");
-    if (it.kind === "stage") row.style.borderLeft = `4px solid ${it.projectColor || "#4dd0c4"}`;
+    if (it.kind === "stage") {
+      row.style.borderLeft = `4px solid ${it.projectColor || "#4dd0c4"}`;
+      // Katie's progress wash: pale fill of the project color, left-to-right
+      // by pipeline completion, so the glance shows step AND depth.
+      const pct = Math.round((it.progressPct || 0) * 100);
+      row.style.background =
+        `linear-gradient(90deg, ${hexToRgba(it.projectColor || "#4dd0c4", 0.16)} ${pct}%, transparent ${pct}%)`;
+    }
     if (it.overdue) staleGlow(row, it.originalDue, now);
 
     if (it.kind === "task") {
@@ -203,7 +235,6 @@ function renderQueue(items, now) {
         ? `active today`
         : `active since ${fmtDay(it.activatedAt)}`;
     } else if (it.overdue) {
-      // D3 reschedule theater: original struck through, current escalation slot shown
       timeLabel = `<s>${fmtTime(it.originalDue)}${sameDayAsView(it.originalDue) ? "" : " " + fmtDay(it.originalDue)}</s> → ${fmtTime(it.time)}`;
     } else {
       timeLabel = fmtTime(it.time);
@@ -213,12 +244,14 @@ function renderQueue(items, now) {
     row.append(main);
 
     if (it.kind === "task") {
-      const fu = iconBtn("↳", "Add follow-up", () => followUpPrompt(it));
-      const del = iconBtn("✕", "Delete", () => { if (confirm(`Delete "${it.title}"?`)) deleteTask(it.id); });
-      row.append(fu, del);
+      row.append(
+        iconBtn("✎", "Edit this task", () => startTaskEdit(it.raw)),
+        iconBtn("↳", "Add follow-up", () => followUpPrompt(it)),
+        iconBtn("✕", "Delete", () => { if (confirm(`Delete "${it.title}"?`)) deleteTask(it.id); })
+      );
     }
     if (it.kind === "stage") {
-      row.append(iconBtn("📅", "Set a hard due date for this stage", () => stageDuePrompt(it.projectId, it.stageIndex, it.title)));
+      row.append(iconBtn("📅", "Set/change this stage's hard due date", () => stageDuePrompt(it.projectId, it.stageIndex, it.title)));
     }
     list.append(row);
   }
@@ -243,7 +276,16 @@ function renderWaiting(waiting) {
     main.className = "row-main";
     main.innerHTML = `<strong>${esc(t.title)}</strong><span class="sub">+${t.offsetDays}d after: ${esc(parent ? parent.title : "(deleted task)")}</span>`;
     row.append(main);
-    row.append(iconBtn("✕", "Delete", () => deleteTask(t.id)));
+    row.append(
+      iconBtn("✎", "Edit title / offset", () => {
+        const title = prompt("Follow-up title:", t.title);
+        if (title === null) return;
+        const days = parseInt(prompt("Days after parent completion:", t.offsetDays), 10);
+        if (isNaN(days)) return;
+        updateTask(t.id, { title: title.trim() || t.title, offsetDays: days });
+      }),
+      iconBtn("✕", "Delete", () => deleteTask(t.id))
+    );
     list.append(row);
   }
 }
@@ -287,13 +329,14 @@ function renderProjects(now) {
     const head = document.createElement("div");
     head.className = "project-head";
     head.innerHTML = `<strong>${esc(p.name)}</strong><span class="sub">${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}</span>`;
-    const del = iconBtn("✕", "Delete project", () => {
-      if (confirm(`Delete project "${p.name}" and its pipeline?`)) deleteProject(p.id);
-    });
-    head.append(del);
+    head.append(
+      iconBtn("✎", "Edit project (name, color, tier, dates)", () => startProjectEdit(p)),
+      iconBtn("✕", "Delete project", () => {
+        if (confirm(`Delete project "${p.name}" and its pipeline?`)) deleteProject(p.id);
+      })
+    );
     card.append(head);
 
-    // Progress fill — the gradient idea, made legible (D28)
     const barWrap = document.createElement("div");
     barWrap.className = "progress-wrap";
     barWrap.title = `${prog.done}/${prog.total} stages`;
@@ -308,7 +351,6 @@ function renderProjects(now) {
     barWrap.append(barLabel);
     card.append(barWrap);
 
-    // Stage checklist
     const stages = p.stages || [];
     const activeIdx = stages.findIndex(s => !s.completedAt);
     const list = document.createElement("div");
@@ -384,16 +426,44 @@ function clickPoint(ev) {
   return {};
 }
 
-// ---------- Add task form ----------
+// ---------- Task form (create + edit) ----------
 
 function refreshTierSelects() {
   const taskOpts = S.tiers.filter(t => t.kind !== "anchor")
     .map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+  const keep1 = $("#task-tier").value, keep2 = $("#project-tier").value;
   $("#task-tier").innerHTML = taskOpts;
   $("#project-tier").innerHTML = taskOpts;
+  if (keep1) $("#task-tier").value = keep1;
+  if (keep2) $("#project-tier").value = keep2;
 }
 
-function onAddTask(ev) {
+function startTaskEdit(task) {
+  S.editingTaskId = task.id;
+  $("#task-form-title").textContent = "✎ Edit task";
+  $("#task-submit").textContent = "Save changes";
+  $("#task-cancel").hidden = false;
+  $("#task-title").value = task.title;
+  $("#task-tier").value = task.tierId;
+  const d = new Date(task.dueAt);
+  $("#task-date").value = toDateInput(d);
+  $("#task-time").value = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  $("#task-esc-n").value = task.escalation?.every ?? 1;
+  $("#task-esc-unit").value = task.escalation?.unit ?? "hours";
+  $("#task-title").focus();
+}
+
+function cancelTaskEdit() {
+  S.editingTaskId = null;
+  $("#task-form-title").textContent = "New task";
+  $("#task-submit").textContent = "Add to the tentacles";
+  $("#task-cancel").hidden = true;
+  $("#task-form").reset();
+  $("#task-time").value = "09:00";
+  $("#task-esc-n").value = 1;
+}
+
+function onTaskFormSubmit(ev) {
   ev.preventDefault();
   const title = $("#task-title").value.trim();
   const tierId = $("#task-tier").value;
@@ -403,11 +473,41 @@ function onAddTask(ev) {
   const unit = $("#task-esc-unit").value;
   if (!title || !tierId || !date) return;
   const dueAt = new Date(`${date}T${time}`).getTime();
-  addTask({ title, tierId, dueAt, escalation: { every, unit } })
-    .then(() => { $("#task-title").value = ""; });
+  const payload = { title, tierId, dueAt, escalation: { every, unit } };
+  if (S.editingTaskId) {
+    updateTask(S.editingTaskId, payload).then(cancelTaskEdit);
+  } else {
+    addTask(payload).then(() => { $("#task-title").value = ""; });
+  }
 }
 
-function onAddProject(ev) {
+// ---------- Project form (create + edit) ----------
+
+function startProjectEdit(p) {
+  S.editingProjectId = p.id;
+  $("#project-form-title").textContent = "✎ Edit project";
+  $("#project-submit").textContent = "Save changes";
+  $("#project-cancel").hidden = false;
+  $("#project-name").value = p.name;
+  $("#project-color").value = p.color;
+  $("#project-tier").value = p.tierId;
+  $("#project-start").value = toDateInput(new Date(p.startDate));
+  $("#project-end").value = toDateInput(new Date(p.endDate));
+  checkProjectColor();
+  $("#project-name").focus();
+}
+
+function cancelProjectEdit() {
+  S.editingProjectId = null;
+  $("#project-form-title").textContent = "New project";
+  $("#project-submit").textContent = "Launch pipeline";
+  $("#project-cancel").hidden = true;
+  $("#project-form").reset();
+  suggestProjectColor(true);
+  $("#project-color-hint").textContent = "";
+}
+
+function onProjectFormSubmit(ev) {
   ev.preventDefault();
   const name = $("#project-name").value.trim();
   const color = $("#project-color").value;
@@ -418,8 +518,81 @@ function onAddProject(ev) {
   const startDate = new Date(`${start}T00:00`).getTime();
   const endDate = new Date(`${end}T00:00`).getTime();
   if (endDate < startDate) { alert("Project can't end before it starts. (The octopus checked.)"); return; }
-  addProject({ name, color, startDate, endDate, tierId })
-    .then(() => { $("#project-name").value = ""; });
+  const payload = { name, color, tierId, startDate, endDate };
+  if (S.editingProjectId) {
+    updateProject(S.editingProjectId, payload).then(cancelProjectEdit);
+  } else {
+    addProject(payload).then(() => { $("#project-name").value = ""; suggestProjectColor(true); });
+  }
+}
+
+// ---------- Color conflict assistant ----------
+
+const COLOR_POOL = [
+  "#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b197fc",
+  "#f783ac", "#63e6be", "#e599f7", "#ff9f43", "#54a0ff", "#00d2d3",
+  "#feca57", "#5f27cd", "#48dbfb", "#1dd1a1"
+];
+
+function hexToRgb(hex) {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function hexToRgba(hex, a) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function colorDistance(h1, h2) {
+  const [r1, g1, b1] = hexToRgb(h1), [r2, g2, b2] = hexToRgb(h2);
+  return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+}
+
+/** Pick the pool color farthest from every existing project color. */
+function bestFreeColor() {
+  const used = S.projects
+    .filter(p => p.id !== S.editingProjectId)
+    .map(p => p.color);
+  if (!used.length) return COLOR_POOL[Math.floor(Math.random() * COLOR_POOL.length)];
+  let best = COLOR_POOL[0], bestScore = -1;
+  for (const c of COLOR_POOL) {
+    const score = Math.min(...used.map(u => colorDistance(c, u)));
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  return best;
+}
+
+/** Only auto-suggest while the field still holds our last suggestion —
+ *  never stomp a color the human actually picked. */
+function suggestProjectColor(force = false) {
+  const field = $("#project-color");
+  if (!field || S.editingProjectId) return;
+  if (force || field.value.toLowerCase() === S.lastSuggestedColor.toLowerCase()) {
+    const c = bestFreeColor();
+    field.value = c;
+    S.lastSuggestedColor = c;
+    checkProjectColor();
+  }
+}
+
+function checkProjectColor() {
+  const hint = $("#project-color-hint");
+  if (!hint) return;
+  const chosen = $("#project-color").value;
+  let nearest = null, nearestDist = Infinity;
+  for (const p of S.projects) {
+    if (p.id === S.editingProjectId) continue;
+    const d = colorDistance(chosen, p.color);
+    if (d < nearestDist) { nearestDist = d; nearest = p; }
+  }
+  if (nearest && nearestDist < 25) {
+    hint.textContent = `⚠️ Same color as ${nearest.name} (${fmtDay(nearest.startDate)} – ${fmtDay(nearest.endDate)}). Try ${bestFreeColor()}.`;
+  } else if (nearest && nearestDist < 60) {
+    hint.textContent = `⚠️ Very close to ${nearest.name} (${fmtDay(nearest.startDate)} – ${fmtDay(nearest.endDate)}). Try ${bestFreeColor()}.`;
+  } else {
+    hint.textContent = "";
+  }
 }
 
 function followUpPrompt(item) {
@@ -453,8 +626,6 @@ const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b
 function tierEditorRow(t, isNew) {
   const box = $("#tier-editor");
   if (isNew) {
-    // Smart defaults: next rank after the highest currently in the editor,
-    // and a color not already in use (random palette fallback).
     const ranks = [...box.querySelectorAll(".t-rank")].map(el => parseInt(el.value, 10) || 0);
     const used = new Set([...box.querySelectorAll(".t-color")].map(el => el.value.toLowerCase()));
     const fresh = TIER_PALETTE.filter(c => !used.has(c));
@@ -502,12 +673,12 @@ function stageTemplateRow(s, isNew) {
   row.innerHTML = `
     <span class="st-move"><button class="st-up" title="Move up">▲</button><button class="st-down" title="Move down">▼</button></span>
     <input class="st-name" type="text" value="${esc(s.name || "")}" placeholder="Stage name">
-    <select class="st-phase" title="When can this stage activate?">
+    <select class="st-phase" title="Before start: activates N days before the project begins. During: activates N days after the project starts (0 = day one). After end: N days after the project ends. A stage never surfaces before its predecessors are checked.">
       <option value="before" ${s.phase === "before" ? "selected" : ""}>Before start</option>
       <option value="during" ${s.phase !== "before" && s.phase !== "after" ? "selected" : ""}>During</option>
       <option value="after" ${s.phase === "after" ? "selected" : ""}>After end</option>
     </select>
-    <label class="st-off-label">±<input class="st-off" type="number" min="0" value="${s.offsetDays || 0}">d</label>
+    <label class="st-off-label" title="Day offset for the phase chosen at left.">±<input class="st-off" type="number" min="0" value="${s.offsetDays || 0}">d</label>
     <button class="st-del" title="Remove stage">✕</button>`;
   row.querySelector(".st-up").addEventListener("click", () => {
     if (row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
@@ -565,6 +736,10 @@ function updatePollCostHint() {
 }
 
 // ---------- Utils ----------
+
+function toDateInput(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 function clampInt(v, min, max, dflt) {
   const n = parseInt(v, 10);
