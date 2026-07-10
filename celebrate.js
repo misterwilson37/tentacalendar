@@ -1,12 +1,14 @@
 // ============================================================
 // Tentacalendar — celebrate.js
-// Version 0.1.0
+// Version 0.1.1 (adds version export)
 // The dopamine engine. celebrate(level):
 //   1 = task done (confetti pop)
 //   2 = project stage done (double burst + streamers)
 //   3 = PROJECT COMPLETE (fireworks + Katie's wave)
 // Variants are randomized so it never gets stale.
 // ============================================================
+
+export const CELEBRATE_VERSION = "0.1.1";
 
 let canvas = null, ctx = null, parts = [], raf = null;
 
