@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.2.0 (adds project pipeline stage items)
+// Version 0.3.0 ("during" stage offset = days AFTER project start)
 // Pure logic: escalation math, tier sorting, anchor pinning.
 // No DOM. No Firebase. Everything here is testable in isolation.
 // See HANDOFF.md D3, D6, D7.
@@ -76,8 +76,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * When does a stage become eligible to appear in the queue?
- * "before" stages lead the project start; "during" stages wait for the
- * project to actually start; "after" stages trail the project end.
+ * "before" = offsetDays BEFORE project start (engagement letter −14d).
+ * "during" = offsetDays AFTER project start (0 = day one).
+ * "after"  = offsetDays AFTER project end.
  * (A stage additionally only surfaces once it is the EARLIEST unchecked
  * stage — that's the sequential pipeline, handled in buildQueue.)
  */
@@ -85,7 +86,7 @@ export function stageActivation(project, stage) {
   const off = (stage.offsetDays || 0) * DAY_MS;
   if (stage.phase === "before") return (project.startDate || 0) - off;
   if (stage.phase === "after") return (project.endDate || 0) + off;
-  return project.startDate || 0;
+  return (project.startDate || 0) + off;
 }
 
 /** Pipeline progress for gradient fills / progress bars. */
