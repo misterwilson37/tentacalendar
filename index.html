@@ -1,333 +1,171 @@
-/* ============================================================
-   Tentacalendar — tentacalendar.css
-   Version 0.4.0
-   0.4.0: drift moves to #drift-wrap (D37: transform on <body> broke
-   position:fixed for the modal), form-action rows, color-warn hint,
-   version custom property.
-   ============================================================ */
+<!DOCTYPE html>
+<!-- ============================================================
+     Tentacalendar — index.html
+     Version 0.4.0
+     0.4.0: drift-wrap (fixes modal centering, D37), edit modes on
+     both forms, color-conflict hint, per-file version reporting.
+     ============================================================ -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tentacalendar</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.4.0">
+</head>
+<body data-html-version="0.4.0">
 
-/* The hidden attribute applies display:none at UA-stylesheet priority,
-   which ANY author display rule silently overrides. Never let that
-   happen again. (Post-mortem: HANDOFF session log 2026-07-09 #5.) */
-[hidden] { display: none !important; }
+  <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
+       ancestor becomes the containing block for position:fixed descendants,
+       which broke the settings modal's viewport centering. The modal and the
+       confetti canvas must stay OUTSIDE this div. -->
+  <div id="drift-wrap">
 
-:root {
-  --tc-version: "0.4.0";
-  --bg: #0a0f14;
-  --panel: #101822;
-  --panel-2: #16212e;
-  --ink: #dce7f0;
-  --ink-dim: #8fa3b5;
-  --line: #1f2d3d;
-  --accent: #4dd0c4;          /* octopus teal */
-  --danger: #ff6b6b;
-  --radius: 10px;
-}
+  <!-- ============ AUTH SCREEN ============ -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="logo">🐙</div>
+      <h1>Tentacalendar</h1>
+      <p class="tagline">The to-do list that refuses to let go.</p>
+      <button id="signin-btn" class="primary">Sign in with Google</button>
+    </div>
+  </div>
 
-* { box-sizing: border-box; }
+  <!-- ============ APP ============ -->
+  <div id="app-screen" hidden>
+    <header>
+      <div class="brand">🐙 Tentacalendar <span id="version" class="version"></span></div>
+      <div class="header-right">
+        <span id="user-label" class="user"></span>
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+        <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
+      </div>
+    </header>
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
+    <main>
+      <!-- ===== Queue column ===== -->
+      <section id="queue-panel">
+        <div class="day-nav">
+          <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
+          <h2 id="day-label">Today</h2>
+          <button id="day-next" class="icon-btn" title="Next day">▶</button>
+          <button id="day-today" class="mini" hidden>back to today</button>
+        </div>
 
-/* D21 drift glides on the wrapper; D37: NEVER put transform on body —
-   it becomes the containing block for position:fixed descendants. */
-#drift-wrap { transition: transform 4s ease-in-out; }
+        <div id="pinned" hidden></div>
+        <div id="queue"></div>
 
-button { cursor: pointer; font: inherit; }
+        <div id="waiting" hidden>
+          <h3>Waiting on…</h3>
+          <div id="waiting-list"></div>
+        </div>
 
-/* ---------- Auth ---------- */
-#auth-screen {
-  min-height: 100vh;
-  display: flex; align-items: center; justify-content: center;
-}
-.auth-card {
-  text-align: center;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 3rem 4rem;
-}
-.auth-card .logo { font-size: 4rem; }
-.auth-card h1 { margin: .5rem 0 0; }
-.tagline { color: var(--ink-dim); margin: .4rem 0 1.6rem; }
+        <div id="done" hidden>
+          <h3>Done today <span id="done-count" class="badge-done"></span></h3>
+          <div id="done-list"></div>
+        </div>
+      </section>
 
-/* ---------- Header ---------- */
-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: .6rem 1rem;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-.brand { font-weight: 700; font-size: 1.1rem; }
-.version { color: var(--ink-dim); font-size: .75rem; font-weight: 400; margin-left: .4rem; }
-.header-right { display: flex; align-items: center; gap: .5rem; }
-.user { color: var(--ink-dim); font-size: .85rem; }
+      <!-- ===== Projects column (Katie's pipeline) ===== -->
+      <section id="projects-panel">
+        <h3>Projects</h3>
+        <p id="projects-empty" class="hint">No projects yet. Create one on the right — its whole pipeline comes with it.</p>
+        <div id="projects-list"></div>
+      </section>
 
-/* ---------- Layout ---------- */
-main {
-  display: grid;
-  grid-template-columns: 1fr 340px 300px;
-  gap: 1rem;
-  padding: 1rem;
-  max-width: 1500px;
-  margin: 0 auto;
-}
-#queue-panel, #form-panel, #projects-panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1rem;
-}
-#form-panel, #projects-panel { align-self: start; }
-#projects-panel h3:first-child { margin-top: 0; }
+      <!-- ===== Forms column ===== -->
+      <section id="form-panel">
+        <h3 id="task-form-title">New task</h3>
+        <form id="task-form">
+          <input id="task-title" type="text" placeholder="What needs doing?" required>
+          <label>Tier
+            <select id="task-tier"></select>
+          </label>
+          <div class="form-row">
+            <label>Due date <input id="task-date" type="date" required></label>
+            <label>Time <input id="task-time" type="time" value="09:00"></label>
+          </div>
+          <label class="esc-label">If ignored, nag again every
+            <span class="esc-inputs">
+              <input id="task-esc-n" type="number" min="1" value="1">
+              <select id="task-esc-unit">
+                <option value="minutes">minutes</option>
+                <option value="hours" selected>hours</option>
+                <option value="days">days</option>
+                <option value="weeks">weeks</option>
+                <option value="months">months</option>
+              </select>
+            </span>
+          </label>
+          <div class="form-actions">
+            <button type="submit" id="task-submit" class="primary">Add to the tentacles</button>
+            <button type="button" id="task-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish.</p>
 
-/* ---------- Day nav ---------- */
-.day-nav { display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem; }
-.day-nav h2 { margin: 0; font-size: 1.15rem; flex: 1; text-align: center; }
+        <h3 id="project-form-title">New project</h3>
+        <form id="project-form">
+          <input id="project-name" type="text" placeholder="Project name (e.g. Alabama Farmers)" required>
+          <div class="form-row">
+            <label>Color <input id="project-color" type="color" value="#4dabf7"></label>
+            <label>Stage tier <select id="project-tier"></select></label>
+          </div>
+          <div class="form-row">
+            <label>Starts <input id="project-start" type="date" required></label>
+            <label>Ends <input id="project-end" type="date" required></label>
+          </div>
+          <p class="hint warn" id="project-color-hint"></p>
+          <div class="form-actions">
+            <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
+            <button type="button" id="project-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
+      </section>
+    </main>
+  </div>
 
-/* ---------- Rows ---------- */
-.row {
-  display: flex; align-items: center; gap: .6rem;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: .55rem .7rem;
-  margin-bottom: .45rem;
-}
-.row input[type="checkbox"] { width: 1.25rem; height: 1.25rem; accent-color: var(--accent); flex-shrink: 0; }
-.row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.row-main strong { overflow-wrap: anywhere; }
-.sub { color: var(--ink-dim); font-size: .8rem; }
-.sub s { opacity: .7; }
+  </div><!-- /drift-wrap -->
 
-.chip {
-  color: #0a0f14; font-size: .7rem; font-weight: 700;
-  padding: .15rem .5rem; border-radius: 99px; flex-shrink: 0;
-}
+  <!-- ============ SETTINGS MODAL ============ -->
+  <div id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>⚙️ Settings</h2>
+        <button id="settings-close" class="icon-btn">✕</button>
+      </div>
 
-.overdue { border-color: var(--danger); }
-.overdue .sub { color: var(--danger); }
-.badge {
-  background: var(--danger); color: #0a0f14;
-  font-size: .68rem; font-weight: 700;
-  padding: .05rem .4rem; border-radius: 99px;
-}
+      <h3>Tiers (priority queue)</h3>
+      <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. Hover anything in a row for an explanation.</p>
+      <div id="tier-editor"></div>
+      <button id="tier-add" class="mini">+ Add tier</button>
 
-.event-row { opacity: .92; border-style: dashed; }
-.event-dot { flex-shrink: 0; }
+      <h3>Project stage template</h3>
+      <p class="hint">The universal pipeline copied into every NEW project (existing projects keep their own copy). Offset days: <em>Before start</em> = activates N days ahead of the project (engagement letter −14). <em>During</em> = activates N days after the project starts (0 = day one). <em>After end</em> = N days past the finish. A stage never surfaces before its predecessors are checked, whatever its date.</p>
+      <div id="stage-template-editor"></div>
+      <button id="stage-add" class="mini">+ Add stage</button>
 
-.pinned-row {
-  border-color: var(--accent);
-  background: #10262b;
-  animation: pinPulse 2.4s ease-in-out infinite;
-}
-@keyframes pinPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(77, 208, 196, .0); }
-  50%      { box-shadow: 0 0 0 4px rgba(77, 208, 196, .25); }
-}
+      <h3>Timing</h3>
+      <div class="form-row">
+        <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr clock: 9 = 9 AM, 21 = 9 PM)</span></label>
+      </div>
+      <div class="form-row">
+        <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
+        <label>until <input id="cfg-sleep-end" type="number" min="0" max="23"> :00</label>
+      </div>
+      <div class="form-row">
+        <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
+      </div>
+      <p class="hint" id="poll-cost-hint"></p>
 
-.waiting-row { opacity: .75; border-style: dotted; }
-.done-row { opacity: .6; }
-.done-row strong { text-decoration: line-through; text-decoration-color: var(--accent); }
-.badge-done { color: var(--accent); font-size: .85rem; }
+      <div class="modal-foot">
+        <span id="versions-line" class="hint-inline"></span>
+        <button id="settings-save" class="primary">Save settings</button>
+      </div>
+    </div>
+  </div>
 
-.empty { color: var(--ink-dim); text-align: center; padding: 2rem 0; }
-
-h3 { margin: 1.2rem 0 .5rem; font-size: .95rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .05em; }
-
-/* ---------- Form ---------- */
-#task-form { display: flex; flex-direction: column; gap: .7rem; }
-#task-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--ink-dim); }
-.form-row { display: flex; gap: .7rem; }
-.form-row label { flex: 1; }
-input[type="text"], input[type="date"], input[type="time"], input[type="number"], select {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--ink);
-  padding: .5rem .6rem;
-  font: inherit;
-  width: 100%;
-}
-.esc-label { line-height: 1.7; }
-.esc-inputs { display: flex; gap: .4rem; }
-.esc-inputs input { width: 4.2rem; }
-
-.primary {
-  background: var(--accent); color: #06282a;
-  border: none; border-radius: 8px;
-  padding: .65rem 1rem; font-weight: 700;
-}
-.primary:hover { filter: brightness(1.1); }
-.icon-btn {
-  background: transparent; border: 1px solid var(--line);
-  color: var(--ink-dim); border-radius: 6px;
-  padding: .25rem .5rem;
-}
-.icon-btn:hover { color: var(--ink); border-color: var(--ink-dim); }
-.mini {
-  background: var(--panel-2); border: 1px solid var(--line);
-  color: var(--ink-dim); border-radius: 6px;
-  padding: .25rem .6rem; font-size: .8rem;
-}
-.hint { color: var(--ink-dim); font-size: .78rem; }
-.hint-inline { color: var(--ink-dim); font-size: .75rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
-
-/* ---------- Settings modal ---------- */
-#settings-modal {
-  position: fixed; inset: 0;
-  background: rgba(4, 8, 12, .75);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 50;
-  padding: 1rem;
-}
-.modal-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.2rem;
-  width: min(640px, 100%);
-  max-height: 90vh;
-  overflow-y: auto;
-}
-.modal-head { display: flex; justify-content: space-between; align-items: center; }
-.modal-head h2 { margin: 0; }
-.modal-card label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: var(--ink-dim); margin: .3rem 0; flex-wrap: wrap; }
-.modal-card input[type="number"] { width: 4.5rem; }
-.modal-foot {
-  margin-top: 1.2rem;
-  display: flex; align-items: center; justify-content: space-between; gap: .8rem;
-}
-.form-actions { display: flex; gap: .5rem; align-items: center; }
-.hint.warn { color: #ffa94d; min-height: 1em; }
-
-.tier-row {
-  display: flex; align-items: center; gap: .45rem;
-  margin-bottom: .4rem;
-  flex-wrap: wrap;
-}
-.tier-row .t-rank { width: 3.2rem; }
-.tier-row .t-name { flex: 1; min-width: 7rem; }
-.tier-row .t-color { width: 2.6rem; padding: 0; height: 2.1rem; }
-.tier-row .t-kind { width: 6.5rem; }
-.tier-row .t-cal { flex-basis: 100%; font-size: .8rem; }
-.t-carry-label { font-size: .75rem; white-space: nowrap; }
-
-.info-dot {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 1rem; height: 1rem;
-  border: 1px solid var(--ink-dim); border-radius: 50%;
-  color: var(--ink-dim); font-size: .65rem; font-style: normal;
-  cursor: help; margin-left: .3rem; vertical-align: middle;
-}
-
-/* ---------- Phone ---------- */
-@media (max-width: 1000px) {
-  main { grid-template-columns: 1fr; }
-  #queue-panel { order: 1; }
-  #projects-panel { order: 2; }
-  #form-panel { order: 3; }
-  .auth-card { padding: 2rem 1.4rem; }
-  .user { display: none; }
-}
-
-/* ---------- Projects panel ---------- */
-.project-card {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: .7rem;
-  margin-bottom: .7rem;
-}
-.project-done { opacity: .55; }
-.project-head { display: flex; align-items: baseline; gap: .5rem; }
-.project-head strong { flex: 1; overflow-wrap: anywhere; }
-.project-head .sub { white-space: nowrap; }
-
-.progress-wrap {
-  position: relative;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 99px;
-  height: 14px;
-  margin: .5rem 0 .6rem;
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  border-radius: 99px;
-  transition: width .5s ease;
-}
-.progress-label {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: .62rem; font-weight: 700; color: var(--ink);
-  text-shadow: 0 0 3px rgba(0,0,0,.8);
-}
-
-.stage-list { display: flex; flex-direction: column; gap: .1rem; }
-.stage-row {
-  display: flex; align-items: center; gap: .45rem;
-  padding: .2rem .3rem;
-  border-radius: 6px;
-  font-size: .85rem;
-}
-.stage-row input[type="checkbox"] { width: .95rem; height: .95rem; accent-color: var(--accent); }
-.stage-name { flex: 1; overflow-wrap: anywhere; }
-.stage-done .stage-name { text-decoration: line-through; color: var(--ink-dim); }
-.stage-active {
-  background: rgba(77, 208, 196, .1);
-  border-left: 3px solid var(--accent);
-}
-.stage-badge {
-  font-size: .62rem; color: var(--ink-dim);
-  border: 1px solid var(--line); border-radius: 99px;
-  padding: .05rem .4rem; white-space: nowrap;
-}
-.stage-badge.clickable { cursor: pointer; }
-.stage-badge.clickable:hover { color: var(--ink); border-color: var(--ink-dim); }
-.stage-due-btn { font-size: .7rem; padding: .05rem .3rem; }
-.stage-proj { font-weight: 700; }
-
-/* ---------- Stage template editor (settings) ---------- */
-.stage-tmpl-row {
-  display: flex; align-items: center; gap: .4rem;
-  margin-bottom: .35rem;
-}
-.st-move { display: flex; flex-direction: column; }
-.st-move button {
-  background: transparent; border: none; color: var(--ink-dim);
-  font-size: .55rem; padding: 0 .2rem; line-height: 1.1;
-}
-.st-move button:hover { color: var(--ink); }
-.stage-tmpl-row .st-name { flex: 1; }
-.stage-tmpl-row .st-phase { width: 7.2rem; }
-.st-off-label { white-space: nowrap; font-size: .8rem; }
-.stage-tmpl-row .st-off { width: 3.4rem; }
-.st-del {
-  background: transparent; border: 1px solid var(--line);
-  color: var(--ink-dim); border-radius: 6px; padding: .15rem .4rem;
-}
-
-/* ---------- Katie's wave (celebration level 3) ---------- */
-body.celebration-wave::after {
-  content: "";
-  position: fixed; inset: 0;
-  background: linear-gradient(105deg,
-    transparent 35%,
-    rgba(77, 208, 196, .10) 45%,
-    rgba(77, 208, 196, .22) 50%,
-    rgba(77, 208, 196, .10) 55%,
-    transparent 65%);
-  pointer-events: none;
-  z-index: 99;
-  animation: waveSweep 1.9s ease-in-out;
-}
-@keyframes waveSweep {
-  from { transform: translateX(-110%); }
-  to   { transform: translateX(110%); }
-}
+  <script type="module" src="app.js?v=0.4.0"></script>
+</body>
+</html>
