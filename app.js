@@ -1,6 +1,10 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.6.0
+// Version 0.6.1
+// 0.6.1: internal module imports are now version-queried (D49) —
+// ?v= on <script> tags does NOT cache-bust ES module imports, so a
+// stale cached config.js (missing CONFIG_VERSION) killed the whole
+// module graph with a SyntaxError before any code ran.
 // 0.6.0 ("Priority Engine v2"): D43 sort wired, workload select,
 // next-deadline labels, tier filter chips (D47), grouped overdue
 // decision modal (D46), weekend-date interception (D45), plus the
@@ -8,7 +12,7 @@
 // tap popovers, numbered project-tier dropdown.
 // ============================================================
 
-import { CONFIG_VERSION } from "./config.js";
+import { CONFIG_VERSION } from "./config.js?v=0.4.0";
 import {
   watchAuth, signIn, signOutUser, STORE_VERSION,
   subscribeTiers, subscribeTasks, subscribeEvents, subscribeConfig,
@@ -16,15 +20,15 @@ import {
   addTask, addFollowUp, setTaskDone, deleteTask, updateTask,
   addProject, deleteProject, updateProject, setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js";
+} from "./store.js?v=0.6.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage,
   isWeekend, addWeekdays, weekendNeighbors,
   fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js";
-import { celebrate, CELEBRATE_VERSION } from "./celebrate.js";
+} from "./queue.js?v=0.5.0";
+import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.6.0";
+export const APP_VERSION = "0.6.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
