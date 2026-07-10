@@ -1,7 +1,7 @@
 # SETUP.md — Tentacalendar Phase 1 Setup Guide
-**Version 0.2.0** | Everything here is doable in ~20 minutes, costs $0, and needs no credit card.
+**Version 0.2.1** | Everything here is doable in ~20 minutes, costs $0, and needs no credit card.
 
-> **v0.2.0 notes:** config.js now ships with BOTH allowlist emails already filled in (Jake + Katie) — only the Firebase config values still need pasting. **Recommended browser: Google Chrome, signed into your PERSONAL Google account** (the app is wall-to-wall Google auth; your sumnerk12.net account isn't on the allowlist). Calendar IDs now live on each Calendar-type tier in ⚙️ Settings, with the where-to-find-it instructions in the field itself.
+> **v0.2.0 notes:** config.js now ships with BOTH allowlist emails already filled in (Jake + Katie) — only the Firebase config values still need pasting. **Recommended browser: Microsoft Edge, signed into your PERSONAL Google account** (Chromium core without the county-managed-Chrome problem, and none of Brave's shields that eat OAuth popups; works identically on Mac and PC). Safari also works. The sumnerk12.net account isn't on the allowlist — personal accounts only. Calendar IDs now live on each Calendar-type tier in ⚙️ Settings, with the where-to-find-it instructions in the field itself.
 
 You've already done step 0 (repo + CNAME). Gold star. 🐙
 
