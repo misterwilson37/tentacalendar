@@ -1,9 +1,9 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.3.0
-   0.3.0: CRITICAL FIX — [hidden] now overrides display rules
-   (settings modal was rendering over the sign-in screen).
-   Also: calendar-ID field on anchor tiers, tooltip affordances.
+   Version 0.4.0
+   0.4.0: drift moves to #drift-wrap (D37: transform on <body> broke
+   position:fixed for the modal), form-action rows, color-warn hint,
+   version custom property.
    ============================================================ */
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
@@ -12,6 +12,7 @@
 [hidden] { display: none !important; }
 
 :root {
+  --tc-version: "0.4.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -30,8 +31,11 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  transition: transform 4s ease-in-out;   /* D21 pixel drift glides */
 }
+
+/* D21 drift glides on the wrapper; D37: NEVER put transform on body —
+   it becomes the containing block for position:fixed descendants. */
+#drift-wrap { transition: transform 4s ease-in-out; }
 
 button { cursor: pointer; font: inherit; }
 
@@ -194,7 +198,12 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 .modal-head h2 { margin: 0; }
 .modal-card label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: var(--ink-dim); margin: .3rem 0; flex-wrap: wrap; }
 .modal-card input[type="number"] { width: 4.5rem; }
-.modal-foot { margin-top: 1.2rem; text-align: right; }
+.modal-foot {
+  margin-top: 1.2rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .8rem;
+}
+.form-actions { display: flex; gap: .5rem; align-items: center; }
+.hint.warn { color: #ffa94d; min-height: 1em; }
 
 .tier-row {
   display: flex; align-items: center; gap: .45rem;
