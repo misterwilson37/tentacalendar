@@ -1,5 +1,5 @@
 # HANDOFF.md — Tentacalendar
-**Document version: 0.4.0** | Last updated: 2026-07-09 | Last session: v0.2.0 shipped (Katie's pipeline + celebrations); STILL NOT DEPLOYED
+**Document version: 0.5.0** | Last updated: 2026-07-09 | Last session: v0.3.0 — first deploy bug fixed ([hidden] vs display), calendar-per-tier redesign
 
 > **Purpose:** Project continuity document, updated at the END of every session, no exceptions (same ritual status as version bumps). Any Claude — Fable, Opus, or otherwise — reading this cold should be able to continue mid-feature. New Claude: read this entire file before writing code.
 
@@ -49,6 +49,10 @@ Interim displays: home-theater 60" 4K TV and possibly a 1080p projector (see D27
 | D30 | **(NEW — Katie #3, split) Gradient feedback:** (a) Year-view project bars render as pale "ghost" of project color with saturated fill left-to-right by pipeline % (`projectProgress()` already in queue.js) — clearer than brightness-only; ships with year view. Progress bar version SHIPPED in project panel v0.2.0. (b) Queue staleness glow: overdue rows grow an intensifying red glow with days ignored (whisper day 1 → searchlight day 4+). SHIPPED v0.2.0. Tier chip colors stay stable (D6 predictability). | Katie's eye-drawing request, made legible. |
 | D31 | **(NEW — Katie #4) Year view spec (phase 2):** quarter-aligned 4 rows × 3 months; THREE anchor modes — Calendar (Jan–Dec), Quarter-first (current fiscal quarter top-left, rolling 12), Month-first (current month top-left, rolling 12). Rolling modes may reallocate panel proportions. | Her clients work on quarters. |
 | D32 | **(NEW — Katie #5) Year view interactivity (phase 2):** project bars support drag-to-move and edge-drag to extend/shorten (pointer events over the grid). Whole-year planning that filters down to hourly tasks is the point. | |
+| D33 | **(NEW v0.3.0) Calendar IDs live ON anchor tiers** (`gcalCalendarId` field, shown in tier editor when kind=Calendar), replacing the separate homeCalendarId/businessCalendarId config fields (REMOVED from settings/config and UI). Phase 3 pollCalendars iterates anchor tiers with non-empty gcalCalendarId. | Jake's setup feedback: the tier IS the calendar mapping; separate section created an ordering/linkage gap. |
+| D34 | **(NEW v0.3.0) "During" stage offset = N days AFTER project start** (0 = day one), still gated on predecessors. Previously the offset was silently ignored for during-phase. | Jake: "what does during do if I set it for 7?" — now it does the obvious thing. |
+| D35 | **(NEW v0.3.0) CSS must contain `[hidden] { display: none !important; }`** — the hidden attribute is UA-stylesheet priority and ANY author display rule silently overrides it. This caused the first-deploy failure (settings modal permanently rendered over the sign-in screen; all Firestore writes fired unauthenticated → permission errors). NEVER remove this rule; when an element with hidden won't hide, check for a display rule on it. | First-deploy post-mortem. |
+| D36 | **(NEW v0.3.0) Recommended browser: Google Chrome on the Mac, signed into personal accounts.** Firefox has a popup-loop history for Jake; the school Safari session (sumnerk12.net) isn't allowlisted. | |
 
 ## 3. Firestore Schema (implemented v0.2.0)
 
@@ -70,9 +74,9 @@ Cloud Functions (phase 3, none exist): `mirrorTask`, `pollCalendars` (+manual tr
 
 (1) ✅ accountability core; **(1.5) ✅ Katie's pipeline + celebrations (v0.2.0)**; (2) year view: quarter-aligned grid, 3 anchor modes (D31), project bars w/ progress ghost-fill (D30a), drag/resize (D32), legend/compact (D27), month zoom (D18); (3) Cloud Functions; (4) week view + kiosk polish.
 
-**ALL FILES AT v0.2.0 except celebrate.js (v0.1.0) and firestore.rules (v0.1.0). NOT YET DEPLOYED — Jake is setting up Firebase/GitHub Pages per SETUP.md concurrently.**
+**Files: config.js 0.3.0 (BOTH allowlist emails now filled in) · store.js 0.3.0 · queue.js 0.3.0 · app.js 0.3.0 · index.html 0.3.0 · tentacalendar.css 0.3.0 · celebrate.js 0.1.0 · firestore.rules 0.1.0 (deployed by Jake with both emails — matches config) · SETUP.md 0.2.0.**
 
-Files: config.js 0.2.0 · store.js 0.2.0 · queue.js 0.2.0 · app.js 0.2.0 · index.html 0.2.0 · tentacalendar.css 0.2.0 · celebrate.js 0.1.0 · firestore.rules 0.1.0 · SETUP.md 0.1.0 (still accurate — nothing in v0.2.0 changes setup steps; smoke test now has extra items below).
+**Deploy status:** Firebase project + rules are LIVE (Jake). First deploy of v0.2.0 failed before sign-in — see D35 post-mortem. v0.3.0 fixes it; Jake redeploys all files and retests in Chrome with his personal account. Firestore is still unseeded (no successful sign-in has occurred yet), so the v0.3.0 seed changes (gcalCalendarId on anchors, config field removal) apply cleanly with no migration.
 
 **Additional smoke tests for v0.2.0 (after SETUP.md Part 6):**
 7. ⚙️ → confirm the 13-stage template is seeded; reorder something with ▲▼, save, reopen, verify.
@@ -85,8 +89,8 @@ Files: config.js 0.2.0 · store.js 0.2.0 · queue.js 0.2.0 · app.js 0.2.0 · in
 
 ## 5. Open Questions
 
-1. Katie's Gmail into config.js + firestore.rules before deploy.
-2. Kiosk PC/Chromebook, Chromium browser (NOT Firefox). Sleep-mode implementation at phase 4.
+1. ~~Katie's Gmail~~ RESOLVED: katie.wilson.bynac@gmail.com is in firestore.rules (deployed) and config.js v0.3.0.
+2. Kiosk PC/Chromebook, Chrome (D36). Sleep-mode implementation at phase 4.
 3. Year view: bar-lane packing + label threshold + drag/resize interaction details — phase 2 build.
 4. Months-unit escalation clamping (Jan 31→Feb 28) — confirm in real use.
 5. Un-completing a parent doesn't rewind materialized follow-ups — watch in use.
@@ -110,3 +114,4 @@ Files: config.js 0.2.0 · store.js 0.2.0 · queue.js 0.2.0 · app.js 0.2.0 · in
 | 2026-07-09 | Claude Fable 5 | Split source of truth (GCal events / Firestore tasks), carryover, poll, overlays, schema. HANDOFF 0.2.0. |
 | 2026-07-09 | Claude Fable 5 | PHASE 1 BUILD: 8 files @ v0.1.0 incl. SETUP.md. Spark-first, adjustable poll. HANDOFF 0.3.0. |
 | 2026-07-09 | Claude Fable 5 | KATIE'S REQUESTS (pre-deploy, so no migration): D28 pipelines (13-stage template, before/during/after activation, early-completion skipping, per-stage hard dues), D29 celebration engine + wave, D30 gradient split (progress fills + staleness glow, both partly shipped), D31 quarter-aligned year view spec, D32 drag/resize spec. Shipped v0.2.0 across all app files + new celebrate.js. Smoke tests 7–13 added. HANDOFF 0.4.0. |
+| 2026-07-09 | Claude Fable 5 | FIRST DEPLOY BUG + SETUP FEEDBACK. Diagnosis: settings modal rendered over sign-in screen because author `display:flex` overrides the `hidden` attribute (D35); unauthenticated Save clicks caused all the permission errors — rules were correct. Fixed with `[hidden]{display:none!important}` (also latently fixed #auth-screen). Jake's feedback shipped: calendar IDs moved onto anchor tiers w/ where-to-find ⓘ (D33), during-offset semantics (D34), smart new-tier defaults (rank max+1, unused random color), clamp-honest poll hint (his "8,755 mystery" = silent clamp of 1→5 min), 24-hr clock labels, tooltips throughout, Chrome recommendation (D36), Katie's email into config.js. All app files → 0.3.0; SETUP.md → 0.2.0. HANDOFF 0.5.0.
