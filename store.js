@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.3.0 (calendar IDs live ON anchor tiers — D33)
+// Version 0.4.0 (updateTask/updateProject for Katie-editing; version export)
 // All Firebase interaction lives here: auth, seeding, live
 // subscriptions, CRUD. Nothing in here touches the DOM.
 // Schema per HANDOFF.md §3.
@@ -16,6 +16,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js";
+
+export const STORE_VERSION = "0.4.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -192,6 +194,11 @@ export function deleteTask(taskId) {
   return deleteDoc(doc(col("tasks"), taskId));
 }
 
+/** Edit any task fields (title, tierId, dueAt, escalation, offsetDays...). */
+export function updateTask(taskId, fields) {
+  return updateDoc(doc(col("tasks"), taskId), fields);
+}
+
 // ---------- Projects & pipeline stages ----------
 
 export function subscribeProjects(cb) {
@@ -230,6 +237,13 @@ export async function addProject({ name, color, startDate, endDate, tierId }) {
 
 export function deleteProject(projectId) {
   return deleteDoc(doc(col("projects"), projectId));
+}
+
+/** Edit project fields (name, color, tierId, startDate, endDate). Stage
+ *  activations are COMPUTED from dates, so moving a project reflows its
+ *  pipeline automatically — no stage cleanup needed. */
+export function updateProject(projectId, fields) {
+  return updateDoc(doc(col("projects"), projectId), fields);
 }
 
 /**
