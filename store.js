@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.4.0 (updateTask/updateProject for Katie-editing; version export)
+// Version 0.6.0 (workload on projects; anchor/direction stage seed)
 // All Firebase interaction lives here: auth, seeding, live
 // subscriptions, CRUD. Nothing in here touches the DOM.
 // Schema per HANDOFF.md §3.
@@ -17,7 +17,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js";
 
-export const STORE_VERSION = "0.4.0";
+export const STORE_VERSION = "0.6.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -70,19 +70,19 @@ const SEED_TIERS = [
 //        "during" = activates at project start (after predecessor done);
 //        "after"  = activates offsetDays after project end.
 const SEED_STAGES = [
-  { name: "Engagement letter",        phase: "before", offsetDays: 14 },
-  { name: "Data request",             phase: "during", offsetDays: 0 },
-  { name: "Excel setup",              phase: "during", offsetDays: 0 },
-  { name: "Word setup",               phase: "during", offsetDays: 0 },
-  { name: "Graphic setup",            phase: "during", offsetDays: 0 },
-  { name: "Loss data processing",     phase: "during", offsetDays: 0 },
-  { name: "Non-loss data processing", phase: "during", offsetDays: 0 },
-  { name: "Data input",               phase: "during", offsetDays: 0 },
-  { name: "Selections",               phase: "during", offsetDays: 0 },
-  { name: "Proofing",                 phase: "during", offsetDays: 0 },
-  { name: "Peer review",              phase: "during", offsetDays: 0 },
-  { name: "Publication",              phase: "during", offsetDays: 0 },
-  { name: "Client follow-up",         phase: "after",  offsetDays: 14 }
+  { name: "Engagement letter",        direction: "before", anchor: "start", offsetDays: 14 },
+  { name: "Data request",             direction: "after",  anchor: "start", offsetDays: 0 },
+  { name: "Excel setup",              direction: "after",  anchor: "start", offsetDays: 0 },
+  { name: "Word setup",               direction: "after",  anchor: "start", offsetDays: 0 },
+  { name: "Graphic setup",            direction: "after",  anchor: "start", offsetDays: 0 },
+  { name: "Loss data processing",     direction: "after",  anchor: "start", offsetDays: 2 },
+  { name: "Non-loss data processing", direction: "after",  anchor: "start", offsetDays: 3 },
+  { name: "Data input",               direction: "after",  anchor: "start", offsetDays: 5 },
+  { name: "Selections",               direction: "before", anchor: "end",   offsetDays: 4 },
+  { name: "Proofing",                 direction: "before", anchor: "end",   offsetDays: 3 },
+  { name: "Peer review",              direction: "before", anchor: "end",   offsetDays: 2 },
+  { name: "Publication",              direction: "before", anchor: "end",   offsetDays: 0 },
+  { name: "Client follow-up",         direction: "after",  anchor: "end",   offsetDays: 14 }
 ];
 
 async function ensureSeed(user) {
@@ -220,15 +220,16 @@ export function saveStageTemplate(stages) {
 }
 
 /** New project snapshots the current template into its own editable stages. */
-export async function addProject({ name, color, startDate, endDate, tierId }) {
+export async function addProject({ name, color, startDate, endDate, tierId, workload = 2 }) {
   const tmplSnap = await getDoc(doc(db, "workspaces", WORKSPACE_ID, "settings", "stageTemplate"));
   const template = tmplSnap.exists() ? (tmplSnap.data().stages || []) : [];
-  const stages = template.map(s => ({
-    name: s.name, phase: s.phase, offsetDays: s.offsetDays || 0,
-    completedAt: null, dueAt: null
-  }));
+  const legacy = { before: ["before", "start"], during: ["after", "start"], after: ["after", "end"] };
+  const stages = template.map(s => {
+    const [dir, anc] = s.direction && s.anchor ? [s.direction, s.anchor] : (legacy[s.phase] || legacy.during);
+    return { name: s.name, direction: dir, anchor: anc, offsetDays: s.offsetDays || 0, completedAt: null, dueAt: null };
+  });
   return addDoc(col("projects"), {
-    name, color, startDate, endDate, tierId, stages,
+    name, color, startDate, endDate, tierId, workload, stages,
     stretchUntilDone: false, completedAt: null,
     createdBy: auth.currentUser?.email || "unknown",
     createdAt: Date.now()
@@ -260,6 +261,17 @@ export async function setStageDone(projectId, stageIndex, done) {
   const allDone = stages.length > 0 && stages.every(s => s.completedAt);
   await updateDoc(ref, { stages, completedAt: allDone ? Date.now() : null });
   return { stages, allDone };
+}
+
+/** Replace a project's entire stage array (rename/reorder/add/remove,
+ *  D42). Caller is responsible for preserving completedAt/dueAt on
+ *  surviving stages. Auto-recomputes project completion. */
+export async function setProjectStages(projectId, stages) {
+  const allDone = stages.length > 0 && stages.every(s => s.completedAt);
+  return updateDoc(doc(col("projects"), projectId), {
+    stages,
+    completedAt: allDone ? Date.now() : null
+  });
 }
 
 export async function setStageDue(projectId, stageIndex, dueAt) {
