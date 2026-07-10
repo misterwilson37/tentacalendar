@@ -1,5 +1,5 @@
 # HANDOFF.md — Tentacalendar
-**Document version: 0.7.2** | Last updated: 2026-07-10 | Last session: D50 — undated stages (fixed the everything-is-69-days-overdue disaster)
+**Document version: 0.7.3** | Last updated: 2026-07-10 | Last session: PHASE 1 CLOSEOUT — checklist issued; open questions pruned; index.html banner resync (0.5.3)
 
 > **Purpose:** Project continuity document, updated at the END of every session, no exceptions (same ritual status as version bumps). Any Claude — Fable, Opus, or otherwise — reading this cold should be able to continue mid-feature. New Claude: read this entire file before writing code.
 
@@ -107,18 +107,35 @@ Cloud Functions (phase 3, none exist): `mirrorTask`, `pollCalendars` (+manual tr
 12. Complete every stage of a throwaway project → fireworks + wave (level 3).
 13. Add a task due 3+ days ago → verify the glow is meaningfully stronger than a task due 1 hour ago.
 
-## 5. Open Questions
+## 5. Open Questions & Phase 1 Closeout
 
-1. ~~Katie's Gmail~~ RESOLVED: katie.wilson.bynac@gmail.com is in firestore.rules (deployed) and config.js v0.3.0.
-2. Kiosk PC/Chromebook, Chrome (D36). Sleep-mode implementation at phase 4.
-3. Year view: bar-lane packing + label threshold + drag/resize interaction details — phase 2 build. **PHASE 2 IS THE NEXT SESSION** (Jake asked "is it calendar view time?" — answer: yes, next session; v0.4.0 was the editing/polish release).
-4. Months-unit escalation clamping (Jan 31→Feb 28) — confirm in real use.
-5. Un-completing a parent doesn't rewind materialized follow-ups — watch in use.
-6. Per-project stage editing is currently: check/uncheck, set/clear hard due date. Renaming/reordering/adding stages WITHIN an existing project = not yet built; template edits don't retrofit. Revisit when Katie hits it.
-7. Stage items use the project's `tierId` for queue ranking. Confirm Katie wants Work tier or a dedicated "Projects" tier.
-8. Renaming/reordering/adding stages WITHIN an existing project still not built (template edits don't retrofit). Katie hasn't hit it yet.
-9. Tooltips are native title attributes (hover-only, no touch). If Katie does setup from her phone and misses them, build ⓘ tap-popovers.
-10. Tier color changes could get the same conflict assistant as projects (D40) — not yet wired.
+**Phase 1/1.5 exit checklist (Jake + Katie, in order):**
+1. Version check: header hover reads app 0.6.2 · store 0.6.2 · queue 0.6.0 · celebrate 0.1.1 · config 0.4.0 · css 0.5.1 · html 0.5.3.
+2. Set REAL dated offsets: ⚙️ template for future projects; ✎⋮ per live project (e.g., Peer review = Before/end/2wd; Publication = Before/end/0). Queue should flip to "next: Peer review — {date}".
+3. Weekend interception: throwaway project ending on a Sunday → 4-option modal; pick Friday; confirm date field updates.
+4. Priority sanity: with real deadlines set, order should read expired → chronological → (same date) heavier/less-done project first → tier → alphabet. Set one project Heavy via ✎ and watch it jump a same-date peer.
+5. Filters: hide Taiko (no confirm, rank 6); try hiding Work (confirm required, rank ≤4); hidden tier vanishes from queue AND tomorrow's decision modal; re-show.
+6. Decision modal (tomorrow — today's daily key is spent): fires once, ✓ completes w/ confetti, ↷ reschedules to next weekday 9 AM.
+7. Due dialog: ⏰ opens native pickers (US-formatted), save/clear both work.
+8. Stage surgery: ✎⋮ rename/reorder/add/remove on a throwaway project; ✓ and ⏰ survive edits.
+9. Phone pass: ⓘ popovers tap-open, filter chips usable, no one-letter-per-line project titles.
+
+**Decisions Jake/Katie owe before Phase 2 (answers → new D-numbers):**
+A. 5 PM convention: computed deadlines count as "due by 5 PM" — right cutoff, or morning?
+B. Decision-modal threshold: 2 days overdue — tighter/looser?
+C. Un-completing a parent task does NOT rewind its materialized follow-up (see plain-English note below) — acceptable, or build rewind?
+D. Monthly escalation clamps Jan 31→Feb 28 — accept? (recommend: yes, forget it)
+E. Tier color conflict assistant (projects have one; tiers don't) — want it, or skip?
+
+**Plain-English for C & D (Jake asked):** D = if a task nags "every 1 month" from Jan 31, February has no 31st, so the next nag clamps to Feb 28. C = check off "Send email," its "+3d follow-up" materializes with a real date; UN-check "Send email" (oops) and the follow-up KEEPS that date rather than returning to "Waiting on…" — workaround is ✎/✕ the follow-up manually.
+
+**Still open (carried into Phase 2+):**
+1. Kiosk PC/Chromebook + sleep-mode implementation — phase 4.
+2. Year view build details (bar-lane packing, label thresholds, drag/resize interactions) — decided during the phase 2 build. **PHASE 2 IS THE NEXT SESSION.**
+3. Follow-up creation/editing still uses prompt() — migrate to a proper dialog like the due-date one (small, phase 2 polish).
+4. D50 caveat: any stage saved via the brief 0.6.0/0.6.1 editors was written dated-at-start; flip to No date via ✎⋮ if one misbehaves (probably none exist).
+
+**Resolved & pruned this session:** Katie's email (config 0.4.0 + rules), browser (Edge, D36), per-project stage editing (D42), project tier dropdown (v0.6.x, default Work), touch tooltips (popovers, v0.6.x).
 
 ## 6. Standing Meta-Rules (ALL sessions)
 
@@ -139,6 +156,7 @@ Cloud Functions (phase 3, none exist): `mirrorTask`, `pollCalendars` (+manual tr
 | 2026-07-09 | Claude Fable 5 | KATIE'S REQUESTS (pre-deploy, so no migration): D28 pipelines (13-stage template, before/during/after activation, early-completion skipping, per-stage hard dues), D29 celebration engine + wave, D30 gradient split (progress fills + staleness glow, both partly shipped), D31 quarter-aligned year view spec, D32 drag/resize spec. Shipped v0.2.0 across all app files + new celebrate.js. Smoke tests 7–13 added. HANDOFF 0.4.0. |
 | 2026-07-09 | Claude Fable 5 | FIRST DEPLOY BUG + SETUP FEEDBACK. Diagnosis: settings modal rendered over sign-in screen because author `display:flex` overrides the `hidden` attribute (D35); unauthenticated Save clicks caused all the permission errors — rules were correct. Fixed with `[hidden]{display:none!important}` (also latently fixed #auth-screen). Jake's feedback shipped: calendar IDs moved onto anchor tiers w/ where-to-find ⓘ (D33), during-offset semantics (D34), smart new-tier defaults (rank max+1, unused random color), clamp-honest poll hint (his "8,755 mystery" = silent clamp of 1→5 min), 24-hr clock labels, tooltips throughout, Chrome recommendation (D36), Katie's email into config.js. All app files → 0.3.0; SETUP.md → 0.2.0. HANDOFF 0.5.0.
 | 2026-07-10 | Claude Fable 5 | v0.5.x mid-flight (folded into 0.6.0): due-date dialog w/ native pickers (prompt() and the July-17 📅 emoji removed — Apple renders that emoji as a fixed July 17, which Katie read as data), per-project stage surgery (D42), tap ⓘ popovers, numbered project-tier dropdown defaulting to Work, config.js baked with real Firebase values + CONFIG_VERSION in runtime report.
+| 2026-07-10 | Claude Fable 5 | PHASE 1 CLOSEOUT: index.html banner had de-synced from its own data attribute (0.5.2 attr, 0.5.1 comment — bump ritual now explicitly includes BOTH). Resync → 0.5.3, only file changed. Pruned resolved open questions; issued 9-step exit checklist + 5 pending decisions (A–E). Verdict: Phase 1/1.5 is functionally DONE pending checklist; Phase 2 (year view, D11/D27/D30a/D31/D32) is the next session and should start fresh.
 | 2026-07-10 | Claude Fable 5 | D50 HOTFIX: 0.6.0's legacy migration dated every "during" stage at project start → all projects 8–69 days "overdue" + decision-modal wall. Root cause conceptual: I assumed all stages dated; Katie's model = only some stages have dates, the rest are pipeline WEIGHT. Fixed in normalizeStage (during→none) — zero data repair. Added "No date" timing option (default for new stages), project-end fallback deadline, project-card header wrap fix (title was rendering one letter per line). queue 0.6.0, app 0.6.2, store 0.6.2, html 0.5.2, css 0.5.1.
 | 2026-07-10 | Claude Fable 5 | HOTFIX D49: first deploy of 0.6.0 died on a stale cached config.js module (SyntaxError on CONFIG_VERSION import → no listeners → dead sign-in). Versioned all internal import specifiers (app 0.6.1, store 0.6.1, html 0.5.1); SETUP 0.2.2 troubleshooting entry; bump ritual extended to importer query strings. One hard refresh needed on already-poisoned browsers.
 | 2026-07-10 | Claude Fable 5 | PRIORITY ENGINE v2 (D43–D48) from Katie+Jake workflow session: new 5-level sort, workload, direction×anchor×weekday stage timing w/ lazy legacy migration, next-deadline labels, weekend interception modal, grouped overdue decision modal, tier filter chips, pipeline-window visibility. queue.js rewritten 0.5.0; app.js rewritten 0.6.0; store 0.6.0; html/css 0.5.0. HANDOFF 0.7.0.
