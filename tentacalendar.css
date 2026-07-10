@@ -1,8 +1,12 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.5.0
-   0.5.0: filter chips, modal-shell system (due/stages/weekend/
-   decision), popover, workload badge, decision rows.
+   Version 0.5.2
+   0.5.2: re-release of the project-card header fix (0.5.1 was built
+   but never verified in shipped outputs — ship-check rule born here)
+   + pinned header buttons. Banner resynced (it had sat at 0.5.0
+   through two version-var bumps — banners move WITH the variable).
+   0.5.1: project-head wrap fix. 0.5.0: filter chips, modal-shell
+   system, popover, workload badge, decision rows.
    ============================================================ */
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
@@ -11,7 +15,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.5.0";
+  --tc-version: "0.5.2";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -274,9 +278,12 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
   margin-bottom: .7rem;
 }
 .project-done { opacity: .55; }
-.project-head { display: flex; align-items: baseline; gap: .5rem; }
-.project-head strong { flex: 1; overflow-wrap: anywhere; }
-.project-head .sub { white-space: nowrap; }
+/* 0.5.1: header wraps — title keeps room, dates drop to their own
+   line instead of crushing the name into one letter per row. */
+.project-head { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+.project-head strong { flex: 1 1 auto; min-width: 7rem; overflow-wrap: anywhere; }
+.project-head .sub { flex-basis: 100%; order: 5; white-space: normal; }
+.project-head .icon-btn { flex: 0 0 auto; }
 
 .progress-wrap {
   position: relative;
