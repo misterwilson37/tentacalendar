@@ -1,5 +1,5 @@
 # HANDOFF.md — Tentacalendar
-**Document version: 0.7.3** | Last updated: 2026-07-10 | Last session: PHASE 1 CLOSEOUT — checklist issued; open questions pruned; index.html banner resync (0.5.3)
+**Document version: 0.7.4** | Last updated: 2026-07-10 | Last session: css 0.5.2 re-ship (header fix never verifiably reached outputs); SHIP-CHECK meta-rule added
 
 > **Purpose:** Project continuity document, updated at the END of every session, no exceptions (same ritual status as version bumps). Any Claude — Fable, Opus, or otherwise — reading this cold should be able to continue mid-feature. New Claude: read this entire file before writing code.
 
@@ -88,7 +88,7 @@ Cloud Functions (phase 3, none exist): `mirrorTask`, `pollCalendars` (+manual tr
 
 (1) ✅ accountability core; **(1.5) ✅ Katie's pipeline + celebrations (v0.2.0)**; (2) year view: quarter-aligned grid, 3 anchor modes (D31), project bars w/ progress ghost-fill (D30a), drag/resize (D32), legend/compact (D27), month zoom (D18); (3) Cloud Functions; (4) week view + kiosk polish.
 
-**Files: app.js 0.6.2 · store.js 0.6.2 · queue.js 0.6.0 · index.html 0.5.2 · css 0.5.1 · config.js 0.4.0 (REAL Firebase values baked in — safe: web config is an identifier, not a secret; deploy wholesale, never revert to placeholders) · celebrate.js 0.1.1 · firestore.rules 0.1.0 · SETUP.md 0.2.1.**
+**Files: app.js 0.6.2 · store.js 0.6.2 · queue.js 0.6.0 · index.html 0.5.4 · css 0.5.2 · config.js 0.4.0 (REAL Firebase values baked in — safe: web config is an identifier, not a secret; deploy wholesale, never revert to placeholders) · celebrate.js 0.1.1 · firestore.rules 0.1.0 · SETUP.md 0.2.1.**
 
 **MIGRATION NOTE (live data):** Katie's projects predate v0.6.0 — old stage docs use `phase`, lack `workload`. Everything reads through normalizeStage()/`workload||2`; docs upgrade lazily on their next save. Do NOT write a migration script; do NOT remove the legacy fallbacks.
 
@@ -144,7 +144,8 @@ E. Tier color conflict assistant (projects have one; tiers don't) — want it, o
 3. Complete replacement files only.
 4. Incremental disk-based builds in /home/claude; syntax-check between major edits; present at session end.
 5. Never store student-identifying data.
-6. Update THIS FILE at end of every session.
+6. **SHIP-CHECK:** after copying to outputs, VERIFY versions in the DESTINATION files by grepping them; present files only after that check passes. Patch scripts must assert every replacement landed — must_replace(), never bare .replace() (silent no-ops caused the css banner to sit at 0.5.0 through two version-variable bumps, and stale outputs left Jake deploying a "fixed" css that lacked the fix). The build isn't shipped until it's verified where Jake downloads it.
+7. Update THIS FILE at end of every session.
 
 ## 7. Session Log
 
@@ -156,6 +157,7 @@ E. Tier color conflict assistant (projects have one; tiers don't) — want it, o
 | 2026-07-09 | Claude Fable 5 | KATIE'S REQUESTS (pre-deploy, so no migration): D28 pipelines (13-stage template, before/during/after activation, early-completion skipping, per-stage hard dues), D29 celebration engine + wave, D30 gradient split (progress fills + staleness glow, both partly shipped), D31 quarter-aligned year view spec, D32 drag/resize spec. Shipped v0.2.0 across all app files + new celebrate.js. Smoke tests 7–13 added. HANDOFF 0.4.0. |
 | 2026-07-09 | Claude Fable 5 | FIRST DEPLOY BUG + SETUP FEEDBACK. Diagnosis: settings modal rendered over sign-in screen because author `display:flex` overrides the `hidden` attribute (D35); unauthenticated Save clicks caused all the permission errors — rules were correct. Fixed with `[hidden]{display:none!important}` (also latently fixed #auth-screen). Jake's feedback shipped: calendar IDs moved onto anchor tiers w/ where-to-find ⓘ (D33), during-offset semantics (D34), smart new-tier defaults (rank max+1, unused random color), clamp-honest poll hint (his "8,755 mystery" = silent clamp of 1→5 min), 24-hr clock labels, tooltips throughout, Chrome recommendation (D36), Katie's email into config.js. All app files → 0.3.0; SETUP.md → 0.2.0. HANDOFF 0.5.0.
 | 2026-07-10 | Claude Fable 5 | v0.5.x mid-flight (folded into 0.6.0): due-date dialog w/ native pickers (prompt() and the July-17 📅 emoji removed — Apple renders that emoji as a fixed July 17, which Katie read as data), per-project stage surgery (D42), tap ⓘ popovers, numbered project-tier dropdown defaulting to Work, config.js baked with real Firebase values + CONFIG_VERSION in runtime report.
+| 2026-07-10 | Claude Fable 5 | SHIPPING POST-MORTEM ×3: (a) 0.5.1 header fix lived only in the build dir while outputs briefly held 0.5.0 css — Jake deployed "the fix" without the fix; (b) re-ship script's asserts then caught the css banner still reading 0.5.0 (two silent bare-.replace no-ops deep); (c) HANDOFF rule-6 patch missed because I quoted the rule from memory instead of grepping it. Re-shipped css 0.5.2 + html 0.5.4, destination-verified. New meta-rule 6 (ship-check + must_replace). Future bugs → any fresh session; HANDOFF carries context.
 | 2026-07-10 | Claude Fable 5 | PHASE 1 CLOSEOUT: index.html banner had de-synced from its own data attribute (0.5.2 attr, 0.5.1 comment — bump ritual now explicitly includes BOTH). Resync → 0.5.3, only file changed. Pruned resolved open questions; issued 9-step exit checklist + 5 pending decisions (A–E). Verdict: Phase 1/1.5 is functionally DONE pending checklist; Phase 2 (year view, D11/D27/D30a/D31/D32) is the next session and should start fresh.
 | 2026-07-10 | Claude Fable 5 | D50 HOTFIX: 0.6.0's legacy migration dated every "during" stage at project start → all projects 8–69 days "overdue" + decision-modal wall. Root cause conceptual: I assumed all stages dated; Katie's model = only some stages have dates, the rest are pipeline WEIGHT. Fixed in normalizeStage (during→none) — zero data repair. Added "No date" timing option (default for new stages), project-end fallback deadline, project-card header wrap fix (title was rendering one letter per line). queue 0.6.0, app 0.6.2, store 0.6.2, html 0.5.2, css 0.5.1.
 | 2026-07-10 | Claude Fable 5 | HOTFIX D49: first deploy of 0.6.0 died on a stale cached config.js module (SyntaxError on CONFIG_VERSION import → no listeners → dead sign-in). Versioned all internal import specifiers (app 0.6.1, store 0.6.1, html 0.5.1); SETUP 0.2.2 troubleshooting entry; bump ritual extended to importer query strings. One hard refresh needed on already-poisoned browsers.
