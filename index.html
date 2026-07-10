@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.4.0
-     0.4.0: drift-wrap (fixes modal centering, D37), edit modes on
-     both forms, color-conflict hint, per-file version reporting.
+     Version 0.5.0
+     0.5.0: tier filter chips, workload select, due/stages/weekend/
+     decision modals + shared popover (all OUTSIDE #drift-wrap, D37).
      ============================================================ -->
 <html lang="en">
 <head>
@@ -11,9 +11,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.4.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.5.0">
 </head>
-<body data-html-version="0.4.0">
+<body data-html-version="0.5.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -51,6 +51,8 @@
           <button id="day-next" class="icon-btn" title="Next day">▶</button>
           <button id="day-today" class="mini" hidden>back to today</button>
         </div>
+
+        <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
 
         <div id="pinned" hidden></div>
         <div id="queue"></div>
@@ -115,6 +117,13 @@
             <label>Starts <input id="project-start" type="date" required></label>
             <label>Ends <input id="project-end" type="date" required></label>
           </div>
+          <label>Workload <span class="info-dot" data-info="How heavy is this project overall? A 10-million project and a 30k project can share a pipeline but not a calendar. Ties in the queue break toward heavier projects with more pipeline remaining.">i</span>
+            <select id="project-workload">
+              <option value="1">Light (1)</option>
+              <option value="2" selected>Standard (2)</option>
+              <option value="3">Heavy (3)</option>
+            </select>
+          </label>
           <p class="hint warn" id="project-color-hint"></p>
           <div class="form-actions">
             <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
@@ -166,6 +175,69 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=0.4.0"></script>
+  <!-- ============ DUE-DATE DIALOG ============ -->
+  <div id="due-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3 id="due-title">Hard due date</h3>
+      <div class="form-row">
+        <label>Date <input id="due-date" type="date"></label>
+        <label>Time <input id="due-time" type="time" value="17:00"></label>
+      </div>
+      <div class="modal-foot">
+        <button id="due-clear" class="mini">Clear due date</button>
+        <span class="flex-spring"></span>
+        <button id="due-cancel" class="mini">Cancel</button>
+        <button id="due-save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PER-PROJECT STAGE EDITOR ============ -->
+  <div id="stages-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="stages-title">✎ Stages</h2>
+        <button id="stages-cancel" class="icon-btn">✕</button>
+      </div>
+      <p class="hint">This edits THIS project only — the template in ⚙️ Settings is untouched. ✓ = already completed, ⏰ = has a hard due date; both survive renames and reordering. Offsets count weekdays.</p>
+      <div id="stage-proj-editor"></div>
+      <button id="stage-proj-add" class="mini">+ Add stage</button>
+      <div class="modal-foot">
+        <span></span>
+        <button id="stages-save" class="primary">Save stages</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ WEEKEND-DATE WARNING (D45) ============ -->
+  <div id="weekend-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3>🗓️ Weekend check</h3>
+      <p id="weekend-text"></p>
+      <div class="weekend-choices">
+        <button id="weekend-yes" class="mini">Yes, keep it</button>
+        <button id="weekend-fri" class="primary"></button>
+        <button id="weekend-mon" class="primary"></button>
+        <button id="weekend-back" class="mini">Go back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OVERDUE DECISION TIME (D46) ============ -->
+  <div id="decision-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>🐙 Decision time</h2>
+        <button id="decision-close" class="icon-btn">✕</button>
+      </div>
+      <p class="hint">These have been overdue for 2+ days. Do them, reschedule them, or close this and live dangerously — it won't ask again until tomorrow.</p>
+      <div id="decision-list"></div>
+    </div>
+  </div>
+
+  <!-- Shared tap-popover for ⓘ dots -->
+  <div id="popover" hidden></div>
+
+  <script type="module" src="app.js?v=0.6.0"></script>
 </body>
 </html>
