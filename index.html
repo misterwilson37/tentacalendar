@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.3.0
-     0.3.0: calendar IDs move onto anchor tiers (Calendars section
-     removed), 24-hr clock labels, tooltip hints throughout.
+     Version 0.4.0
+     0.4.0: drift-wrap (fixes modal centering, D37), edit modes on
+     both forms, color-conflict hint, per-file version reporting.
      ============================================================ -->
 <html lang="en">
 <head>
@@ -11,9 +11,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.3.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.4.0">
 </head>
-<body>
+<body data-html-version="0.4.0">
+
+  <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
+       ancestor becomes the containing block for position:fixed descendants,
+       which broke the settings modal's viewport centering. The modal and the
+       confetti canvas must stay OUTSIDE this div. -->
+  <div id="drift-wrap">
 
   <!-- ============ AUTH SCREEN ============ -->
   <div id="auth-screen">
@@ -69,7 +75,7 @@
 
       <!-- ===== Forms column ===== -->
       <section id="form-panel">
-        <h3>New task</h3>
+        <h3 id="task-form-title">New task</h3>
         <form id="task-form">
           <input id="task-title" type="text" placeholder="What needs doing?" required>
           <label>Tier
@@ -91,11 +97,14 @@
               </select>
             </span>
           </label>
-          <button type="submit" class="primary">Add to the tentacles</button>
+          <div class="form-actions">
+            <button type="submit" id="task-submit" class="primary">Add to the tentacles</button>
+            <button type="button" id="task-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
         </form>
-        <p class="hint">↳ on any task adds a follow-up that schedules itself relative to when you actually finish.</p>
+        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish.</p>
 
-        <h3>New project</h3>
+        <h3 id="project-form-title">New project</h3>
         <form id="project-form">
           <input id="project-name" type="text" placeholder="Project name (e.g. Alabama Farmers)" required>
           <div class="form-row">
@@ -106,12 +115,18 @@
             <label>Starts <input id="project-start" type="date" required></label>
             <label>Ends <input id="project-end" type="date" required></label>
           </div>
-          <button type="submit" class="primary">Launch pipeline</button>
+          <p class="hint warn" id="project-color-hint"></p>
+          <div class="form-actions">
+            <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
+            <button type="button" id="project-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
         </form>
         <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
       </section>
     </main>
   </div>
+
+  </div><!-- /drift-wrap -->
 
   <!-- ============ SETTINGS MODAL ============ -->
   <div id="settings-modal" hidden>
@@ -145,11 +160,12 @@
       <p class="hint" id="poll-cost-hint"></p>
 
       <div class="modal-foot">
+        <span id="versions-line" class="hint-inline"></span>
         <button id="settings-save" class="primary">Save settings</button>
       </div>
     </div>
   </div>
 
-  <script type="module" src="app.js?v=0.3.0"></script>
+  <script type="module" src="app.js?v=0.4.0"></script>
 </body>
 </html>
