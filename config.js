@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — config.js
-// Version 0.2.0
+// Version 0.3.0
 // THE ONLY FILE YOU SHOULD NEED TO EDIT BY HAND.
 // 1. Create Firebase project "tentacalendar" (Blaze plan)
 // 2. Enable Firestore + Authentication (Google provider)
@@ -27,4 +27,4 @@ export const ALLOWED_EMAILS = [
 // v1 ships with exactly one workspace (HANDOFF D12).
 export const WORKSPACE_ID = "primary";
 
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.3.0";
