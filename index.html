@@ -1,7 +1,11 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.7.0 (banner and data-html-version move together, always)
+     Version 0.8.0 (banner and data-html-version move together, always)
+     0.8.0 (D62 rev): dup modal gains pipeline-review button + 1d/7d/30d
+     snooze row; project-form labels get task-form column treatment
+     (the staggered Starts/Ends); un-dater covers both remnant flavors.
+     css ?v= → 0.8.0, app.js ?v= → 0.9.0.
      0.7.0 (D62): duplicate modal is a review FORM (name/dates/color/
      tier/workload + snooze button). css ?v= → 0.7.0, app.js ?v= → 0.8.0.
      0.6.0: settings modal split into tabs (Tiers / Pipeline / Timing)
@@ -18,9 +22,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.7.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.8.0">
 </head>
-<body data-html-version="0.7.0">
+<body data-html-version="0.8.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -124,7 +128,7 @@
             <label>Starts <input id="project-start" type="date" required></label>
             <label>Ends <input id="project-end" type="date" required></label>
           </div>
-          <label>Workload <span class="info-dot" title="How heavy is this project overall? Ties in the queue break toward heavier projects with more pipeline remaining. (Tap for details.)" data-info="How heavy is this project overall? A 10-million project and a 30k project can share a pipeline but not a calendar. Ties in the queue break toward heavier projects with more pipeline remaining.">i</span>
+          <label><span class="label-line">Workload <span class="info-dot" title="How heavy is this project overall? Ties in the queue break toward heavier projects with more pipeline remaining. (Tap for details.)" data-info="How heavy is this project overall? A 10-million project and a 30k project can share a pipeline but not a calendar. Ties in the queue break toward heavier projects with more pipeline remaining.">i</span></span>
             <select id="project-workload">
               <option value="1">Light (1)</option>
               <option value="2" selected>Standard (2)</option>
@@ -229,7 +233,7 @@
       <p class="hint">This edits THIS project only — the template in ⚙️ Settings is untouched. ✓ = already completed, ⏰ = has a hard due date; both survive renames and reordering. Offsets count this tier's working days.</p>
       <div id="stage-proj-editor"></div>
       <button id="stage-proj-add" class="mini">+ Add stage</button>
-      <button id="stage-proj-undate" class="mini" title="Early experiments saved stages as 'After end + 0wd', which dates them all at the project end. This flips every such row to No date — review, then Save.">Un-date all "+0wd end" stages</button>
+      <button id="stage-proj-undate" class="mini" title="Early experiments and the old editors saved stages as 'After + 0wd' (from start OR end), silently dating them. This flips every such row to No date — review, then Save.">Un-date all "+0wd" stages</button>
       <div class="modal-foot">
         <span></span>
         <button id="stages-save" class="primary">Save stages</button>
@@ -299,10 +303,15 @@
           </select>
         </label>
       </div>
-      <p class="hint">Stage-level tweaks (splitting "Excel setup" into five steps, new offsets) live in ✎⋮ on the new card — it opens expanded so you can review the pipeline right away.</p>
+      <p class="hint">✎⋮ below edits next year's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
       <div class="weekend-choices">
+        <button id="dup-stages" class="mini">✎⋮ Review the pipeline first…</button>
         <button id="dup-yes" class="primary">Create next year's run</button>
-        <button id="dup-snooze" class="mini">🕐 Remind me in a month</button>
+        <div class="snooze-row"><span class="hint-inline">🕐 Remind me in</span>
+          <button id="dup-snooze-1" class="mini">a day</button>
+          <button id="dup-snooze-7" class="mini">a week</button>
+          <button id="dup-snooze-30" class="mini">a month</button>
+        </div>
         <button id="dup-no" class="mini">No thanks</button>
       </div>
     </div>
@@ -311,6 +320,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.8.0"></script>
+  <script type="module" src="app.js?v=0.9.0"></script>
 </body>
 </html>
