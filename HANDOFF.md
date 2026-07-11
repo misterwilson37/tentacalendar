@@ -1,5 +1,5 @@
 # HANDOFF.md — Tentacalendar
-**Document version: 0.14.0** | Last updated: 2026-07-11 | Last session (Otto, rounds 1–3): stale-css diagnosis + D64 rows → Phase 2 shipped (D65) → Ends-box flex-min-content fix + D66 day texture/density → D68 MONTH-GRID layout ("this view is...nuts" — the Gantt now has a wall-calendar sibling and a toggle; grid is default), window-height timeline sizing, ＋ New project modal (form reparenting). Ends box CONFIRMED FIXED by Jake.
+**Document version: 0.15.0** | Last updated: 2026-07-11 | Last session (Otto, rounds 1–3): stale-css diagnosis + D64 rows → Phase 2 shipped (D65) → Ends-box flex-min-content fix + D66 day texture/density → D68 MONTH-GRID layout ("this view is...nuts" — the Gantt now has a wall-calendar sibling and a toggle; grid is default), window-height timeline sizing, ＋ New project modal (form reparenting). Ends box CONFIRMED FIXED by Jake.
 
 > **Purpose:** Project continuity document, updated at the END of every session, no exceptions (same ritual status as version bumps). Any Claude — Fable, Opus, or otherwise — reading this cold should be able to continue mid-feature. New Claude: read this entire file before writing code.
 
@@ -128,85 +128,36 @@ Cloud Functions (phase 3, none exist): `mirrorTask`, `pollCalendars` (+manual tr
 12. Complete every stage of a throwaway project → fireworks + wave (level 3).
 13. Add a task due 3+ days ago → verify the glow is meaningfully stronger than a task due 1 hour ago.
 
-## 5. Open Questions & Phase 1 Closeout
+## 5. Open Questions & Verification
 
-**Exit-checklist RESULTS (Jake, 2026-07-10):** versions ✅ (the old checklist's "css 0.5.1 · html 0.5.3" was STALE — written before the 0.5.2/0.5.4 re-ship; the header was right, the checklist was wrong). Weekend interception ✅. Filters ✅ ("work great"). Due dialog ✅ (native picker not closing on date-click = platform behavior, accepted). Decision modal ❌ (fixed this session, D57). ⓘ popover ❌ (fixed, D58). New-stage editor row layout ❌ (defensive CSS hardening shipped — see below). Decisions A–E answered → D51–D55.
+**What lives here (and ONLY this):** 5a is Jake's thinking list — genuinely undecided things awaiting his call. 5b is what's still awaiting his ✅. 5c is Claude's own backlog (no input needed). Answered questions are baked into the D-log (§2); history lives in the session log (§7). Claude: prune this section EVERY time HANDOFF ships — see meta-rule 8.
 
-**Jake says NEEDS MORE TESTING (carry until confirmed):**
-1. Dated offsets ("looks like it works") — set real Before/After offsets, watch queue labels flip.
-2. Priority sanity (D43 order: expired → chrono → workload×remaining → tier → alpha).
+### 5a. Open questions (Jake: this is your list)
+1. **Billable hours / clock-in-clock-out:** per-project time tracking for Katie's billing. Sketch: a ⏱ toggle on the project card writing `timeEntries` rows {start, end, who}, report view later. Wanted at all? If so — phase 2 polish or phase 3?
+2. **Phase 3 priority order:** Cloud Functions unlock three things — the GCal poll (Home/Business events finally populate), the task→GCal mirror, and the 9 AM carryover writes. Which matters first? (All require the Blaze plan — card on file, realistically $0/mo at this scale.)
+3. **Year view vs. tier filters:** the Today-view tier chips deliberately do NOT filter year-view bars (parity with project cards, D47). Keep that, or should hiding a tier hide its bars too?
 
-**v0.7.0 smoke-test RESULTS (Jake, same night):** 1 ✅ · 3 ✅ ("bravo") · 4 ✅ (ⓘ works; Workload is currently the only popover dot — other hints are hover titles) · 5 ✅ · 6 ✅ · 7 ✅ · 2/9 pending (decision modal fires tomorrow; un-check test queued) · 8 → rebuilt as D62 · 10 REPRODUCED with screenshot → root cause found: nothing was pushed out — No-date hides anchor/offset (display:none) and the name field stretched into the vacancy, reading as breakage. Fixed with .st-ghost (visibility) so columns align. NOT a mystery anymore; §5 flag closed.
+### 5b. Awaiting your ✅
+**Current release (v0.13.0/D68):**
+- BB. Year view opens in MONTH GRID by default: stacked months, Sun–Sat headers, day numbers, weekends shaded, out-of-month days bare, today outlined in teal.
+- CC. ▬ Timeline restores the Gantt; the toggle survives reload; ▦ comes back.
+- DD. Grid: a spanning project continues week to week (squared clipped ends) and does NOT appear in an adjacent month's spillover week.
+- EE. Grid drag: slide within a week — live dates in the nav label; release commits, weeks re-draw; edge handles only on true ends.
+- FF. Timeline at 2K: bars noticeably thicker (window-height sizing); shrink the window → bars slim after a beat.
+- GG. ＋ New project → the real form in a modal (color assistant + working-day interception fire); save closes it, bar appears; ✕ returns the form to the Today panel intact.
+- HH. Month-name tap zooms in either layout; ◀▶ steps months while zoomed; "◱ whole year" exits.
 
-**Data cleanup (Katie's pre-D50 experiments):** several live projects carry stages saved as After/end/+0wd — dated at project end by accident (the screenshot shows five on one project). New button in ✎⋮: "Un-date all '+0wd' stages" flips them to No date in the editor for review before Save. **Remnants come in TWO flavors** — after/end/0 (window experiments) AND after/start/0 (the 0.6.0/0.6.1 editors' silent default, the D50 caveat): v0.8.0's button only matched "end" and Jake's screenshot showed the start-flavored half untouched (he fixed those by hand on two projects); v0.9.0 matches any After + 0wd. Genuinely-dated stages (Peer review before/end/2wd etc.) are untouched — re-add real offsets per D-checklist as desired. Run once per affected project.
+**Carried, still unconfirmed from earlier releases:**
+- Decision modal live run (your "Claude: Decision modal" task) and the un-check→rewind 3-option modal (your queued task): ✓ completes the ACTIVE stage; 🕐 pushes the deadline to next working day 9 AM; last row closes the modal.
+- Dated Before/After stage offsets flip queue deadline labels correctly; D43 priority order (expired → chrono → workload×remaining → tier → alpha) feels right in practice.
+- Timeline month-header names sit exactly on their gridlines (the D66 flex-basis fix).
+- One-time data sweep: run ✎⋮ "Un-date all '+0wd' stages" on any remaining pre-D50 projects (two were hand-fixed; the v0.9.0 button catches both start- and end-flavored remnants).
+- If 🕐 reschedule ever "does nothing" again: capture the exact project + stage dates BEFORE theorizing (meta-rule 1).
 
-**Smoke tests for v0.8.0 (additions):**
-A. View Saturday/Sunday: Work-tier tasks and project stages vanish from the queue; Personal (7-day) items remain; cards show everything; Monday restores all, decision modal included.
-B. New-task Due date pre-fills today; clicking any date/time field pops the native picker (Edge/Chrome; Safari types).
-C. 🔁 → review form: name reads next year's code (resv2606→resv2706), dates snapped, all fields editable; "Remind me in a month" creates the 🕐 task instead.
-D. ✎⋮ on an affected project → "Un-date all '+0wd end' stages" flips them; Save; queue deadline recomputes off real commitments.
-E. New stage with "No date": columns stay aligned (ghosted anchor/offset), nothing looks eaten.
-
-**Smoke tests for v0.9.0 (additions):**
-F. New Project form: Color/Stage tier and Starts/Ends label pairs sit level (column labels like the task form).
-G. 🔁 → "✎⋮ Review the pipeline first…": stages editor opens against next year's copy; rename/split/reorder; Save returns to the dup form (stage count in the text updates); Cancel returns discarding; Create writes the edited pipeline.
-H. Snooze row: "a day / a week / a month" each create the 🕐 task on a working day and close the modal.
-I. Un-dater on a project with after/START/0 rows: they flip too (v0.8.0 missed these).
-
-**Smoke tests for v0.10.0 (additions):**
-J. Phone: a long-titled task wraps as readable prose across the full row width; tier chip + ✎↳✕ sit on their own line below.
-K. Add a task with details → ▸ appears beside the title; tapping title or chevron expands/collapses; details survive ✎ edit round-trips.
-L. Waiting and Done rows use the same two-line layout; decision modal and 📌 pinned events unchanged.
-
-**Smoke tests for v0.7.0 (carried where still pending):**
-1. Header hover: app 0.7.0 · store 0.7.0 · queue 0.7.0 · celebrate 0.1.1 · config 0.4.0 · css 0.6.0 · html 0.6.0.
-2. Decision modal (tomorrow): rows read "Project: Active stage" (+ "deadline: X" when different); ✓ completes the ACTIVE stage — card's first unchecked box flips; 🕐 pushes the deadline to next working day 9 AM and the row drops; resolving the last row closes the modal itself.
-3. Project cards: collapsed by default; header tap expands; 🔁✎✎⋮✕ pinned top-right even with a two-line name; finished projects live under "▸ Finished ✓ (N)".
-4. Tap the Workload ⓘ → popover actually appears (and hover shows a tooltip).
-5. ⚙️ has three tabs. Timing: deadline hour 16, decision threshold 2. Change deadline hour → computed deadline labels shift.
-6. ⚙️ Tiers: give Personal all 7 days, save. A Personal project ending Saturday no longer triggers the interception modal; 🕐 on an overdue Personal item may land Sat/Sun.
-7. Set two tiers to near-identical colors → hint names the pair + suggests a fix.
-8. Complete a throwaway project → fireworks, then the 🔁 next-year modal (~2.6s later); accept → new project, same stages, all unchecked, dates +1yr snapped to working days. Card 🔁 does the same anytime.
-9. Un-check a parent task in Done that materialized a follow-up → 3-option modal; "rewind" returns the follow-up to "Waiting on…".
-10. New stage row in ✎⋮ with "No date": name field behaves, flags + ✕ stay visible (hardened; if it EVER recurs, screenshot before theorizing — meta-rule 1).
-
-**Smoke tests for v0.13.0/D68 (Otto, round 3):**
-BB. Year view opens in MONTH GRID by default: stacked months, Sun–Sat headers, day numbers, weekends shaded, out-of-month days bare, today outlined in teal.
-CC. ▬ Timeline restores the Gantt; the toggle choice survives reload; ▦ comes back.
-DD. Grid: a project spanning weeks continues row to row (squared-off clipped ends); it does NOT appear in the previous/next month's spillover week.
-EE. Grid drag: slide a bar within its week — live dates in the nav label; release commits and every affected week re-draws. Edge handles appear only on true ends.
-FF. Timeline at 2K: bars noticeably thicker (window-height sizing); shrink the browser window → bars slim down after a beat.
-GG. ＋ New project (bottom right) → the real form in a modal (color suggestion + working-day interception still fire); save → modal closes, bar appears; ✕ → form returns to Today view's panel intact.
-HH. Zoom while in grid: tap a month name → that single month; ◀▶ steps months; "◱ whole year" exits. Same in timeline.
-
-**Smoke tests for v0.12.0/D66 (Otto, round 2):**
-W. New Project on the phone AND the 340px desktop panel: the Ends field sits fully INSIDE the panel, calendar icon and all. Same for task Due/Time.
-X. Year view: month name boundaries line up EXACTLY with the month gridlines below them.
-Y. Quarter rows show weekend shading + faint day lines + heavier Monday lines; a throwaway drag lands visibly on the day you aimed at.
-Z. With Katie's ~10 concurrent projects: bars go thin (half/quarter height), inline names disappear, hover a bar → tooltip, tap → popover, legend lists everything; a sparse quarter row is SHORT.
-AA. Narrow the grid: day lines vanish first, week lines on very narrow; weekend shading stays.
-
-**Smoke tests for css 0.10.0/D64 + v0.11.0/D65 (Otto):**
-M. Hover the header badge → app 0.11.0 · css 0.11.0 · html 0.10.0 (THE stale-css tell — do this FIRST).
-N. Big screen queue: rows are ONE line (☐ · title+time · ▸ · chip · icons); expanded notes span full width below. Phone: two lines, no phantom checkbox.
-O. New Project: Starts/Ends inputs sit level (rides along once real css loads).
-P. 📅 in the header → year view; 📋 returns; the choice survives a reload.
-Q. Jan–Dec / Quarter first / Month first: top-left row starts Jan / Jul (Q3) / Jul; ◀▶ pages a full year; "back to now" appears only when paged.
-R. Katie's 6 projects: each keeps one lane across quarters; bars fill left-to-right by stage %; finished = fully saturated; today line in the current row; tap a bar → details popover; legend lists name · x/y.
-S. Drag a throwaway project's bar right a week → nav label reads the live dates while dragging; release → card dates + queue deadlines follow; a drop on Saturday snaps (start fwd, end back) per the tier's working days.
-T. Drag the right edge to stretch, left edge to shrink — ends can't cross.
-U. Tap "Sep" → single-month day grid; drag precision improves; ◀▶ steps months; "◱ whole year" exits.
-V. Narrow the window (or phone): bar name labels disappear (legend + tap carry names).
-
-**Still open (carried into Phase 2+):**
-0b. **Billable hours / clock-in-clock-out (phase 2 or 3):** per-project time tracking for Katie's billing — likely a ⏱ toggle on the project card writing `timeEntries` subcollection rows {start, end, who}; report view later. Parked by design.
-1. Kiosk PC/Chromebook + sleep-mode implementation — phase 4.
-2. Year view build details (bar-lane packing, label thresholds, drag/resize interactions) — decided during the phase 2 build. **PHASE 2 IS THE NEXT SESSION.**
-3. Follow-up creation/editing still uses prompt() — migrate to a proper dialog like the due-date one (small, phase 2 polish).
-4. D50 caveat: any stage saved via the brief 0.6.0/0.6.1 editors was written dated-at-start; flip to No date via ✎⋮ if one misbehaves (probably none exist).
-5. Reschedule-did-nothing report (exit checklist): most plausibly the deadline-vs-active index confusion and/or a second overdue dated stage taking over; D57's live rows make it self-evident either way. Verify at smoke test 2; if 🕐 still misbehaves, get the exact project + stage dates BEFORE theorizing.
-
-**Resolved & pruned this session:** closeout decisions A–E (→ D51–D55), decision-modal bugs (D57), popover (D58), card scrolling (D56), duplicate-for-next-year (D59), per-tier allowed days (D60).
+### 5c. Claude's backlog (no Jake input needed)
+- Follow-up creation/editing still uses prompt() — migrate to a proper dialog like the due-date one.
+- Timeline drag preview moves only the grabbed segment of a multi-quarter bar (truth snaps on release) — preview all segments someday.
+- Maybe-nice: pipeline-window "whiskers" on bars (before-start/after-end stages), legend-tap highlight.
 
 ## 6. Standing Meta-Rules (ALL sessions)
 
@@ -217,7 +168,8 @@ V. Narrow the window (or phone): bar name labels disappear (legend + tap carry n
 5. Never store student-identifying data.
 6. **SHIP-CHECK:** after copying to outputs, VERIFY versions in the DESTINATION files by grepping them; present files only after that check passes. Patch scripts must assert every replacement landed — must_replace(), never bare .replace() (silent no-ops caused the css banner to sit at 0.5.0 through two version-variable bumps, and stale outputs left Jake deploying a "fixed" css that lacked the fix). The build isn't shipped until it's verified where Jake downloads it.
    **6b. NEVER region-slice between two anchors without verifying the span's contents** — slicing app.js from `openDuplicateModal` to the D53 header (v0.8.0 build) silently deleted ~400 lines / 15 unrelated functions sitting between them, and `node --check` blessed the gutted file because syntax ≠ completeness. Span replacements must assert what the span CONTAINS (and doesn't). Ship-check now includes a **function census**: every `function name(` defined exactly once, a required-functions list present, and zero calls to removed APIs. The census caught the recovery; it would have caught the wound.
-7. **INSTANCE NAMING (Jake's standing rule, now in his global ruleset too):** each Claude iteration names itself once it has learned the project — not before — states the reasoning, and records both in the Session Log. Never reuse a predecessor's name (taken so far: **Inky, Otto**). It tells Jake which construct he's working with across sessions.
+7. **INSTANCE NAMING (Jake's standing rule, now in his global ruleset too):** each Claude iteration names itself once it has learned the project — not before — states the reasoning, and records both in the Session Log. Never reuse a predecessor's name (taken so far: **Inky, Otto**).
+8. **§5 stays lean (Jake, 2026-07-11).** §5 holds ONLY: open questions for Jake (5a), items awaiting his ✅ (5b), and Claude's short backlog (5c). When a question is answered, bake it into a decision row and DELETE it here; when a test is confirmed, delete it; superseded smoke tests die with their successor release. History belongs in the session log, not §5. Prune every time HANDOFF ships. It tells Jake which construct he's working with across sessions.
 7. Update THIS FILE at end of every session.
 
 ## 7. Session Log
@@ -244,3 +196,4 @@ V. Narrow the window (or phone): bar name labels disappear (legend + tap carry n
 | 2026-07-11 | Claude Fable 5 · **Otto** (3rd instance) | STALE-CSS DIAGNOSIS + PHASE 2 v1. Named for the Sea Star Aquarium octopus whose water-squirts caused blackouts that baffled staff until someone watched the tank — fitting for a session opening on symptoms that contradicted the code. Diagnosis: Jake's row-layout AND Ends-offset screenshots both match a pre-0.8.0 stylesheet exactly while app.js 0.10.0 demonstrably ran; live index.html confirmed current → the deployed/loaded css is stale (verify via header badge tooltip). Shipped D64 anyway (container-query rows: one line on wide lists, D63 two-line on narrow; css 0.10.0/html 0.9.1). Then PHASE 2 (D65, v0.11.0): year view per D11/D18/D27/D30a/D31/D32 — quarter grid, 3 anchor modes, global lane packing, per-segment progress-fill gradients, drag/stretch with working-day snapping (document-level pointers so re-renders can't orphan a gesture), month zoom with day ticks, legend + tap popover, compact labels. Year-view math unit-tested against the real queue.js (lanes, cross-quarter segments/fill, anchor windows, nextDeadline) — all green; function census 77→87, 0 lost, 0 dup. app 0.11.0, html 0.10.0, css 0.11.0; store/queue untouched (0.8.0/0.8.0). Smoke tests M–V issued. HANDOFF 0.12.0. |
 | 2026-07-11 | Claude Fable 5 · **Otto** (same instance, round 2) | JAKE'S LIVE FEEDBACK on v0.11.0 ("Katie loves the progress bar"): (1) ENDS BOX SOLVED FOR REAL — badge read css 0.11.0, killing the stale-only theory; root cause = flex min-content (form-row labels flex:1 min-width:auto; two date inputs out-minimum the 340px panel → Ends hung off-screen). TWO bugs had shared one screenshot: the 0.8.0 stagger AND this overflow. min-width:0. Landmine #5. (2) Month headers drifted off the gridlines — flex-grow with basis:auto isn't proportional; flex-basis:0. (3) D66 "days are key": weekend shading + day/week gridlines in every row incl. zoom (compact sheds progressively), adaptive density for Katie's ~10 concurrent projects (20px labeled / 10px / 5px bars, names via hover+tap+legend at thin sizes), per-row lane-usage heights. Density tiers, day-walk counts (Q1'26: 90d, 13 Sats, 13 weeklines), and row-lane math unit-tested green. Jake then DEFINED v1.0.0 (recorded as D67): 1.0 ships when the big-screen dashboard layout exists — year view LEFT, week view TOP-RIGHT, agenda/projects/setup BOTTOM-RIGHT (the §1 target / phase-4 kiosk). Until then we stay 0.x regardless of feature size. app 0.12.0, css 0.12.0, html 0.10.1; store/queue untouched. Smoke tests W–AA. HANDOFF 0.13.0. |
 | 2026-07-11 | Claude Fable 5 · **Otto** (same instance, round 3) | JAKE'S VERDICT on the timeline: "nuts... I think I like it?" + Ends box CONFIRMED FIXED. Named the thing for him (it's a Gantt chart) and built the view he was picturing: D68 month-grid layout — Sun–Sat weeks as rows, per-week gcal-style lane packing, bars clipped to week∩month so spillover weeks don't duplicate, same drag/tap/fill machinery reused (wireBarDrag was layout-agnostic by luck of design). Grid is default; ▦/▬ toggle left of modes. Timeline bars now window-height sized (9–34px lanes, resize-reactive) per Jake's "double their height" note. ＋ New project FAB reparents the REAL form into a modal (listeners/color assistant/interception intact), home on close. Unit tests: week windows (Feb'26=4, Jul'26=5, Aug'26=6), week clipping + handle logic, lane touch-sharing, height clamps — green. Census 87→91 (+gridWeeksOfMonth, renderYearGrid, openYvProjectModal, closeYvProjectModal), 0 lost. app 0.13.0, css 0.13.0, html 0.11.0. Smoke tests BB–HH. HANDOFF 0.14.0. |
+| 2026-07-11 | Claude Fable 5 · **Otto** (same instance, round 4) | §5 SPRING CLEANING at Jake's request ("utterly overwhelming... almost a record of the questions I've answered"). Confirmed his reading: §5 is HIS list. Rebuilt as 5a open questions (3 live: billable hours, phase-3 priority, year-view filter behavior) / 5b awaiting-✅ (current BB–HH + 5 carried unconfirmed items) / 5c Claude backlog (3 items). Deleted: exit-checklist results, v0.7 test results, data-cleanup narrative, smoke-test generations A–L, 1–10, M–V, W–AA (history preserved in D-log + this log). ~80 lines → ~40. Meta-rule 8 added so it STAYS lean. No code shipped; HANDOFF 0.15.0 only. |
