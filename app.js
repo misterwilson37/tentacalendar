@@ -1,5 +1,13 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.10.0 — "the encore" (Katie's notes field, D63)
+// 0.10.0:
+//  · Tasks get an optional NOTES field: short title in the row, details
+//    behind a ▸ toggle underneath (tap the title or the chevron).
+//  · Row layout v2 (the phone smoking-gun screenshot): queue/waiting/
+//    done rows are now two lines — [checkbox + title] over [tier chip +
+//    actions] — so long titles wrap as prose instead of one-word
+//    columns squeezed beside four buttons. Shared rowScaffold builder.
 // Version 0.9.0 — "the goodbye release" (Inky's last)
 // 0.9.0:
 //  · D62 rev: dup modal gains "✎⋮ Review the pipeline first…" — edits
@@ -58,7 +66,7 @@ import {
   addProject, addProjectWithStages, deleteProject, updateProject,
   setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js?v=0.7.0";
+} from "./store.js?v=0.8.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -66,7 +74,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.9.0";
+export const APP_VERSION = "0.10.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -84,6 +92,7 @@ const S = {
   decisionIds: null,        // Set of item keys while decision modal is open (D57)
   dupTarget: null,          // {projectId, stages} pending duplicate (D59/D62)
   stagesFromDup: false,     // stages editor opened FROM the dup modal (D62 rev)
+  expandedNotes: new Set(), // task ids with details open (D63; ephemeral by design)
   uncheckTarget: null,      // task pending the un-complete rewind choice (D53)
   expandedProjects: new Set(JSON.parse(localStorage.getItem("tc-expanded-projects") || "[]")), // D56
   showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
@@ -351,6 +360,53 @@ function whenLabel(ts) {
   return sameDayAsView(ts) ? fmtTime(ts) : `${fmtTime(ts)} ${fmtDay(ts)}`;
 }
 
+/** D63 row layout: line 1 = lead (checkbox/dot) + title (+ ▸ when the
+ *  task has notes), line 2 = tier chip + actions pinned right, details
+ *  expanding underneath. One builder so queue/waiting/done stay twins. */
+function rowScaffold(row, { lead, tier, mainHTML, buttons = [], notes = "", noteKey = null }) {
+  row.classList.add("row-2l");
+  const top = document.createElement("div");
+  top.className = "row-top";
+  if (lead) top.append(lead);
+  const main = document.createElement("div");
+  main.className = "row-main";
+  main.innerHTML = mainHTML;
+  top.append(main);
+  const hasNotes = !!(notes && String(notes).trim()) && noteKey != null;
+  if (hasNotes) {
+    const open = S.expandedNotes.has(noteKey);
+    const chev = document.createElement("button");
+    chev.type = "button";
+    chev.className = "icon-btn note-chev";
+    chev.textContent = open ? "▾" : "▸";
+    chev.title = open ? "Hide details" : "Show details";
+    const toggle = () => {
+      if (S.expandedNotes.has(noteKey)) S.expandedNotes.delete(noteKey);
+      else S.expandedNotes.add(noteKey);
+      render();
+    };
+    chev.addEventListener("click", toggle);
+    main.classList.add("has-notes");
+    main.title = open ? "Hide details" : "Show details";
+    main.addEventListener("click", toggle);
+    top.append(chev);
+  }
+  row.append(top);
+  const actions = document.createElement("div");
+  actions.className = "row-actions";
+  if (tier !== undefined) actions.append(tierChip(tier));
+  const spacer = document.createElement("span");
+  spacer.className = "row-spacer";
+  actions.append(spacer, ...buttons);
+  row.append(actions);
+  if (hasNotes && S.expandedNotes.has(noteKey)) {
+    const n = document.createElement("div");
+    n.className = "row-notes";
+    n.textContent = String(notes);
+    row.append(n);
+  }
+}
+
 function renderQueue(items, now) {
   const list = $("#queue");
   list.innerHTML = "";
@@ -369,31 +425,25 @@ function renderQueue(items, now) {
     }
     if (it.expired) staleGlow(row, it.kind === "stage" ? it.deadline : it.originalDue, now);
 
+    let lead;
     if (it.kind === "task") {
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.addEventListener("change", ev => {
-        setTaskDone(it.id, cb.checked);
-        if (cb.checked) celebrate(1, clickPoint(ev));
+      lead = document.createElement("input");
+      lead.type = "checkbox";
+      lead.addEventListener("change", ev => {
+        setTaskDone(it.id, lead.checked);
+        if (lead.checked) celebrate(1, clickPoint(ev));
       });
-      row.append(cb);
     } else if (it.kind === "stage") {
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.title = `Mark "${it.title}" done`;
-      cb.addEventListener("change", ev => onStageToggle(it.projectId, it.stageIndex, cb.checked, ev));
-      row.append(cb);
+      lead = document.createElement("input");
+      lead.type = "checkbox";
+      lead.title = `Mark "${it.title}" done`;
+      lead.addEventListener("change", ev => onStageToggle(it.projectId, it.stageIndex, lead.checked, ev));
     } else {
-      const dot = document.createElement("span");
-      dot.className = "event-dot";
-      dot.textContent = "📌";
-      row.append(dot);
+      lead = document.createElement("span");
+      lead.className = "event-dot";
+      lead.textContent = "📌";
     }
 
-    row.append(tierChip(it.tier));
-
-    const main = document.createElement("div");
-    main.className = "row-main";
     let sub;
     if (it.kind === "event") {
       sub = fmtTime(it.time) + (it.end ? "–" + fmtTime(it.end) : "");
@@ -409,20 +459,21 @@ function renderQueue(items, now) {
     }
     const stagePrefix = it.kind === "stage"
       ? `<span class="stage-proj" style="color:${it.projectColor}">${esc(it.projectName)}</span> · ` : "";
-    main.innerHTML = `<strong>${stagePrefix}${esc(it.title)}</strong><span class="sub">${sub}</span>`;
-    row.append(main);
-
-    if (it.kind === "task") {
-      row.append(
-        iconBtn("✎", "Edit this task", () => startTaskEdit(it.raw)),
-        iconBtn("↳", "Add follow-up", () => followUpPrompt(it)),
-        iconBtn("✕", "Delete", () => { if (confirm(`Delete "${it.title}"?`)) deleteTask(it.id); })
-      );
-    }
-    if (it.kind === "stage") {
-      row.append(iconBtn("⏰", "Set/change this stage's hard due date", () =>
-        openDueDialog(it.projectId, it.stageIndex, it.title, it.dueAt)));
-    }
+    const buttons = it.kind === "task" ? [
+      iconBtn("✎", "Edit this task", () => startTaskEdit(it.raw)),
+      iconBtn("↳", "Add follow-up", () => followUpPrompt(it)),
+      iconBtn("✕", "Delete", () => { if (confirm(`Delete "${it.title}"?`)) deleteTask(it.id); })
+    ] : it.kind === "stage" ? [
+      iconBtn("⏰", "Set/change this stage's hard due date", () =>
+        openDueDialog(it.projectId, it.stageIndex, it.title, it.dueAt))
+    ] : [];
+    rowScaffold(row, {
+      lead, tier: it.tier,
+      mainHTML: `<strong>${stagePrefix}${esc(it.title)}</strong><span class="sub">${sub}</span>`,
+      buttons,
+      notes: it.kind === "task" ? (it.raw?.notes || "") : "",
+      noteKey: it.kind === "task" ? it.id : null
+    });
     list.append(row);
   }
 }
@@ -441,21 +492,22 @@ function renderWaiting(waiting) {
     const tier = S.tiers.find(x => x.id === t.tierId);
     const row = document.createElement("div");
     row.className = "row waiting-row";
-    row.append(tierChip(tier));
-    const main = document.createElement("div");
-    main.className = "row-main";
-    main.innerHTML = `<strong>${esc(t.title)}</strong><span class="sub">+${t.offsetDays}d after: ${esc(parent ? parent.title : "(deleted task)")}</span>`;
-    row.append(main);
-    row.append(
-      iconBtn("✎", "Edit title / offset", () => {
-        const title = prompt("Follow-up title:", t.title);
-        if (title === null) return;
-        const days = parseInt(prompt("Days after parent completion:", t.offsetDays), 10);
-        if (isNaN(days)) return;
-        updateTask(t.id, { title: title.trim() || t.title, offsetDays: days });
-      }),
-      iconBtn("✕", "Delete", () => deleteTask(t.id))
-    );
+    rowScaffold(row, {
+      lead: null, tier,
+      mainHTML: `<strong>${esc(t.title)}</strong><span class="sub">+${t.offsetDays}d after: ${esc(parent ? parent.title : "(deleted task)")}</span>`,
+      buttons: [
+        iconBtn("✎", "Edit title / offset", () => {
+          const title = prompt("Follow-up title:", t.title);
+          if (title === null) return;
+          const days = parseInt(prompt("Days after parent completion:", t.offsetDays), 10);
+          if (isNaN(days)) return;
+          updateTask(t.id, { title: title.trim() || t.title, offsetDays: days });
+        }),
+        iconBtn("✕", "Delete", () => deleteTask(t.id))
+      ],
+      notes: t.notes || "",
+      noteKey: t.id
+    });
     list.append(row);
   }
 }
@@ -474,11 +526,12 @@ function renderDone(done) {
     cb.type = "checkbox";
     cb.checked = true;
     cb.addEventListener("change", () => onTaskUncheck(t));
-    row.append(cb, tierChip(tier));
-    const main = document.createElement("div");
-    main.className = "row-main";
-    main.innerHTML = `<strong>✓ ${esc(t.title)}</strong><span class="sub">done ${fmtTime(t.completedAt)}</span>`;
-    row.append(main);
+    rowScaffold(row, {
+      lead: cb, tier,
+      mainHTML: `<strong>✓ ${esc(t.title)}</strong><span class="sub">done ${fmtTime(t.completedAt)}</span>`,
+      notes: t.notes || "",
+      noteKey: t.id
+    });
     list.append(row);
   }
 }
@@ -1016,6 +1069,7 @@ function startTaskEdit(task) {
   $("#task-submit").textContent = "Save changes";
   $("#task-cancel").hidden = false;
   $("#task-title").value = task.title;
+  $("#task-notes").value = task.notes || "";
   $("#task-tier").value = task.tierId;
   const d = new Date(task.dueAt);
   $("#task-date").value = toDateInput(d);
@@ -1045,9 +1099,9 @@ function onTaskFormSubmit(ev) {
   const unit = $("#task-esc-unit").value;
   if (!title || !tierId || !date) return;
   const dueAt = new Date(`${date}T${time}`).getTime();
-  const payload = { title, tierId, dueAt, escalation: { every, unit } };
+  const payload = { title, tierId, dueAt, escalation: { every, unit }, notes: $("#task-notes").value.trim() };
   if (S.editingTaskId) updateTask(S.editingTaskId, payload).then(cancelTaskEdit);
-  else addTask(payload).then(() => { $("#task-title").value = ""; });
+  else addTask(payload).then(() => { $("#task-title").value = ""; $("#task-notes").value = ""; });
 }
 
 // ---------- Project form (create + edit) + weekend interception (D45) ----------
