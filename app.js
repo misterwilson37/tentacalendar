@@ -1,17 +1,25 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.6.2
-// 0.6.2 (D50): "No date" timing option — most pipeline stages are
-// weight, not deadlines. Project card header wrap fix.
-// 0.6.1: internal module imports are now version-queried (D49) —
-// ?v= on <script> tags does NOT cache-bust ES module imports, so a
-// stale cached config.js (missing CONFIG_VERSION) killed the whole
-// module graph with a SyntaxError before any code ran.
-// 0.6.0 ("Priority Engine v2"): D43 sort wired, workload select,
-// next-deadline labels, tier filter chips (D47), grouped overdue
-// decision modal (D46), weekend-date interception (D45), plus the
-// 0.5.x features: due-date dialog, per-project stage surgery,
-// tap popovers, numbered project-tier dropdown.
+// Version 0.7.0 — "the exit-checklist release"
+// 0.7.0:
+//  · DECISION MODAL v2 (D57): rows are LIVE (re-derived from real
+//    state every render), ✓ completes the ACTIVE stage (the old code
+//    completed the deadline stage — Jake's "still on the first phase"
+//    bug), 🕐 replaces ↷ and reschedules the overdue DEADLINE to the
+//    tier's next allowed day 9 AM, modal auto-closes when emptied.
+//  · Collapsible project cards + pinned header buttons + finished
+//    projects folded into their own section (D56).
+//  · Un-complete-parent rewind modal, 3 options (D53).
+//  · Duplicate-for-next-year: completion prompt + 🔁 card button (D59).
+//  · Settings split into tabs; deadline hour (D51) + decision
+//    threshold (D52) settable; per-tier allowed-day toggles (D60);
+//    tier color conflict assistant (D55).
+//  · ⓘ popover fix (D58): a tap inside a <label> re-dispatches a
+//    click to the label's control, and THAT second click closed the
+//    popover in the same instant it opened. preventDefault() stops
+//    the forwarding. (Jake: "the i doesn't show anything.")
+// 0.6.x: D50 undated stages, D49 versioned module imports, D43–D48
+// priority engine v2 + modals + filters.
 // ============================================================
 
 import { CONFIG_VERSION } from "./config.js?v=0.4.0";
@@ -19,18 +27,19 @@ import {
   watchAuth, signIn, signOutUser, STORE_VERSION,
   subscribeTiers, subscribeTasks, subscribeEvents, subscribeConfig,
   subscribeProjects, subscribeStageTemplate,
-  addTask, addFollowUp, setTaskDone, deleteTask, updateTask,
-  addProject, deleteProject, updateProject, setStageDone, setStageDue, setProjectStages,
+  addTask, addFollowUp, setTaskDone, deleteTask, updateTask, rewindFollowUps,
+  addProject, addProjectWithStages, deleteProject, updateProject,
+  setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js?v=0.6.2";
+} from "./store.js?v=0.7.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage,
-  isWeekend, addWeekdays, weekendNeighbors,
+  isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.6.0";
+} from "./queue.js?v=0.7.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.6.2";
+export const APP_VERSION = "0.7.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -45,6 +54,11 @@ const S = {
   dueTarget: null,          // {projectId, stageIndex}
   stagesTarget: null,       // projectId
   weekendPending: null,     // {payload, field} mid-validation project save
+  decisionIds: null,        // Set of item keys while decision modal is open (D57)
+  dupTarget: null,          // {projectId, startDate, endDate} pending duplicate (D59)
+  uncheckTarget: null,      // task pending the un-complete rewind choice (D53)
+  expandedProjects: new Set(JSON.parse(localStorage.getItem("tc-expanded-projects") || "[]")), // D56
+  showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
   hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
   lastSuggestedColor: "#4dabf7",
   unsubs: []
@@ -76,13 +90,36 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#stages-cancel").addEventListener("click", () => { $("#stages-modal").hidden = true; });
   $("#stage-proj-add").addEventListener("click", () =>
     projStageRow({ name: "", direction: "none", anchor: "start", offsetDays: 0, completedAt: null, dueAt: null }, -1, true));
-  $("#decision-close").addEventListener("click", () => { $("#decision-modal").hidden = true; });
+  $("#decision-close").addEventListener("click", closeDecision);
+
+  // Settings tabs (D52)
+  document.querySelectorAll(".tab-btn").forEach(btn =>
+    btn.addEventListener("click", () => switchSettingsTab(btn.dataset.tab)));
+
+  // Tier color conflict assistant (D55) — delegated, rows are dynamic
+  $("#tier-editor").addEventListener("input", ev => {
+    if (ev.target.classList.contains("t-color") || ev.target.classList.contains("t-name")) checkTierColors();
+  });
+
+  // Un-complete rewind modal (D53)
+  $("#uncheck-oops").addEventListener("click", () => resolveUncheck("oops"));
+  $("#uncheck-rewind").addEventListener("click", () => resolveUncheck("rewind"));
+  $("#uncheck-keep").addEventListener("click", () => resolveUncheck("keep"));
+
+  // Duplicate-for-next-year modal (D59)
+  $("#dup-yes").addEventListener("click", dupConfirm);
+  $("#dup-no").addEventListener("click", () => { S.dupTarget = null; $("#dup-modal").hidden = true; });
 
   // Tap-to-reveal ⓘ popovers (phones can't hover).
+  // D58: preventDefault() is load-bearing — when the ⓘ lives inside a
+  // <label>, the label re-dispatches the click to its form control, and
+  // that second click's target isn't the dot OR the popover, so the
+  // handler's else-branch hid the popover in the same tick it appeared.
   document.addEventListener("click", ev => {
     const dot = ev.target.closest(".info-dot");
     const pop = $("#popover");
     if (dot && dot.dataset.info) {
+      ev.preventDefault();
       pop.textContent = dot.dataset.info;
       pop.hidden = false;
       const r = dot.getBoundingClientRect();
@@ -122,7 +159,11 @@ function onSignedIn(user) {
   S.unsubs.push(subscribeEvents(e => { S.events = e; render(); }));
   S.unsubs.push(subscribeProjects(p => { S.projects = p; suggestProjectColor(); render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
-  S.unsubs.push(subscribeConfig(c => { S.config = c; }));
+  S.unsubs.push(subscribeConfig(c => {
+    S.config = c;
+    setDeadlineHour(c?.deadlineHour ?? 16); // D51 — queue math follows settings
+    render();
+  }));
 }
 
 function onSignedOut() {
@@ -207,6 +248,7 @@ function render() {
   renderWaiting(q.waiting);
   renderDone(q.doneToday);
   renderProjects(now);
+  renderDecision(); // D57: modal rows track live state while open
 }
 
 function tierChip(tier) {
@@ -371,7 +413,7 @@ function renderDone(done) {
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = true;
-    cb.addEventListener("change", () => setTaskDone(t.id, false));
+    cb.addEventListener("change", () => onTaskUncheck(t));
     row.append(cb, tierChip(tier));
     const main = document.createElement("div");
     main.className = "row-main";
@@ -383,89 +425,204 @@ function renderDone(done) {
 
 // ---------- Project panel ----------
 
+function persistExpanded() {
+  localStorage.setItem("tc-expanded-projects", JSON.stringify([...S.expandedProjects]));
+}
+
 function renderProjects(now) {
   const box = $("#projects-list");
   box.innerHTML = "";
   $("#projects-empty").hidden = S.projects.length !== 0;
 
-  for (const p of S.projects) {
-    const prog = projectProgress(p);
-    const card = document.createElement("div");
-    card.className = "project-card" + (p.completedAt ? " project-done" : "");
-    card.style.borderTop = `3px solid ${p.color}`;
+  // D56: unfinished projects up top (whatever their dates — a stalled
+  // past project stays visible on purpose); finished ones fold into
+  // their own collapsed section below. Both keep start-date order.
+  const open = S.projects.filter(p => !p.completedAt);
+  const finished = S.projects.filter(p => p.completedAt);
 
-    const head = document.createElement("div");
-    head.className = "project-head";
-    const wl = p.workload === 3 ? " · heavy" : p.workload === 1 ? " · light" : "";
-    head.innerHTML = `<strong>${esc(p.name)}</strong><span class="sub">${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}${wl}</span>`;
-    head.append(
-      iconBtn("✎", "Edit project (name, color, tier, dates, workload)", () => startProjectEdit(p)),
-      iconBtn("✎⋮", "Edit this project's stages (rename, reorder, add, remove)", () => openStagesDialog(p)),
-      iconBtn("✕", "Delete project", () => {
-        if (confirm(`Delete project "${p.name}" and its pipeline?`)) deleteProject(p.id);
-      })
-    );
-    card.append(head);
+  for (const p of open) box.append(projectCard(p));
 
-    const barWrap = document.createElement("div");
-    barWrap.className = "progress-wrap";
-    barWrap.title = `${prog.done}/${prog.total} stages`;
-    const bar = document.createElement("div");
-    bar.className = "progress-fill";
-    bar.style.width = `${(prog.pct * 100).toFixed(0)}%`;
-    bar.style.background = p.color;
-    barWrap.append(bar);
-    const barLabel = document.createElement("span");
-    barLabel.className = "progress-label";
-    barLabel.textContent = `${prog.done}/${prog.total}`;
-    barWrap.append(barLabel);
-    card.append(barWrap);
-
-    const stages = p.stages || [];
-    const activeIdx = stages.findIndex(x => !x.completedAt);
-    const list = document.createElement("div");
-    list.className = "stage-list";
-    stages.forEach((sRaw, i) => {
-      const st = normalizeStage(sRaw);
-      const row = document.createElement("div");
-      row.className = "stage-row"
-        + (st.completedAt ? " stage-done" : "")
-        + (i === activeIdx ? " stage-active" : "");
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = !!st.completedAt;
-      cb.addEventListener("change", ev => onStageToggle(p.id, i, cb.checked, ev));
-      row.append(cb);
-
-      const label = document.createElement("span");
-      label.className = "stage-name";
-      label.textContent = st.name;
-      row.append(label);
-
-      if (st.direction && st.direction !== "none") {
-        const code = `${st.direction === "before" ? "−" : "+"}${st.offsetDays}wd ${st.anchor === "end" ? "end" : "start"}`;
-        row.append(badge(code, `${st.offsetDays} weekday(s) ${st.direction} project ${st.anchor}`));
-      }
-      if (st.dueAt) {
-        const due = badge(`⏰ ${fmtDay(st.dueAt)}`, "Hard due date — click to change/clear");
-        due.classList.add("clickable");
-        due.addEventListener("click", () => openDueDialog(p.id, i, st.name, st.dueAt));
-        row.append(due);
-      } else if (!st.completedAt) {
-        const setDue = iconBtn("⏰", "Set a hard due date", () => openDueDialog(p.id, i, st.name, null));
-        setDue.classList.add("stage-due-btn");
-        row.append(setDue);
-      }
-      list.append(row);
+  if (finished.length) {
+    const toggle = document.createElement("button");
+    toggle.className = "mini finished-toggle";
+    toggle.textContent = `${S.showFinished ? "▾" : "▸"} Finished ✓ (${finished.length})`;
+    toggle.title = "Completed projects, kept for the record";
+    toggle.addEventListener("click", () => {
+      S.showFinished = !S.showFinished;
+      localStorage.setItem("tc-show-finished", S.showFinished ? "1" : "0");
+      render();
     });
-    card.append(list);
-    box.append(card);
+    box.append(toggle);
+    if (S.showFinished) for (const p of finished) box.append(projectCard(p));
   }
+}
+
+/** D56: collapsed = header row + dates + progress bar. The header row
+ *  never wraps: [chevron][name (wraps internally)][buttons] — the
+ *  buttons Jake kept losing to the second row are now pinned. */
+function projectCard(p) {
+  const prog = projectProgress(p);
+  const expanded = S.expandedProjects.has(p.id);
+  const card = document.createElement("div");
+  card.className = "project-card" + (p.completedAt ? " project-done" : "");
+  card.style.borderTop = `3px solid ${p.color}`;
+
+  const head = document.createElement("div");
+  head.className = "project-head";
+  head.title = expanded ? "Collapse" : "Expand stages";
+  const chev = document.createElement("span");
+  chev.className = "proj-chevron";
+  chev.textContent = expanded ? "▾" : "▸";
+  const nameEl = document.createElement("strong");
+  nameEl.textContent = p.name;
+  const btns = document.createElement("span");
+  btns.className = "proj-btns";
+  btns.append(
+    iconBtn("🔁", "Duplicate this project for next year (same window, stages reset)", () => openDuplicateModal(p)),
+    iconBtn("✎", "Edit project (name, color, tier, dates, workload)", () => startProjectEdit(p)),
+    iconBtn("✎⋮", "Edit this project's stages (rename, reorder, add, remove)", () => openStagesDialog(p)),
+    iconBtn("✕", "Delete project", () => {
+      if (confirm(`Delete project "${p.name}" and its pipeline?`)) deleteProject(p.id);
+    })
+  );
+  head.append(chev, nameEl, btns);
+  head.addEventListener("click", ev => {
+    if (ev.target.closest("button")) return; // buttons act, header toggles
+    if (expanded) S.expandedProjects.delete(p.id); else S.expandedProjects.add(p.id);
+    persistExpanded();
+    render();
+  });
+  card.append(head);
+
+  const wl = p.workload === 3 ? " · heavy" : p.workload === 1 ? " · light" : "";
+  const dates = document.createElement("div");
+  dates.className = "project-dates sub";
+  dates.textContent = `${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}${wl}` +
+    (p.completedAt ? ` · finished ${fmtDay(p.completedAt)}` : "");
+  card.append(dates);
+
+  const barWrap = document.createElement("div");
+  barWrap.className = "progress-wrap";
+  barWrap.title = `${prog.done}/${prog.total} stages`;
+  const bar = document.createElement("div");
+  bar.className = "progress-fill";
+  bar.style.width = `${(prog.pct * 100).toFixed(0)}%`;
+  bar.style.background = p.color;
+  barWrap.append(bar);
+  const barLabel = document.createElement("span");
+  barLabel.className = "progress-label";
+  barLabel.textContent = `${prog.done}/${prog.total}`;
+  barWrap.append(barLabel);
+  card.append(barWrap);
+
+  if (!expanded) return card;
+
+  const stages = p.stages || [];
+  const activeIdx = stages.findIndex(x => !x.completedAt);
+  const list = document.createElement("div");
+  list.className = "stage-list";
+  stages.forEach((sRaw, i) => {
+    const st = normalizeStage(sRaw);
+    const row = document.createElement("div");
+    row.className = "stage-row"
+      + (st.completedAt ? " stage-done" : "")
+      + (i === activeIdx ? " stage-active" : "");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!st.completedAt;
+    cb.addEventListener("change", ev => onStageToggle(p.id, i, cb.checked, ev));
+    row.append(cb);
+
+    const label = document.createElement("span");
+    label.className = "stage-name";
+    label.textContent = st.name;
+    row.append(label);
+
+    if (st.direction && st.direction !== "none") {
+      const code = `${st.direction === "before" ? "−" : "+"}${st.offsetDays}wd ${st.anchor === "end" ? "end" : "start"}`;
+      row.append(badge(code, `${st.offsetDays} working day(s) ${st.direction} project ${st.anchor} (counts this tier's allowed days)`));
+    }
+    if (st.dueAt) {
+      const due = badge(`⏰ ${fmtDay(st.dueAt)}`, "Hard due date — click to change/clear");
+      due.classList.add("clickable");
+      due.addEventListener("click", () => openDueDialog(p.id, i, st.name, st.dueAt));
+      row.append(due);
+    } else if (!st.completedAt) {
+      const setDue = iconBtn("⏰", "Set a hard due date", () => openDueDialog(p.id, i, st.name, null));
+      setDue.classList.add("stage-due-btn");
+      row.append(setDue);
+    }
+    list.append(row);
+  });
+  card.append(list);
+  return card;
 }
 
 async function onStageToggle(projectId, stageIndex, done, ev) {
   const result = await setStageDone(projectId, stageIndex, done);
-  if (done && result) celebrate(result.allDone ? 3 : 2, clickPoint(ev));
+  if (done && result) {
+    celebrate(result.allDone ? 3 : 2, clickPoint(ev));
+    // D59: once the fireworks land, offer next year's run.
+    if (result.allDone) {
+      const p = S.projects.find(x => x.id === projectId);
+      if (p) setTimeout(() => openDuplicateModal(p), 2600);
+    }
+  }
+}
+
+// ---------- Duplicate for next year (D59) ----------
+
+/** Same calendar date next year; Feb 29 clamps to Feb 28. */
+function plusOneYear(ts) {
+  const d = new Date(ts);
+  const m = d.getMonth();
+  d.setFullYear(d.getFullYear() + 1);
+  if (d.getMonth() !== m) d.setDate(0); // rolled over → back to month end
+  return d.getTime();
+}
+
+function openDuplicateModal(p) {
+  const tier = S.tiers.find(t => t.id === p.tierId);
+  const allowed = tier?.allowedDays;
+  // Shift the window +1 year, then snap onto the tier's working days:
+  // start slides FORWARD to the next allowed day, end slides BACK to the
+  // previous one (never widening the window), with an order guard.
+  let startDate = plusOneYear(p.startDate);
+  let endDate = plusOneYear(p.endDate);
+  if (!isDayAllowed(startDate, allowed)) startDate = allowedNeighbors(startDate, allowed).next;
+  if (!isDayAllowed(endDate, allowed)) endDate = allowedNeighbors(endDate, allowed).prev;
+  if (endDate < startDate) endDate = allowedNeighbors(startDate, allowed).next;
+  S.dupTarget = { projectId: p.id, startDate, endDate };
+  $("#dup-text").textContent =
+    `Set up "${p.name}" to run again ${fmtDay(startDate)} – ${fmtDay(endDate)}? ` +
+    `Its ${(p.stages || []).length} stages copy over (including any surgery) with every checkbox and hard due date reset.`;
+  $("#dup-yes").textContent = `Yes — duplicate for ${new Date(startDate).getFullYear()}`;
+  $("#dup-modal").hidden = false;
+}
+
+function dupConfirm() {
+  const t = S.dupTarget;
+  S.dupTarget = null;
+  $("#dup-modal").hidden = true;
+  if (!t) return;
+  const p = S.projects.find(x => x.id === t.projectId);
+  if (!p) return;
+  const stages = (p.stages || []).map(sRaw => {
+    const s = normalizeStage(sRaw);
+    return {
+      name: s.name,
+      direction: s.direction || "none",
+      anchor: s.anchor || "start",
+      offsetDays: s.offsetDays || 0,
+      completedAt: null,
+      dueAt: null
+    };
+  });
+  addProjectWithStages({
+    name: p.name, color: p.color, tierId: p.tierId,
+    workload: p.workload || 2,
+    startDate: t.startDate, endDate: t.endDate, stages
+  });
 }
 
 function badge(text, title) {
@@ -590,45 +747,88 @@ function decisionKey() {
   return `tc-decision-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
-function maybeDecisionTime() {
-  if (!S.user) return;
-  if (localStorage.getItem(decisionKey())) return;
+/** Items ≥ threshold days past deadline in visible tiers, right now. */
+function staleItems() {
   const now = Date.now();
+  const threshold = (S.config?.decisionThresholdDays ?? 2) * DAY_MS; // D52
   const q = buildQueue({
     tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
     now, viewDay: now, hiddenTierIds: S.hiddenTierIds
   });
-  const stale = q.items.filter(it =>
-    it.expired && (now - (it.kind === "stage" ? it.deadline : it.originalDue)) >= 2 * DAY_MS);
+  return q.items.filter(it =>
+    it.expired && (now - (it.kind === "stage" ? it.deadline : it.originalDue)) >= threshold);
+}
+
+/** One project = one modal row across its whole lifetime in the modal,
+ *  however many stages it burns through while it's open. */
+function decisionItemKey(it) {
+  return it.kind === "stage" ? `proj:${it.projectId}` : `task:${it.id}`;
+}
+
+function maybeDecisionTime() {
+  if (!S.user || S.decisionIds) return;           // already open
+  if (localStorage.getItem(decisionKey())) return; // today's shot is spent
+  const stale = staleItems();
   if (!stale.length) return;
   localStorage.setItem(decisionKey(), "1"); // once per day per device
+  S.decisionIds = new Set(stale.map(decisionItemKey));
+  renderDecision();
+  $("#decision-modal").hidden = false;
+}
+
+function closeDecision() {
+  S.decisionIds = null;
+  $("#decision-modal").hidden = true;
+}
+
+/** D57: the modal is a live view. Every render re-derives its rows from
+ *  current state, so ✓ and 🕐 visibly resolve items, a project row
+ *  advances to its next stage instead of lying, and the modal closes
+ *  itself once everything is dealt with. */
+function renderDecision() {
+  if (!S.decisionIds) return;
+  const current = staleItems().filter(it => S.decisionIds.has(decisionItemKey(it)));
+  if (!current.length) { closeDecision(); return; }
+  const now = Date.now();
   const list = $("#decision-list");
   list.innerHTML = "";
-  for (const it of stale) {
-    const days = Math.floor((now - (it.kind === "stage" ? it.deadline : it.originalDue)) / DAY_MS);
+  for (const it of current) {
+    const overdueSince = it.kind === "stage" ? it.deadline : it.originalDue;
+    const days = Math.floor((now - overdueSince) / DAY_MS);
     const row = document.createElement("div");
     row.className = "row decision-row";
     const main = document.createElement("div");
     main.className = "row-main";
-    const name = it.kind === "stage" ? `${it.projectName}: ${it.deadlineStageName}` : it.title;
-    main.innerHTML = `<strong>${esc(name)}</strong><span class="sub">${days} day${days === 1 ? "" : "s"} overdue</span>`;
+    if (it.kind === "stage") {
+      // Show the ACTIVE stage (what ✓ completes); name the overdue
+      // deadline separately when it's a different, later stage.
+      const dl = it.deadlineStageIndex !== it.stageIndex
+        ? ` · deadline: ${esc(it.deadlineStageName)}` : "";
+      main.innerHTML = `<strong>${esc(it.projectName)}: ${esc(it.title)}</strong>` +
+        `<span class="sub">${days} day${days === 1 ? "" : "s"} overdue${dl}</span>`;
+    } else {
+      main.innerHTML = `<strong>${esc(it.title)}</strong>` +
+        `<span class="sub">${days} day${days === 1 ? "" : "s"} overdue</span>`;
+    }
     row.append(main);
-    const nextWd = (() => { const t = addWeekdays(now, 1); const d = new Date(t); d.setHours(9, 0, 0, 0); return d.getTime(); })();
+    // D60: reschedule lands on the tier's next ALLOWED day — a weekend
+    // check is unnecessary by construction (disallowed days are skipped).
+    const target = (() => {
+      const t = addAllowedDays(now, 1, it.tier?.allowedDays);
+      const d = new Date(t); d.setHours(9, 0, 0, 0); return d.getTime();
+    })();
     row.append(
-      iconBtn("✓", "Mark it done", ev => {
-        if (it.kind === "stage") onStageToggle(it.projectId, it.deadlineStageIndex, true, ev);
+      iconBtn("✓", it.kind === "stage" ? `Mark "${it.title}" done` : "Mark it done", ev => {
+        if (it.kind === "stage") onStageToggle(it.projectId, it.stageIndex, true, ev);
         else { setTaskDone(it.id, true); celebrate(1, clickPoint(ev)); }
-        row.remove();
       }),
-      iconBtn("↷", `Reschedule to ${fmtDay(nextWd)} 9:00 AM`, () => {
-        if (it.kind === "stage") setStageDue(it.projectId, it.deadlineStageIndex, nextWd);
-        else updateTask(it.id, { dueAt: nextWd });
-        row.remove();
+      iconBtn("🕐", `Reschedule to ${fmtDay(target)} 9:00 AM`, () => {
+        if (it.kind === "stage") setStageDue(it.projectId, it.deadlineStageIndex, target);
+        else updateTask(it.id, { dueAt: target });
       })
     );
     list.append(row);
   }
-  $("#decision-modal").hidden = false;
 }
 
 // ---------- Task form (create + edit) ----------
@@ -738,20 +938,25 @@ function onProjectFormSubmit(ev) {
   validateWeekends(payload, "startDate");
 }
 
-/** D45: project start/end must be weekdays — everything else is computed
- *  from them. Checks fields one at a time via the weekend modal. */
+/** D45→D60: project start/end should land on the tier's ALLOWED days —
+ *  everything else is computed from them. A tier that allows all seven
+ *  days (e.g. Personal) never triggers this modal. Checks fields one at
+ *  a time via the interception modal. */
 function validateWeekends(payload, field) {
   if (field === null) { commitProject(payload); return; }
   const next = field === "startDate" ? "endDate" : null;
-  if (!isWeekend(payload[field])) { validateWeekends(payload, next); return; }
-  const { fri, mon } = weekendNeighbors(payload[field]);
-  S.weekendPending = { payload, field, next, fri, mon };
+  const tier = S.tiers.find(t => t.id === payload.tierId);
+  const allowed = tier?.allowedDays;
+  if (isDayAllowed(payload[field], allowed)) { validateWeekends(payload, next); return; }
+  const { prev, next: after } = allowedNeighbors(payload[field], allowed);
+  S.weekendPending = { payload, field, next, fri: prev, mon: after };
   const which = field === "startDate" ? "start" : "end";
   const dow = new Date(payload[field]).toLocaleDateString([], { weekday: "long" });
   $("#weekend-text").textContent =
-    `${fmtDay(payload[field])} is a ${dow} — are you sure you want that as the project ${which} date? Pipeline math counts weekdays only.`;
-  $("#weekend-fri").textContent = `No — ${fmtDay(fri)}`;
-  $("#weekend-mon").textContent = `No — ${fmtDay(mon)}`;
+    `${fmtDay(payload[field])} is a ${dow} — that's outside ${tier ? `the ${tier.name} tier's` : "this tier's"} working days, ` +
+    `and pipeline math only counts those. Keep it as the project ${which} date anyway?`;
+  $("#weekend-fri").textContent = `No — ${fmtDay(prev)}`;
+  $("#weekend-mon").textContent = `No — ${fmtDay(after)}`;
   $("#weekend-modal").hidden = false;
 }
 
@@ -839,6 +1044,40 @@ function checkProjectColor() {
   }
 }
 
+// ---------- Un-complete rewind (D53) ----------
+
+/** Incomplete children that HAVE a dueAt were materialized by this
+ *  parent's completion (follow-ups are born with dueAt:null). */
+function materializedKids(parentId) {
+  return S.tasks.filter(t =>
+    t.parentTaskId === parentId && t.dueAt != null && !t.completedAt);
+}
+
+function onTaskUncheck(t) {
+  const kids = materializedKids(t.id);
+  if (!kids.length) { setTaskDone(t.id, false); return; }
+  S.uncheckTarget = t;
+  const names = kids.map(k => `"${k.title}" (${fmtDay(k.dueAt)})`).join(", ");
+  $("#uncheck-title").textContent = `Un-complete "${t.title}"?`;
+  $("#uncheck-text").textContent =
+    `Completing it scheduled ${kids.length === 1 ? "a follow-up" : "follow-ups"}: ${names}. What should happen?`;
+  $("#uncheck-modal").hidden = false;
+  render(); // snap the checkbox back to ✓ until a choice is made
+}
+
+function resolveUncheck(choice) {
+  const t = S.uncheckTarget;
+  S.uncheckTarget = null;
+  $("#uncheck-modal").hidden = true;
+  if (!t) return;
+  if (choice === "oops") { render(); return; }        // stays done, follow-ups keep dates
+  if (choice === "rewind") {                          // truly not done: pull kids back to Waiting
+    setTaskDone(t.id, false).then(() => rewindFollowUps(t.id));
+    return;
+  }
+  setTaskDone(t.id, false);                           // "keep": un-done, follow-ups stay dated
+}
+
 function followUpPrompt(item) {
   const title = prompt(`Follow-up to "${item.title}":`, `Follow up: ${item.title}`);
   if (!title) return;
@@ -849,20 +1088,63 @@ function followUpPrompt(item) {
 
 // ---------- Settings ----------
 
+function switchSettingsTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tab-pane").forEach(p =>
+    { p.hidden = p.dataset.pane !== tab; });
+}
+
 function openSettings() {
   $("#settings-modal").hidden = false;
+  switchSettingsTab("tiers");
   const c = S.config || {};
   $("#cfg-carryover").value = c.carryoverWriteHour ?? 9;
   $("#cfg-sleep-start").value = c.sleepStart ?? 22;
   $("#cfg-sleep-end").value = c.sleepEnd ?? 6;
   $("#cfg-poll").value = c.pollIntervalMinutes ?? 60;
+  $("#cfg-deadline-hour").value = c.deadlineHour ?? 16;   // D51
+  $("#cfg-decision-days").value = c.decisionThresholdDays ?? 2; // D52
   updatePollCostHint();
   const box = $("#tier-editor");
   box.innerHTML = "";
   for (const t of S.tiers) tierEditorRow(t, false);
+  checkTierColors();
   const stBox = $("#stage-template-editor");
   stBox.innerHTML = "";
   for (const st of S.stageTemplate) stageTemplateRow(normalizeStage(st), false);
+}
+
+/** D55: tiers get the same conflict assistant projects have. One shared
+ *  hint line under the editor names the closest colliding pair. */
+function checkTierColors() {
+  const hint = $("#tier-color-hint");
+  if (!hint) return;
+  const rows = [...document.querySelectorAll("#tier-editor .tier-row")].map(r => ({
+    name: r.querySelector(".t-name").value.trim() || "Untitled",
+    color: r.querySelector(".t-color").value
+  }));
+  let worst = null;
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const d = colorDistance(rows[i].color, rows[j].color);
+      if (d < 60 && (!worst || d < worst.d)) worst = { d, a: rows[i], b: rows[j] };
+    }
+  }
+  if (!worst) { hint.textContent = ""; return; }
+  const used = rows.map(r => r.color.toLowerCase());
+  const fresh = TIER_PALETTE.filter(c => !used.includes(c));
+  let suggestion = fresh[0] || TIER_PALETTE[0];
+  if (fresh.length) {
+    let bestScore = -1;
+    for (const cand of fresh) {
+      const score = Math.min(...used.map(u => colorDistance(cand, u)));
+      if (score > bestScore) { bestScore = score; suggestion = cand; }
+    }
+  }
+  hint.textContent = worst.d < 25
+    ? `⚠️ ${worst.a.name} and ${worst.b.name} are the same color. Try ${suggestion}.`
+    : `⚠️ ${worst.a.name} and ${worst.b.name} are very close. Try ${suggestion}.`;
 }
 
 const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b197fc", "#f783ac", "#63e6be", "#ffc9c9", "#a5d8ff"];
@@ -882,6 +1164,13 @@ function tierEditorRow(t, isNew) {
   const row = document.createElement("div");
   row.className = "tier-row";
   row.dataset.id = t.id || "";
+  // D60: which days count for this tier — reschedule targets, project
+  // date interception, and stage-offset math all follow these toggles.
+  const allowed = new Set((Array.isArray(t.allowedDays) && t.allowedDays.length) ? t.allowedDays : [1, 2, 3, 4, 5]);
+  const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  const dayToggles = dayNames.map((n, d) =>
+    `<label class="t-day" title="${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d]}"><input type="checkbox" class="t-dow" data-dow="${d}" ${allowed.has(d) ? "checked" : ""}>${n}</label>`
+  ).join("");
   row.innerHTML = `
     <input class="t-rank" type="number" min="1" value="${t.rank ?? 1}" title="Priority rank: only breaks ties in the queue now (D43), but orders the filter chips and dropdowns">
     <input class="t-name" type="text" value="${esc(t.name || "")}" placeholder="Tier name">
@@ -892,12 +1181,14 @@ function tierEditorRow(t, isNew) {
     </select>
     <label class="t-carry-label" title="If tasks in this tier are still unchecked at midnight, they get written onto tomorrow's Google Calendar with a ❗ at the carryover hour below. (Phase 3 feature.)"><input class="t-carry" type="checkbox" ${t.midnightCarryover ? "checked" : ""}> ❗ carryover</label>
     <button class="t-del" title="Delete tier">✕</button>
+    <span class="t-days" title="Working days for this tier: reschedules land on these days, project dates outside them get intercepted, and pipeline offsets only count them. Weekend jobs? Check Sa/Su." ${t.kind === "anchor" ? "hidden" : ""}>${dayToggles}</span>
     <input class="t-cal" type="text" value="${esc(t.gcalCalendarId || "")}"
       placeholder="Google Calendar ID — GCal ⚙️ → pick calendar → 'Integrate calendar' → Calendar ID"
       title="Which Google Calendar feeds this tier. calendar.google.com → ⚙️ Settings → click the calendar → 'Integrate calendar' → Calendar ID. Your main personal calendar's ID is just your Gmail address."
       ${t.kind === "anchor" ? "" : "hidden"}>`;
   row.querySelector(".t-kind").addEventListener("change", ev => {
     row.querySelector(".t-cal").hidden = ev.target.value !== "anchor";
+    row.querySelector(".t-days").hidden = ev.target.value === "anchor";
   });
   row.querySelector(".t-del").addEventListener("click", () => {
     if (row.dataset.id) {
@@ -940,17 +1231,26 @@ function onSaveSettings() {
     carryoverWriteHour: clampInt($("#cfg-carryover").value, 0, 23, 9),
     pollIntervalMinutes: clampInt($("#cfg-poll").value, 5, 1440, 60),
     sleepStart: clampInt($("#cfg-sleep-start").value, 0, 23, 22),
-    sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6)
+    sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6),
+    deadlineHour: clampInt($("#cfg-deadline-hour").value, 0, 23, 16),      // D51
+    decisionThresholdDays: clampInt($("#cfg-decision-days").value, 1, 30, 2) // D52
   });
   for (const row of document.querySelectorAll(".tier-row")) {
     const kind = row.querySelector(".t-kind").value;
+    // D60: gather the day toggles; an accidental zero-day tier falls
+    // back to Mon–Fri rather than making scheduling math impossible.
+    let allowedDays = [...row.querySelectorAll(".t-dow")]
+      .filter(cb => cb.checked)
+      .map(cb => parseInt(cb.dataset.dow, 10));
+    if (!allowedDays.length) allowedDays = [1, 2, 3, 4, 5];
     const data = {
       rank: clampInt(row.querySelector(".t-rank").value, 1, 99, 99),
       name: row.querySelector(".t-name").value.trim() || "Untitled",
       color: row.querySelector(".t-color").value,
       kind,
       midnightCarryover: row.querySelector(".t-carry").checked,
-      gcalCalendarId: kind === "anchor" ? row.querySelector(".t-cal").value.trim() : ""
+      gcalCalendarId: kind === "anchor" ? row.querySelector(".t-cal").value.trim() : "",
+      allowedDays
     };
     if (kind === "anchor") data.defaultLeadWindowMinutes = 30;
     saveTier(row.dataset.id || null, data);
