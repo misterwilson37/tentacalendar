@@ -1,5 +1,17 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.9.0 — "the goodbye release" (Inky's last)
+// 0.9.0:
+//  · D62 rev: dup modal gains "✎⋮ Review the pipeline first…" — edits
+//    next year's stage list BEFORE anything is created (stages editor
+//    borrowed via the "@dup" target; dup modal hides and returns).
+//  · Snooze row: remind me in 1 day / 1 week / 1 month (30d alone was
+//    too blunt).
+//  · Un-dater broadened: remnants come in TWO flavors — after/end/0
+//    (Katie's window experiments) AND after/start/0 (the 0.6.0/0.6.1
+//    editors' default, per the D50 caveat). v0.8.0 only caught "end";
+//    Jake's screenshot showed the other half untouched. Now any
+//    After + 0wd row converts, either anchor.
 // Version 0.8.0 — "the smoke-test release"
 // 0.8.0:
 //  · D61: queue hides a tier's items on days outside its allowedDays
@@ -54,7 +66,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.8.0";
+export const APP_VERSION = "0.9.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -70,7 +82,8 @@ const S = {
   stagesTarget: null,       // projectId
   weekendPending: null,     // {payload, field} mid-validation project save
   decisionIds: null,        // Set of item keys while decision modal is open (D57)
-  dupTarget: null,          // {projectId, startDate, endDate} pending duplicate (D59)
+  dupTarget: null,          // {projectId, stages} pending duplicate (D59/D62)
+  stagesFromDup: false,     // stages editor opened FROM the dup modal (D62 rev)
   uncheckTarget: null,      // task pending the un-complete rewind choice (D53)
   expandedProjects: new Set(JSON.parse(localStorage.getItem("tc-expanded-projects") || "[]")), // D56
   showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
@@ -102,16 +115,20 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#due-clear").addEventListener("click", dueClear);
   $("#due-cancel").addEventListener("click", () => { $("#due-modal").hidden = true; });
   $("#stages-save").addEventListener("click", stagesSave);
-  $("#stages-cancel").addEventListener("click", () => { $("#stages-modal").hidden = true; });
+  $("#stages-cancel").addEventListener("click", () => {
+    $("#stages-modal").hidden = true;
+    if (S.stagesFromDup) { S.stagesFromDup = false; $("#dup-modal").hidden = false; } // back to the dup form, unsaved
+  });
   $("#stage-proj-add").addEventListener("click", () =>
     projStageRow({ name: "", direction: "none", anchor: "start", offsetDays: 0, completedAt: null, dueAt: null }, -1, true));
   // Cleanup for pre-D50 experiments: rows saved as after/end/0 were
   // "dated at project end" by accident — flip them to No date IN THE
   // EDITOR (nothing writes until Save, so it's reviewable).
   $("#stage-proj-undate").addEventListener("click", () => {
+    // BOTH remnant flavors (Jake's screenshot): after/end/0 (window
+    // experiments) and after/start/0 (0.6.0/0.6.1 editor default).
     for (const row of document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")) {
       if (row.querySelector(".st-dir").value === "after" &&
-          row.querySelector(".st-anchor").value === "end" &&
           (parseInt(row.querySelector(".st-off").value, 10) || 0) === 0) {
         row.querySelector(".st-dir").value = "none";
         syncTimingRow(row);
@@ -136,7 +153,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Duplicate-for-next-year modal (D59)
   $("#dup-yes").addEventListener("click", dupConfirm);
-  $("#dup-snooze").addEventListener("click", dupSnooze);
+  $("#dup-stages").addEventListener("click", openDupStages);
+  $("#dup-snooze-1").addEventListener("click", () => dupSnooze(1));
+  $("#dup-snooze-7").addEventListener("click", () => dupSnooze(7));
+  $("#dup-snooze-30").addEventListener("click", () => dupSnooze(30));
   $("#dup-no").addEventListener("click", () => { S.dupTarget = null; $("#dup-modal").hidden = true; });
 
   // Any date/time field opens its native picker on click/focus where
@@ -632,12 +652,24 @@ function openDuplicateModal(p) {
   if (!isDayAllowed(startDate, allowed)) startDate = allowedNeighbors(startDate, allowed).next;
   if (!isDayAllowed(endDate, allowed)) endDate = allowedNeighbors(endDate, allowed).prev;
   if (endDate < startDate) endDate = allowedNeighbors(startDate, allowed).next;
-  S.dupTarget = { projectId: p.id };
-  // D62: everything reviewable before anything is created.
+  // D62 rev: the stage list is part of the review — copied (and reset)
+  // up front so "✎⋮ Review the pipeline first…" can edit it pre-create.
+  const stages = (p.stages || []).map(sRaw => {
+    const st = normalizeStage(sRaw);
+    return {
+      name: st.name,
+      direction: st.direction || "none",
+      anchor: st.anchor || "start",
+      offsetDays: st.offsetDays || 0,
+      completedAt: null,
+      dueAt: null
+    };
+  });
+  S.dupTarget = { projectId: p.id, stages };
   $("#dup-text").textContent =
     `Everything below is pre-filled for next year and editable — double-check before creating. ` +
-    `All ${(p.stages || []).length} stages copy over exactly as this project has them (surgery included), ` +
-    `with every checkbox and hard due date reset.`;
+    `The ${stages.length}-stage pipeline copies over exactly as this project has it (surgery included), ` +
+    `checkboxes and hard dues reset; review or reshape it first with ✎⋮ below.`;
   $("#dup-name").value = bumpYearTokens(p.name, new Date(p.startDate).getFullYear(), new Date(startDate).getFullYear());
   $("#dup-start").value = toDateInput(new Date(startDate));
   $("#dup-end").value = toDateInput(new Date(endDate));
@@ -684,19 +716,9 @@ function dupConfirm() {
       return;
     }
   }
+  const stages = t.stages || [];
   S.dupTarget = null;
   $("#dup-modal").hidden = true;
-  const stages = (p.stages || []).map(sRaw => {
-    const st = normalizeStage(sRaw);
-    return {
-      name: st.name,
-      direction: st.direction || "none",
-      anchor: st.anchor || "start",
-      offsetDays: st.offsetDays || 0,
-      completedAt: null,
-      dueAt: null
-    };
-  });
   addProjectWithStages({
     name, color: $("#dup-color").value, tierId, workload, startDate, endDate, stages
   }).then(ref => {
@@ -706,9 +728,24 @@ function dupConfirm() {
   });
 }
 
+/** D62 rev: edit next year's pipeline BEFORE it exists — borrows the
+ *  per-project stages editor against the staged copy ("@dup" target). */
+function openDupStages() {
+  if (!S.dupTarget) return;
+  const p = S.projects.find(x => x.id === S.dupTarget.projectId);
+  S.stagesTarget = "@dup";
+  S.stagesFromDup = true;
+  $("#dup-modal").hidden = true;
+  $("#stages-title").textContent = `✎ Stages — next year's ${p ? p.name : "run"}`;
+  const box = $("#stage-proj-editor");
+  box.innerHTML = "";
+  (S.dupTarget.stages || []).forEach(st => projStageRow(st, -1, false));
+  $("#stages-modal").hidden = false;
+}
+
 /** D62: "too soon after the fireworks" escape hatch — snooze the
- *  duplication decision into a real task a month out. */
-function dupSnooze() {
+ *  duplication decision into a real task 1/7/30 days out. */
+function dupSnooze(days) {
   const t = S.dupTarget;
   S.dupTarget = null;
   $("#dup-modal").hidden = true;
@@ -716,7 +753,7 @@ function dupSnooze() {
   const p = S.projects.find(x => x.id === t.projectId);
   if (!p) return;
   const tier = S.tiers.find(x => x.id === p.tierId);
-  let due = Date.now() + 30 * DAY_MS;
+  let due = Date.now() + days * DAY_MS;
   if (!isDayAllowed(due, tier?.allowedDays)) due = allowedNeighbors(due, tier?.allowedDays).next;
   const d = new Date(due); d.setHours(9, 0, 0, 0);
   addTask({
@@ -825,6 +862,26 @@ function projStageRow(st, origIndex, isNew) {
 }
 
 function stagesSave() {
+  if (S.stagesTarget === "@dup") {
+    // D62 rev: collect into the staged copy — nothing writes until
+    // "Create next year's run"; checkboxes/dues stay reset by design.
+    if (S.dupTarget) {
+      S.dupTarget.stages = [...document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")].map(row => ({
+        name: row.querySelector(".st-name").value.trim() || "Untitled stage",
+        direction: row.querySelector(".st-dir").value,
+        anchor: row.querySelector(".st-anchor").value,
+        offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
+        completedAt: null,
+        dueAt: null
+      }));
+      $("#dup-text").textContent = $("#dup-text").textContent.replace(/The \d+-stage pipeline/, `The ${S.dupTarget.stages.length}-stage pipeline`);
+    }
+    S.stagesTarget = null;
+    S.stagesFromDup = false;
+    $("#stages-modal").hidden = true;
+    $("#dup-modal").hidden = false;
+    return;
+  }
   const p = S.projects.find(x => x.id === S.stagesTarget);
   if (!p) { $("#stages-modal").hidden = true; return; }
   const orig = p.stages || [];
