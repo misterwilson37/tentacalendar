@@ -1,6 +1,12 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.9.0
+   Version 0.10.0
+   0.10.0 (D64): responsive rows — queue/waiting/done lists are size
+   containers; when a list is ≥540px wide the two-line row collapses
+   to ONE line (checkbox · title+time · ▸ · chip · buttons), notes
+   still expanding full-width below. Narrow lists keep the D63
+   two-line layout. Pure CSS (container queries); unsupported
+   browsers just keep the two-line layout.
    0.9.0 (D63): two-line row layout (.row-2l/.row-top/.row-actions/
    .row-notes) — long titles wrap as prose instead of one-word phone
    columns; notes toggle; #task-notes textarea matches inputs.
@@ -26,7 +32,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.9.0";
+  --tc-version: "0.10.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -447,6 +453,23 @@ body.celebration-wave::after {
   border-top: 1px dashed var(--line);
   padding: .35rem .15rem 0 1.8rem;
 }
+/* ---------- D64: one-line rows when the list is wide enough ----------
+   The lists are inline-size containers; each row asks "how wide is MY
+   list?" (the viewport is a liar here — at 1100px the desktop grid
+   gives the queue barely 300px). Wide list → row-top and row-actions
+   sit side by side on one line; expanded notes wrap to a full-width
+   line of their own. Browsers without container queries skip this
+   block and keep the two-line layout — a safe fallback by design. */
+#queue, #waiting-list, #done-list { container-type: inline-size; }
+
+@container (min-width: 540px) {
+  .row-2l { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .6rem; }
+  .row-2l .row-top { flex: 1 1 auto; min-width: 0; }
+  .row-2l .row-actions { flex: 0 0 auto; }
+  .row-2l .row-actions .row-spacer { flex: 0 0 0; }
+  .row-2l .row-notes { flex-basis: 100%; }
+}
+
 #task-notes {
   width: 100%;
   background: var(--bg);
