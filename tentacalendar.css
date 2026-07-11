@@ -1,5 +1,587 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
+   Version 0.12.0
+   0.12.0 (D66 + form-overflow fix): THE ENDS BOX, finally — .form-row
+   labels are flex:1 with min-width:auto, and a flex item won't shrink
+   below its content's min width; two native date inputs exceed the
+   340px panel, so Ends hung off the right edge (a SECOND bug behind
+   the same screenshot as the 0.8.0 stagger). min-width:0 on the label
+   and its controls ends the saga. Year view: .yv-month gets
+   flex-basis:0 so header widths are truly day-proportional (labels
+   were drifting off the gridlines); day texture everywhere — faint
+   day lines, stronger Monday week lines, weekend shading blocks;
+   adaptive bar density (full 20px ≤4 lanes / half 10px ≤9 / quarter
+   5px beyond, labels only at full height — hover/tap carry names);
+   compact query sheds day lines first, week lines on very narrow.
+   0.11.0 (D65, PHASE 2): year view — .yv-nav/.yv-modes, quarter rows
+   (.yv-row: month headers flex-grown by day count, .yv-lanes with
+   absolutely positioned .yv-bar segments), D30a ghost/fill via inline
+   gradients, today marker, month gridlines, continuation clipping,
+   drag handles (.yv-handle, touch-action:none), legend, and the D27
+   compact container query (labels hide when the grid is narrow).
+   #popover gains pre-line whitespace for multi-line bar details.
+   0.10.0 (D64): responsive rows — queue/waiting/done lists are size
+   containers; when a list is ≥540px wide the two-line row collapses
+   to ONE line (checkbox · title+time · ▸ · chip · buttons), notes
+   still expanding full-width below. Narrow lists keep the D63
+   two-line layout. Pure CSS (container queries); unsupported
+   browsers just keep the two-line layout.
+   0.9.0 (D63): two-line row layout (.row-2l/.row-top/.row-actions/
+   .row-notes) — long titles wrap as prose instead of one-word phone
+   columns; notes toggle; #task-notes textarea matches inputs.
+   0.8.0: #project-form labels get the SAME column-flex treatment as
+   #task-form (they never had a display rule, so each label's height
+   depended on how its inline contents wrapped — Jake's staggered
+   Starts/Ends screenshot); .snooze-row; .label-line.
+   0.7.0: .st-ghost (undated stages keep their columns via visibility —
+   the "name field ate the row" fix), dup review-form styles.
+   0.6.0 (D56/D52/D60/D58): collapsible project cards — header row
+   never wraps ([chevron][name wraps internally][pinned buttons]),
+   dates on their own .project-dates line, finished-projects toggle;
+   settings tab bar; per-tier day toggles (.t-days); stage-editor row
+   hardening (name field can no longer shove flags/✕ out of view:
+   min-width guards + wrap fallback — Jake's new-stage layout bug).
+   0.5.2: re-release of the project-card header fix + ship-check rule.
+   0.5.x: filter chips, modal-shell system, popover, decision rows.
+   ============================================================ */
+
+/* The hidden attribute applies display:none at UA-stylesheet priority,
+   which ANY author display rule silently overrides. Never let that
+   happen again. (Post-mortem: HANDOFF session log 2026-07-09 #5.) */
+[hidden] { display: none !important; }
+
+:root {
+  --tc-version: "0.12.0";
+  --bg: #0a0f14;
+  --panel: #101822;
+  --panel-2: #16212e;
+  --ink: #dce7f0;
+  --ink-dim: #8fa3b5;
+  --line: #1f2d3d;
+  --accent: #4dd0c4;          /* octopus teal */
+  --danger: #ff6b6b;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* D21 drift glides on the wrapper; D37: NEVER put transform on body —
+   it becomes the containing block for position:fixed descendants. */
+#drift-wrap { transition: transform 4s ease-in-out; }
+
+button { cursor: pointer; font: inherit; }
+
+/* ---------- Auth ---------- */
+#auth-screen {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+}
+.auth-card {
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 3rem 4rem;
+}
+.auth-card .logo { font-size: 4rem; }
+.auth-card h1 { margin: .5rem 0 0; }
+.tagline { color: var(--ink-dim); margin: .4rem 0 1.6rem; }
+
+/* ---------- Header ---------- */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.brand { font-weight: 700; font-size: 1.1rem; }
+.version { color: var(--ink-dim); font-size: .75rem; font-weight: 400; margin-left: .4rem; }
+.header-right { display: flex; align-items: center; gap: .5rem; }
+.user { color: var(--ink-dim); font-size: .85rem; }
+
+/* ---------- Layout ---------- */
+main {
+  display: grid;
+  grid-template-columns: 1fr 340px 300px;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+#queue-panel, #form-panel, #projects-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+#form-panel, #projects-panel { align-self: start; }
+#projects-panel h3:first-child { margin-top: 0; }
+
+/* ---------- Day nav ---------- */
+.day-nav { display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem; }
+.day-nav h2 { margin: 0; font-size: 1.15rem; flex: 1; text-align: center; }
+
+/* ---------- Rows ---------- */
+.row {
+  display: flex; align-items: center; gap: .6rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .55rem .7rem;
+  margin-bottom: .45rem;
+}
+.row input[type="checkbox"] { width: 1.25rem; height: 1.25rem; accent-color: var(--accent); flex-shrink: 0; }
+.row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.row-main strong { overflow-wrap: anywhere; }
+.sub { color: var(--ink-dim); font-size: .8rem; }
+.sub s { opacity: .7; }
+
+.chip {
+  color: #0a0f14; font-size: .7rem; font-weight: 700;
+  padding: .15rem .5rem; border-radius: 99px; flex-shrink: 0;
+}
+
+.overdue { border-color: var(--danger); }
+.overdue .sub { color: var(--danger); }
+.badge {
+  background: var(--danger); color: #0a0f14;
+  font-size: .68rem; font-weight: 700;
+  padding: .05rem .4rem; border-radius: 99px;
+}
+
+.event-row { opacity: .92; border-style: dashed; }
+.event-dot { flex-shrink: 0; }
+
+.pinned-row {
+  border-color: var(--accent);
+  background: #10262b;
+  animation: pinPulse 2.4s ease-in-out infinite;
+}
+@keyframes pinPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(77, 208, 196, .0); }
+  50%      { box-shadow: 0 0 0 4px rgba(77, 208, 196, .25); }
+}
+
+.waiting-row { opacity: .75; border-style: dotted; }
+.done-row { opacity: .6; }
+.done-row strong { text-decoration: line-through; text-decoration-color: var(--accent); }
+.badge-done { color: var(--accent); font-size: .85rem; }
+
+.empty { color: var(--ink-dim); text-align: center; padding: 2rem 0; }
+
+h3 { margin: 1.2rem 0 .5rem; font-size: .95rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ---------- Form ---------- */
+#task-form { display: flex; flex-direction: column; gap: .7rem; }
+#task-form label, #project-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--ink-dim); }
+#project-form .label-line { display: inline-flex; align-items: center; gap: .3rem; } /* "Workload ⓘ" stays one line */
+.form-row { display: flex; gap: .7rem; }
+/* min-width:0 is load-bearing: flex items refuse to shrink below their
+   content's min width, and two native date inputs out-minimum a 340px
+   panel — the Ends field hung off the screen until this. */
+.form-row label { flex: 1; min-width: 0; }
+.form-row input, .form-row select { min-width: 0; }
+input[type="text"], input[type="date"], input[type="time"], input[type="number"], select {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  padding: .5rem .6rem;
+  font: inherit;
+  width: 100%;
+}
+.esc-label { line-height: 1.7; }
+.esc-inputs { display: flex; gap: .4rem; }
+.esc-inputs input { width: 4.2rem; }
+
+.primary {
+  background: var(--accent); color: #06282a;
+  border: none; border-radius: 8px;
+  padding: .65rem 1rem; font-weight: 700;
+}
+.primary:hover { filter: brightness(1.1); }
+.icon-btn {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink-dim); border-radius: 6px;
+  padding: .25rem .5rem;
+}
+.icon-btn:hover { color: var(--ink); border-color: var(--ink-dim); }
+.mini {
+  background: var(--panel-2); border: 1px solid var(--line);
+  color: var(--ink-dim); border-radius: 6px;
+  padding: .25rem .6rem; font-size: .8rem;
+}
+.hint { color: var(--ink-dim); font-size: .78rem; }
+.hint-inline { color: var(--ink-dim); font-size: .75rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* ---------- Modal system ---------- */
+#settings-modal, .modal-shell {
+  position: fixed; inset: 0;
+  background: rgba(4, 8, 12, .75);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+.modal-sm { width: min(420px, 100%); }
+.flex-spring { flex: 1; }
+.weekend-choices { display: flex; flex-direction: column; gap: .5rem; margin-top: .8rem; }
+.decision-row .row-main strong { color: var(--danger); }
+
+/* Tier filter chips (D47) */
+#tier-filters { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+.filter-chip {
+  border: 1px solid var(--line); border-radius: 99px;
+  background: transparent; color: var(--ink);
+  font-size: .72rem; font-weight: 600; padding: .2rem .6rem;
+}
+.filter-chip.chip-off { color: var(--ink-dim); opacity: .55; border-style: dashed; }
+
+/* Shared tap popover */
+#popover {
+  white-space: pre-line;
+  position: fixed; z-index: 130;
+  max-width: 300px;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: .78rem;
+  padding: .5rem .65rem;
+  box-shadow: 0 4px 18px rgba(0,0,0,.5);
+}
+
+.proj-stage-done .st-name { text-decoration: line-through; opacity: .6; }
+.st-flags { font-size: .75rem; color: var(--accent); white-space: nowrap; }
+.stage-tmpl-row .st-dir { width: 5.2rem; }
+.stage-tmpl-row .st-anchor { width: 4.6rem; }
+.modal-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.2rem;
+  width: min(640px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; }
+.modal-head h2 { margin: 0; }
+.modal-card label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: var(--ink-dim); margin: .3rem 0; flex-wrap: wrap; }
+.modal-card input[type="number"] { width: 4.5rem; }
+.modal-foot {
+  margin-top: 1.2rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .8rem;
+}
+.form-actions { display: flex; gap: .5rem; align-items: center; }
+.hint.warn { color: #ffa94d; min-height: 1em; }
+
+.tier-row {
+  display: flex; align-items: center; gap: .45rem;
+  margin-bottom: .4rem;
+  flex-wrap: wrap;
+}
+.tier-row .t-rank { width: 3.2rem; }
+.tier-row .t-name { flex: 1; min-width: 7rem; }
+.tier-row .t-color { width: 2.6rem; padding: 0; height: 2.1rem; }
+.tier-row .t-kind { width: 6.5rem; }
+.tier-row .t-cal { flex-basis: 100%; font-size: .8rem; }
+.t-carry-label { font-size: .75rem; white-space: nowrap; }
+
+.info-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1rem; height: 1rem;
+  border: 1px solid var(--ink-dim); border-radius: 50%;
+  color: var(--ink-dim); font-size: .65rem; font-style: normal;
+  cursor: help; margin-left: .3rem; vertical-align: middle;
+}
+
+/* ---------- Phone ---------- */
+@media (max-width: 1000px) {
+  main { grid-template-columns: 1fr; }
+  #queue-panel { order: 1; }
+  #projects-panel { order: 2; }
+  #form-panel { order: 3; }
+  .auth-card { padding: 2rem 1.4rem; }
+  .user { display: none; }
+}
+
+/* ---------- Projects panel ---------- */
+.project-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .7rem;
+  margin-bottom: .7rem;
+}
+.project-done { opacity: .55; }
+/* D56: the header row NEVER wraps — [chevron][name][buttons] stay on
+   one line; long names wrap INSIDE their own box; dates live on the
+   .project-dates line below. Whole header is a tap target. */
+.project-head { display: flex; align-items: flex-start; gap: .35rem; flex-wrap: nowrap; cursor: pointer; }
+.project-head strong { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.proj-chevron { flex: 0 0 auto; color: var(--ink-dim); font-size: .8rem; padding-top: .1rem; width: .9rem; }
+.proj-btns { flex: 0 0 auto; display: flex; gap: .2rem; }
+.project-dates { margin: .15rem 0 .3rem 1.25rem; white-space: normal; }
+.finished-toggle { display: block; width: 100%; text-align: left; margin-top: .3rem; }
+
+.progress-wrap {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  height: 14px;
+  margin: .5rem 0 .6rem;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .5s ease;
+}
+.progress-label {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .62rem; font-weight: 700; color: var(--ink);
+  text-shadow: 0 0 3px rgba(0,0,0,.8);
+}
+
+.stage-list { display: flex; flex-direction: column; gap: .1rem; }
+.stage-row {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .2rem .3rem;
+  border-radius: 6px;
+  font-size: .85rem;
+}
+.stage-row input[type="checkbox"] { width: .95rem; height: .95rem; accent-color: var(--accent); }
+.stage-name { flex: 1; overflow-wrap: anywhere; }
+.stage-done .stage-name { text-decoration: line-through; color: var(--ink-dim); }
+.stage-active {
+  background: rgba(77, 208, 196, .1);
+  border-left: 3px solid var(--accent);
+}
+.stage-badge {
+  font-size: .62rem; color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: 99px;
+  padding: .05rem .4rem; white-space: nowrap;
+}
+.stage-badge.clickable { cursor: pointer; }
+.stage-badge.clickable:hover { color: var(--ink); border-color: var(--ink-dim); }
+.stage-due-btn { font-size: .7rem; padding: .05rem .3rem; }
+.stage-proj { font-weight: 700; }
+
+/* ---------- Stage template editor (settings) ---------- */
+.stage-tmpl-row {
+  display: flex; align-items: center; gap: .4rem;
+  margin-bottom: .35rem;
+}
+.st-move { display: flex; flex-direction: column; }
+.st-move button {
+  background: transparent; border: none; color: var(--ink-dim);
+  font-size: .55rem; padding: 0 .2rem; line-height: 1.1;
+}
+.st-move button:hover { color: var(--ink); }
+/* 0.6.0 hardening: the name input must never shove the flags/✕ out of
+   view. min-width:0 lets it shrink (inputs refuse by default), width:
+   auto beats the global input width:100%, and the row wraps as a last
+   resort instead of clipping. */
+.stage-tmpl-row { flex-wrap: wrap; }
+.stage-tmpl-row .st-name { flex: 1 1 7rem; min-width: 0; width: auto; }
+.st-off-label { white-space: nowrap; font-size: .8rem; }
+.stage-tmpl-row .st-off { width: 3.4rem; }
+.st-del {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink-dim); border-radius: 6px; padding: .15rem .4rem;
+}
+
+/* ---------- Katie's wave (celebration level 3) ---------- */
+body.celebration-wave::after {
+  content: "";
+  position: fixed; inset: 0;
+  background: linear-gradient(105deg,
+    transparent 35%,
+    rgba(77, 208, 196, .10) 45%,
+    rgba(77, 208, 196, .22) 50%,
+    rgba(77, 208, 196, .10) 55%,
+    transparent 65%);
+  pointer-events: none;
+  z-index: 99;
+  animation: waveSweep 1.9s ease-in-out;
+}
+@keyframes waveSweep {
+  from { transform: translateX(-110%); }
+  to   { transform: translateX(110%); }
+}
+
+/* ---------- Settings tabs (D52) ---------- */
+.tab-bar {
+  display: flex; gap: .3rem; margin: .2rem 0 .8rem;
+  border-bottom: 1px solid var(--line);
+}
+.tab-btn {
+  background: transparent; border: 1px solid transparent; border-bottom: none;
+  color: var(--ink-dim); padding: .35rem .8rem; font-size: .85rem;
+  border-radius: 8px 8px 0 0; cursor: pointer;
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active {
+  color: var(--ink); border-color: var(--line);
+  background: var(--panel); font-weight: 700;
+}
+
+/* ---------- Per-tier working-day toggles (D60) ---------- */
+.t-days {
+  flex-basis: 100%;
+  display: flex; gap: .35rem; align-items: center;
+  font-size: .72rem; color: var(--ink-dim);
+  margin: .1rem 0 .25rem 0; padding-left: .1rem;
+}
+.t-day { display: inline-flex; align-items: center; gap: .12rem; white-space: nowrap; cursor: pointer; }
+.t-day input { width: auto; margin: 0; accent-color: var(--accent); }
+
+
+/* ---------- 0.7.0 additions ---------- */
+/* Undated stages: anchor/offset hold their space invisibly so every
+   editor row's columns line up (display:none let the name input
+   swallow the vacancy and the row read as broken). */
+.st-ghost { visibility: hidden; }
+
+/* Duplicate review form (D62) */
+#dup-modal .dup-wide { flex: 1 1 100%; }
+#dup-modal .dup-wide input { width: 100%; }
+#dup-modal select { min-width: 6rem; }
+#dup-modal input[type="color"] { width: 2.6rem; padding: 0; height: 2.1rem; }
+
+
+/* Dup snooze row (D62 rev) */
+.snooze-row { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+
+
+/* ---------- D63: two-line rows + task notes ---------- */
+.row-2l { flex-direction: column; align-items: stretch; gap: .3rem; }
+.row-top { display: flex; align-items: flex-start; gap: .6rem; }
+.row-top input[type="checkbox"] { margin-top: .1rem; }
+.row-2l .row-main { flex: 1; }
+.row-main.has-notes { cursor: pointer; }
+.note-chev { flex-shrink: 0; }
+.row-actions { display: flex; align-items: center; gap: .3rem; }
+.row-spacer { flex: 1; }
+.row-notes {
+  font-size: .82rem; color: var(--ink-dim);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  border-top: 1px dashed var(--line);
+  padding: .35rem .15rem 0 1.8rem;
+}
+/* ---------- D64: one-line rows when the list is wide enough ----------
+   The lists are inline-size containers; each row asks "how wide is MY
+   list?" (the viewport is a liar here — at 1100px the desktop grid
+   gives the queue barely 300px). Wide list → row-top and row-actions
+   sit side by side on one line; expanded notes wrap to a full-width
+   line of their own. Browsers without container queries skip this
+   block and keep the two-line layout — a safe fallback by design. */
+#queue, #waiting-list, #done-list { container-type: inline-size; }
+
+@container (min-width: 540px) {
+  .row-2l { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .6rem; }
+  .row-2l .row-top { flex: 1 1 auto; min-width: 0; }
+  .row-2l .row-actions { flex: 0 0 auto; }
+  .row-2l .row-actions .row-spacer { flex: 0 0 0; }
+  .row-2l .row-notes { flex-basis: 100%; }
+}
+
+#task-notes {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit; font-size: .9rem;
+  padding: .45rem .55rem;
+  resize: vertical;
+  min-height: 2.6rem;
+}
+
+
+/* ---------- D65: Year view (Phase 2) ---------- */
+#year-view { padding: 1rem; max-width: 1500px; margin: 0 auto; }
+.yv-nav { display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem; flex-wrap: wrap; }
+.yv-nav h2 { margin: 0; font-size: 1.15rem; }
+.yv-modes { margin-left: auto; display: flex; gap: .3rem; }
+.yv-modes .mini.active { border-color: var(--accent); color: var(--accent); }
+
+#yv-grid { container-type: inline-size; }
+.yv-row {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .4rem .6rem .6rem;
+  margin-bottom: .6rem;
+}
+.yv-months { display: flex; }
+.yv-month {
+  font-size: .78rem; color: var(--ink-dim); font-weight: 600;
+  padding: .1rem .3rem .25rem; min-width: 0;
+  flex-basis: 0%; white-space: nowrap; overflow: hidden;
+  border-left: 1px solid var(--line);
+  cursor: pointer; user-select: none;
+}
+.yv-month:first-child { border-left: none; }
+.yv-month:hover { color: var(--ink); }
+.yv-month.yv-now { color: var(--accent); }
+.yv-day-tick { cursor: default; text-align: center; padding: .1rem 0 .25rem; font-weight: 400; }
+.yv-day-tick:hover { color: var(--ink-dim); }
+
+.yv-lanes { position: relative; }
+.yv-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.yv-todayline { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); opacity: .8; z-index: 2; }
+.yv-dayline { opacity: .22; }
+.yv-weekline { opacity: .65; }
+.yv-weekend { position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.30); }
+
+.yv-bar {
+  position: absolute;
+  border-radius: var(--bar-r, 6px);
+  border: 1px solid rgba(255,255,255,.14);
+  display: flex; align-items: center;
+  overflow: hidden;
+  cursor: grab; touch-action: none; user-select: none;
+  z-index: 1;
+}
+.yv-bar:active { cursor: grabbing; }
+.yv-bar.cont-l { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; }
+.yv-bar.cont-r { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
+.yv-bar.dragging { z-index: 3; box-shadow: 0 0 8px rgba(77,208,196,.5); }
+.yv-bar-label {
+  font-size: .68rem; font-weight: 700; color: #0a0f14;
+  padding: 0 .35rem; white-space: nowrap; overflow: hidden;
+  pointer-events: none; text-shadow: 0 0 3px rgba(255,255,255,.25);
+}
+.yv-handle {
+  position: absolute; top: 0; bottom: 0; width: 10px;
+  cursor: ew-resize; touch-action: none;
+}
+.yv-handle.l { left: 0; } .yv-handle.r { right: 0; }
+
+#yv-legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin-top: .2rem; }
+.yv-key { display: flex; align-items: center; gap: .35rem; font-size: .8rem; color: var(--ink-dim); }
+.yv-key .swatch { width: .8rem; height: .8rem; border-radius: 3px; flex-shrink: 0; }
+
+/* D27 compact: on a narrow grid (projector slice / phone) bar labels
+   hide — the legend and tap-popover carry the names. */
+@container (max-width: 700px) {
+  .yv-bar-label { display: none; }
+  .yv-month { font-size: .68rem; padding-left: .15rem; }
+  .yv-dayline { display: none; }
+}
+@container (max-width: 460px) {
+  .yv-weekline { display: none; }
+}/* ============================================================
+   Tentacalendar — tentacalendar.css
    Version 0.11.0
    0.11.0 (D65, PHASE 2): year view — .yv-nav/.yv-modes, quarter rows
    (.yv-row: month headers flex-grown by day count, .yv-lanes with
