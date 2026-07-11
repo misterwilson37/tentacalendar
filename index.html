@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.8.0 (banner and data-html-version move together, always)
+     Version 0.9.0 (banner and data-html-version move together, always)
+     0.9.0 (D63): #task-notes textarea. css ?v= → 0.9.0, app ?v= → 0.10.0.
      0.8.0 (D62 rev): dup modal gains pipeline-review button + 1d/7d/30d
      snooze row; project-form labels get task-form column treatment
      (the staggered Starts/Ends); un-dater covers both remnant flavors.
@@ -22,9 +23,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.8.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.9.0">
 </head>
-<body data-html-version="0.8.0">
+<body data-html-version="0.9.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -91,6 +92,7 @@
         <h3 id="task-form-title">New task</h3>
         <form id="task-form">
           <input id="task-title" type="text" placeholder="What needs doing?" required>
+          <textarea id="task-notes" rows="2" placeholder="Details (optional — tucked behind a ▸ under the task)"></textarea>
           <label>Tier
             <select id="task-tier"></select>
           </label>
@@ -320,6 +322,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.9.0"></script>
+  <script type="module" src="app.js?v=0.10.0"></script>
 </body>
 </html>
