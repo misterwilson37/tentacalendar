@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.10.0 (banner and data-html-version move together, always)
+     Version 0.10.1 (banner and data-html-version move together, always)
+     0.10.1: css ?v= → 0.12.0, app ?v= → 0.12.0 (D66 day texture +
+     density; form-overflow fix). Reference bump only.
      0.10.0 (D65, PHASE 2): year view — header 📅 toggle, #year-view
      section (nav, mode buttons, grid, legend, empty state, drag hint).
      css ?v= → 0.11.0, app ?v= → 0.11.0.
@@ -28,9 +30,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.11.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.12.0">
 </head>
-<body data-html-version="0.10.0">
+<body data-html-version="0.10.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -352,6 +354,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.11.0"></script>
+  <script type="module" src="app.js?v=0.12.0"></script>
 </body>
 </html>
