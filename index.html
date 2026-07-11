@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.10.1 (banner and data-html-version move together, always)
+     Version 0.11.0 (banner and data-html-version move together, always)
+     0.11.0 (D68): year-view layout toggle (Month grid ⇄ Timeline),
+     ＋ New project FAB, #yv-project-modal shell (the REAL form gets
+     reparented in, listeners intact). css ?v= → 0.13.0, app → 0.13.0.
      0.10.1: css ?v= → 0.12.0, app ?v= → 0.12.0 (D66 day texture +
      density; form-overflow fix). Reference bump only.
      0.10.0 (D65, PHASE 2): year view — header 📅 toggle, #year-view
@@ -30,9 +33,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.12.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.13.0">
 </head>
-<body data-html-version="0.10.1">
+<body data-html-version="0.11.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -167,6 +170,10 @@
         <button id="yv-next" class="icon-btn" title="Forward one year (one month while zoomed)">▶</button>
         <button id="yv-today" class="mini" hidden>back to now</button>
         <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
+        <div class="yv-layouts" id="yv-layouts" title="Month grid: weeks as rows, Sun–Sat — the wall-calendar look. Timeline: days in one long row per quarter (a Gantt chart).">
+          <button data-layout="grid" class="mini">▦ Month grid</button>
+          <button data-layout="timeline" class="mini">▬ Timeline</button>
+        </div>
         <div class="yv-modes" id="yv-modes" title="What sits top-left: January, the current quarter, or the current month (rolling 12 months either way)">
           <button data-mode="calendar" class="mini">Jan–Dec</button>
           <button data-mode="quarter" class="mini">Quarter first</button>
@@ -177,7 +184,18 @@
       <p id="yv-empty" class="hint" hidden>No projects land in this window. Create one in Today view — its bar shows up here.</p>
       <div id="yv-legend"></div>
       <p class="hint">Drag a bar to move a project · drag either end to stretch or shrink it · tap a bar for details · tap a month name to zoom in. Dates keep to the project tier's working days.</p>
+      <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
     </section>
+
+    <!-- D68: the REAL project form is reparented in here from the form
+         panel while this is open — listeners, color assistant, and the
+         working-day interception all come along for free. -->
+    <div id="yv-project-modal" class="modal-shell" hidden>
+      <div class="modal-card yv-project-card">
+        <button id="yv-project-close" class="icon-btn yv-modal-close" title="Close">✕</button>
+        <div id="yv-project-slot"></div>
+      </div>
+    </div>
   </div>
 
   </div><!-- /drift-wrap -->
@@ -354,6 +372,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.12.0"></script>
+  <script type="module" src="app.js?v=0.13.0"></script>
 </body>
 </html>
