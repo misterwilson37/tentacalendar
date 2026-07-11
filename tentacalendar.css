@@ -1,12 +1,14 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.5.2
-   0.5.2: re-release of the project-card header fix (0.5.1 was built
-   but never verified in shipped outputs — ship-check rule born here)
-   + pinned header buttons. Banner resynced (it had sat at 0.5.0
-   through two version-var bumps — banners move WITH the variable).
-   0.5.1: project-head wrap fix. 0.5.0: filter chips, modal-shell
-   system, popover, workload badge, decision rows.
+   Version 0.6.0
+   0.6.0 (D56/D52/D60/D58): collapsible project cards — header row
+   never wraps ([chevron][name wraps internally][pinned buttons]),
+   dates on their own .project-dates line, finished-projects toggle;
+   settings tab bar; per-tier day toggles (.t-days); stage-editor row
+   hardening (name field can no longer shove flags/✕ out of view:
+   min-width guards + wrap fallback — Jake's new-stage layout bug).
+   0.5.2: re-release of the project-card header fix + ship-check rule.
+   0.5.x: filter chips, modal-shell system, popover, decision rows.
    ============================================================ */
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
@@ -15,7 +17,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.5.2";
+  --tc-version: "0.6.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -278,12 +280,15 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
   margin-bottom: .7rem;
 }
 .project-done { opacity: .55; }
-/* 0.5.1: header wraps — title keeps room, dates drop to their own
-   line instead of crushing the name into one letter per row. */
-.project-head { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
-.project-head strong { flex: 1 1 auto; min-width: 7rem; overflow-wrap: anywhere; }
-.project-head .sub { flex-basis: 100%; order: 5; white-space: normal; }
-.project-head .icon-btn { flex: 0 0 auto; }
+/* D56: the header row NEVER wraps — [chevron][name][buttons] stay on
+   one line; long names wrap INSIDE their own box; dates live on the
+   .project-dates line below. Whole header is a tap target. */
+.project-head { display: flex; align-items: flex-start; gap: .35rem; flex-wrap: nowrap; cursor: pointer; }
+.project-head strong { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.proj-chevron { flex: 0 0 auto; color: var(--ink-dim); font-size: .8rem; padding-top: .1rem; width: .9rem; }
+.proj-btns { flex: 0 0 auto; display: flex; gap: .2rem; }
+.project-dates { margin: .15rem 0 .3rem 1.25rem; white-space: normal; }
+.finished-toggle { display: block; width: 100%; text-align: left; margin-top: .3rem; }
 
 .progress-wrap {
   position: relative;
@@ -341,8 +346,12 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
   font-size: .55rem; padding: 0 .2rem; line-height: 1.1;
 }
 .st-move button:hover { color: var(--ink); }
-.stage-tmpl-row .st-name { flex: 1; }
-.stage-tmpl-row .st-phase { width: 7.2rem; }
+/* 0.6.0 hardening: the name input must never shove the flags/✕ out of
+   view. min-width:0 lets it shrink (inputs refuse by default), width:
+   auto beats the global input width:100%, and the row wraps as a last
+   resort instead of clipping. */
+.stage-tmpl-row { flex-wrap: wrap; }
+.stage-tmpl-row .st-name { flex: 1 1 7rem; min-width: 0; width: auto; }
 .st-off-label { white-space: nowrap; font-size: .8rem; }
 .stage-tmpl-row .st-off { width: 3.4rem; }
 .st-del {
@@ -368,3 +377,29 @@ body.celebration-wave::after {
   from { transform: translateX(-110%); }
   to   { transform: translateX(110%); }
 }
+
+/* ---------- Settings tabs (D52) ---------- */
+.tab-bar {
+  display: flex; gap: .3rem; margin: .2rem 0 .8rem;
+  border-bottom: 1px solid var(--line);
+}
+.tab-btn {
+  background: transparent; border: 1px solid transparent; border-bottom: none;
+  color: var(--ink-dim); padding: .35rem .8rem; font-size: .85rem;
+  border-radius: 8px 8px 0 0; cursor: pointer;
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active {
+  color: var(--ink); border-color: var(--line);
+  background: var(--panel); font-weight: 700;
+}
+
+/* ---------- Per-tier working-day toggles (D60) ---------- */
+.t-days {
+  flex-basis: 100%;
+  display: flex; gap: .35rem; align-items: center;
+  font-size: .72rem; color: var(--ink-dim);
+  margin: .1rem 0 .25rem 0; padding-left: .1rem;
+}
+.t-day { display: inline-flex; align-items: center; gap: .12rem; white-space: nowrap; cursor: pointer; }
+.t-day input { width: auto; margin: 0; accent-color: var(--accent); }
