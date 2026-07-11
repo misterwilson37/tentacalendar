@@ -1,6 +1,12 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.6.2 (seed template uses dated/undated mix per D50)
+// Version 0.7.0
+// 0.7.0: rewindFollowUps (D53 un-complete rewind), addProjectWithStages
+// (D59 duplicate-for-next-year), per-tier allowedDays in seed (D60,
+// Personal seeds 7-day), config seeds deadlineHour 16 + 
+// decisionThresholdDays 2 (D51/D52). Live DBs never reseed — missing
+// fields fall back in readers.
+// 0.6.2: seed template uses dated/undated mix per D50.
 // All Firebase interaction lives here: auth, seeding, live
 // subscriptions, CRUD. Nothing in here touches the DOM.
 // Schema per HANDOFF.md §3.
@@ -17,7 +23,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.6.2";
+export const STORE_VERSION = "0.7.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -55,13 +61,17 @@ export function signOutUser() {
 //   3 Work  4 Family  5 Personal  6 Taiko
 // Dark-theme ROYGBIV, all editable in settings.
 
+// D60: allowedDays = which days of the week (0=Sun…6=Sat) this tier's
+// scheduling math counts. Personal seeds 7-day (weekend jobs live there);
+// missing field reads as Mon–Fri everywhere, so live DBs need no repair.
+const WD = [1, 2, 3, 4, 5];
 const SEED_TIERS = [
   { name: "Home",     rank: 1, color: "#ff6b6b", kind: "anchor", midnightCarryover: false, defaultLeadWindowMinutes: 30, gcalCalendarId: "" },
   { name: "Business", rank: 2, color: "#ffa94d", kind: "anchor", midnightCarryover: false, defaultLeadWindowMinutes: 30, gcalCalendarId: "" },
-  { name: "Work",     rank: 3, color: "#ffd43b", kind: "task",   midnightCarryover: true },
-  { name: "Family",   rank: 4, color: "#69db7c", kind: "task",   midnightCarryover: true },
-  { name: "Personal", rank: 5, color: "#4dabf7", kind: "task",   midnightCarryover: false },
-  { name: "Taiko",    rank: 6, color: "#b197fc", kind: "task",   midnightCarryover: false }
+  { name: "Work",     rank: 3, color: "#ffd43b", kind: "task",   midnightCarryover: true,  allowedDays: WD },
+  { name: "Family",   rank: 4, color: "#69db7c", kind: "task",   midnightCarryover: true,  allowedDays: WD },
+  { name: "Personal", rank: 5, color: "#4dabf7", kind: "task",   midnightCarryover: false, allowedDays: [0, 1, 2, 3, 4, 5, 6] },
+  { name: "Taiko",    rank: 6, color: "#b197fc", kind: "task",   midnightCarryover: false, allowedDays: WD }
 ];
 
 // Katie's universal project pipeline (session 5). Applied as a snapshot
@@ -97,7 +107,9 @@ async function ensureSeed(user) {
     carryoverWriteHour: 9,      // Jake: 9 AM, adjustable (open Q1 resolved)
     pollIntervalMinutes: 60,    // GCal poll cadence (phase 3); Jake: hourly default
     sleepStart: 22,             // 10 PM
-    sleepEnd: 6                 // 6 AM
+    sleepEnd: 6,                // 6 AM
+    deadlineHour: 16,           // D51: computed deadlines are "by 4 PM" (Jake)
+    decisionThresholdDays: 2    // D52: decision modal fires at ≥2 days overdue
   });
   batch.set(doc(db, "workspaces", WORKSPACE_ID, "settings", "stageTemplate"), {
     stages: SEED_STAGES
@@ -190,6 +202,27 @@ export async function setTaskDone(taskId, done) {
   if (any) await batch.commit();
 }
 
+/**
+ * D53: pull a parent's materialized follow-ups back to "Waiting on…".
+ * Any incomplete child that HAS a dueAt was materialized by a completion
+ * (follow-ups are always born with dueAt:null) — reset those to null.
+ * Completed children are left alone: they really happened.
+ */
+export async function rewindFollowUps(parentTaskId) {
+  const q = query(col("tasks"), where("parentTaskId", "==", parentTaskId));
+  const kids = await getDocs(q);
+  const batch = writeBatch(db);
+  let any = false;
+  kids.forEach(k => {
+    const d = k.data();
+    if (d.dueAt != null && !d.completedAt) {
+      batch.update(k.ref, { dueAt: null });
+      any = true;
+    }
+  });
+  if (any) await batch.commit();
+}
+
 export function deleteTask(taskId) {
   return deleteDoc(doc(col("tasks"), taskId));
 }
@@ -228,6 +261,21 @@ export async function addProject({ name, color, startDate, endDate, tierId, work
     const [dir, anc] = s.direction && s.anchor ? [s.direction, s.anchor] : (legacy[s.phase] || legacy.during);
     return { name: s.name, direction: dir, anchor: anc, offsetDays: s.offsetDays || 0, completedAt: null, dueAt: null };
   });
+  return addDoc(col("projects"), {
+    name, color, startDate, endDate, tierId, workload, stages,
+    stretchUntilDone: false, completedAt: null,
+    createdBy: auth.currentUser?.email || "unknown",
+    createdAt: Date.now()
+  });
+}
+
+/**
+ * D59: create a project with an EXPLICIT stage array (used by
+ * duplicate-for-next-year — the caller passes the source project's
+ * pipeline with completedAt/dueAt already reset, so the template is
+ * NOT consulted and one-off stage surgery survives the duplication).
+ */
+export function addProjectWithStages({ name, color, startDate, endDate, tierId, workload = 2, stages = [] }) {
   return addDoc(col("projects"), {
     name, color, startDate, endDate, tierId, workload, stages,
     stretchUntilDone: false, completedAt: null,
