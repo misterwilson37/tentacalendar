@@ -1,6 +1,10 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.14.0
+   Version 0.15.0
+   0.15.0 (D70): .yv-bar.thin (borderless — a 1px border is most of a
+   3px hairline bar) for the Annual view's window-fit density floor.
+   NOTE: the Annual column breakpoints below (1150/850/520) are
+   MIRRORED in renderYearGrid's window-fit math — change both together.
    0.14.0 (D69): YEAR WALL — #yv-grid.yv-wall lays the 12 .yvg-month
    blocks in a 4-column grid (3 rows of 4, Jake's wall of calendars),
    with compact head/dow/day typography; container queries step the
@@ -63,7 +67,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.14.0";
+  --tc-version: "0.15.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -580,6 +584,7 @@ body.celebration-wave::after {
   cursor: ew-resize; touch-action: none;
 }
 .yv-handle.l { left: 0; } .yv-handle.r { right: 0; }
+.yv-bar.thin { border: none; }
 
 #yv-legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin-top: .2rem; }
 .yv-key { display: flex; align-items: center; gap: .35rem; font-size: .8rem; color: var(--ink-dim); }
