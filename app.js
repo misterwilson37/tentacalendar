@@ -1,5 +1,22 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.11.0 — "PHASE 2: the year view" (D65)
+// 0.11.0:
+//  · Header 📅 toggles between Today and a quarter-aligned year view:
+//    4 rows × 3 months, three anchor modes (Jan–Dec / quarter-first /
+//    month-first, D31), ◀▶ pages 12 months, "back to now" resets.
+//  · Project bars (D30a): pale ghost of the project color saturating
+//    left-to-right by pipeline %, continuous across quarter rows via
+//    per-segment gradient clipping; global lane packing keeps each
+//    project on ONE lane all year; today line; legend + tap-for-details
+//    popover (D27); labels hide on narrow grids (container query).
+//  · Drag to move, edge-drag to stretch (D32): document-level pointer
+//    listeners survive re-renders; live date readout in the nav label;
+//    release snaps to the tier's working days (start fwd / end back,
+//    order-guarded — same rules as the form and 🔁 duplicate).
+//  · Tap a month name to zoom it full-width with day ticks (D18);
+//    ◀▶ then steps one month; "◱ whole year" returns.
+//  · View + anchor mode persist per device (tc-view / tc-year-mode).
 // Version 0.10.0 — "the encore" (Katie's notes field, D63)
 // 0.10.0:
 //  · Tasks get an optional NOTES field: short title in the row, details
@@ -68,13 +85,13 @@ import {
   saveTier, deleteTier, saveConfig, saveStageTemplate
 } from "./store.js?v=0.8.0";
 import {
-  buildQueue, projectProgress, remainingWork, normalizeStage,
+  buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   fmtTime, fmtDay, QUEUE_VERSION
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.10.0";
+export const APP_VERSION = "0.11.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -97,6 +114,10 @@ const S = {
   expandedProjects: new Set(JSON.parse(localStorage.getItem("tc-expanded-projects") || "[]")), // D56
   showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
   hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
+  view: localStorage.getItem("tc-view") === "year" ? "year" : "day",   // D65 (persists per device)
+  yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
+  yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
+  yearZoom: null,          // D18 month zoom: month-start ts, or null for the 12-month grid
   lastSuggestedColor: "#4dabf7",
   unsubs: []
 };
@@ -111,6 +132,20 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#day-prev").addEventListener("click", () => shiftDay(-1));
   $("#day-next").addEventListener("click", () => shiftDay(1));
   $("#day-today").addEventListener("click", () => { S.viewDay = Date.now(); render(); });
+
+  // D65 year view
+  $("#view-toggle").addEventListener("click", () => setView(S.view === "year" ? "day" : "year"));
+  $("#yv-prev").addEventListener("click", () => shiftYear(-1));
+  $("#yv-next").addEventListener("click", () => shiftYear(1));
+  $("#yv-today").addEventListener("click", () => { S.yearOffset = 0; S.yearZoom = null; renderYear(); });
+  $("#yv-unzoom").addEventListener("click", () => { S.yearZoom = null; renderYear(); });
+  $("#yv-modes").querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => {
+      S.yearMode = b.dataset.mode;
+      localStorage.setItem("tc-year-mode", S.yearMode);
+      S.yearOffset = 0; S.yearZoom = null;
+      renderYear();
+    }));
   $("#task-form").addEventListener("submit", onTaskFormSubmit);
   $("#task-cancel").addEventListener("click", cancelTaskEdit);
   $("#project-form").addEventListener("submit", onProjectFormSubmit);
@@ -223,6 +258,7 @@ function onSignedIn(user) {
   $("#auth-screen").hidden = true;
   $("#app-screen").hidden = false;
   $("#user-label").textContent = user.email;
+  setView(S.view); // D65: restore this device's last view (year renders on first snapshot)
   S.unsubs.push(subscribeTiers(t => { S.tiers = t; refreshTierSelects(); renderFilters(); render(); }));
   S.unsubs.push(subscribeTasks(t => { S.tasks = t; render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeEvents(e => { S.events = e; render(); }));
@@ -318,6 +354,7 @@ function render() {
   renderDone(q.doneToday);
   renderProjects(now);
   renderDecision(); // D57: modal rows track live state while open
+  if (S.view === "year") renderYear(); // D65: live updates flow into the grid
 }
 
 function tierChip(tier) {
@@ -1212,6 +1249,317 @@ function hexToRgb(hex) {
   const h = hex.replace("#", "");
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
+// ---------- D65: Year view (Phase 2) ----------
+// Quarter-aligned 4 rows × 3 months (D31: calendar / quarter-first /
+// month-first anchors), D30a ghost bars saturating left-to-right by
+// pipeline %, D32 drag-to-move + edge-drag-to-stretch, D18 month zoom,
+// D27 legend + tap details. Bars are %-positioned inside each row, so
+// one renderer serves the year grid AND the zoomed single month.
+
+let yvTapSquelch = false; // a completed drag must not fire the tap popover
+let yvDragging = false;
+
+function startOfDayTs(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+
+function setView(v) {
+  S.view = v;
+  localStorage.setItem("tc-view", v);
+  $("main").hidden = v === "year";           // D35's [hidden]!important beats main's display:grid
+  $("#year-view").hidden = v !== "year";
+  const b = $("#view-toggle");
+  b.textContent = v === "year" ? "📋" : "📅";
+  b.title = v === "year" ? "Today view" : "Year view";
+  if (v === "year") renderYear();
+}
+
+/** First month of the visible 12 (D31 mode + paging offset). */
+function yearAnchorMonth() {
+  const now = new Date();
+  let m0 = 0;
+  if (S.yearMode === "quarter") m0 = Math.floor(now.getMonth() / 3) * 3;
+  else if (S.yearMode === "month") m0 = now.getMonth();
+  return new Date(now.getFullYear(), m0 + S.yearOffset, 1);
+}
+
+function shiftYear(n) {
+  if (S.yearZoom != null) {
+    const z = new Date(S.yearZoom);
+    S.yearZoom = new Date(z.getFullYear(), z.getMonth() + n, 1).getTime();
+  } else {
+    S.yearOffset += n * 12;
+  }
+  renderYear();
+}
+
+function yvDetails(p, prog) {
+  const tier = S.tiers.find(t => t.id === p.tierId);
+  const nd = nextDeadline(p, tier?.allowedDays);
+  const s0 = startOfDayTs(p.startDate || 0), e0 = startOfDayTs(p.endDate || p.startDate || 0);
+  let out = `${p.name}\n${fmtDay(s0)} → ${fmtDay(e0)} · ${prog.done}/${prog.total} stages (${Math.round(prog.pct * 100)}%)`;
+  if (p.completedAt) out += "\n✓ complete";
+  else if (nd) out += `\nnext: ${nd.stage.name} — ${fmtDay(nd.date)}`;
+  return out;
+}
+
+function yvShowDetails(bar, p) {
+  const pop = $("#popover");
+  pop.textContent = yvDetails(p, projectProgress(p));
+  pop.hidden = false;
+  const r = bar.getBoundingClientRect();
+  pop.style.top = `${r.bottom + 6}px`;
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8))}px`;
+}
+
+/** Commit a drag: snap to the tier's working days exactly like the
+ *  form save does (start forward, end back, order-guarded — D59/D60). */
+function commitBarDrag(p, ns, ne) {
+  const allowed = S.tiers.find(t => t.id === p.tierId)?.allowedDays;
+  if (!isDayAllowed(ns, allowed)) ns = allowedNeighbors(ns, allowed).next;
+  if (!isDayAllowed(ne, allowed)) ne = allowedNeighbors(ne, allowed).prev;
+  if (ne < ns) ne = allowedNeighbors(ns, allowed).next;
+  updateProject(p.id, { startDate: ns, endDate: ne });
+}
+
+/** D32 pointer plumbing. Listeners live on document during the drag so
+ *  re-renders can't orphan the gesture; the grabbed bar previews via
+ *  transform/width only, and truth is committed on release (Firestore's
+ *  latency compensation re-renders the real thing instantly). */
+function wireBarDrag(bar, p, rowSpanMs, lanes) {
+  bar.addEventListener("pointerdown", ev => {
+    if (yvDragging || (ev.button != null && ev.button !== 0)) return;
+    const mode = ev.target.classList && ev.target.classList.contains("yv-handle")
+      ? (ev.target.classList.contains("l") ? "start" : "end") : "move";
+    const laneW = lanes.getBoundingClientRect().width || 1;
+    const msPerPx = rowSpanMs / laneW;
+    const originX = ev.clientX;
+    const baseW = bar.getBoundingClientRect().width;
+    const s0 = startOfDayTs(p.startDate || 0);
+    const e0 = startOfDayTs(p.endDate || p.startDate || 0);
+    let moved = false, ns = s0, ne = e0;
+    yvDragging = true;
+    const onMove = e => {
+      const dx = e.clientX - originX;
+      if (!moved && Math.abs(dx) < 4) return;
+      moved = true;
+      bar.classList.add("dragging");
+      const dDays = Math.round(dx * msPerPx / DAY_MS);
+      ns = s0; ne = e0;
+      if (mode !== "end") ns += dDays * DAY_MS;
+      if (mode !== "start") ne += dDays * DAY_MS;
+      if (ne < ns) { if (mode === "start") ns = ne; else ne = ns; }
+      const px = dDays * DAY_MS / msPerPx;
+      if (mode === "move") bar.style.transform = `translateX(${px}px)`;
+      else if (mode === "start") {
+        bar.style.transform = `translateX(${Math.min(px, baseW - 8)}px)`;
+        bar.style.width = `${Math.max(8, baseW - px)}px`;
+      } else {
+        bar.style.width = `${Math.max(8, baseW + px)}px`;
+      }
+      $("#yv-label").textContent = `${fmtDay(ns)} → ${fmtDay(ne)}`;
+      e.preventDefault();
+    };
+    const finish = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", finish);
+      document.removeEventListener("pointercancel", finish);
+      yvDragging = false;
+      if (moved) {
+        yvTapSquelch = true;
+        setTimeout(() => { yvTapSquelch = false; }, 50);
+        commitBarDrag(p, ns, ne);
+      }
+      renderYear(); // restores label + geometry; the snapshot re-renders saved truth
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", finish);
+    document.addEventListener("pointercancel", finish);
+  });
+  bar.addEventListener("click", ev => {
+    ev.stopPropagation(); // keep the global popover-closer out of it
+    if (yvTapSquelch || yvDragging) return;
+    yvShowDetails(bar, p);
+  });
+}
+
+function renderYearLegend(projs) {
+  const box = $("#yv-legend");
+  box.innerHTML = "";
+  for (const p of projs) {
+    const k = document.createElement("span");
+    k.className = "yv-key";
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = p.color || "#4dd0c4";
+    const prog = projectProgress(p);
+    k.append(sw, document.createTextNode(`${p.name} · ${prog.done}/${prog.total}`));
+    k.title = yvDetails(p, prog);
+    box.append(k);
+  }
+}
+
+function renderYear() {
+  if (S.view !== "year" || !S.user) return;
+  const grid = $("#yv-grid");
+  grid.innerHTML = "";
+  const now = Date.now();
+
+  // Row windows: one zoomed month, or 4 quarter-aligned rows of 3.
+  let rows = [];
+  if (S.yearZoom != null) {
+    const z = new Date(S.yearZoom);
+    rows.push([z.getTime(), new Date(z.getFullYear(), z.getMonth() + 1, 1).getTime()]);
+  } else {
+    const a = yearAnchorMonth();
+    for (let r = 0; r < 4; r++) {
+      rows.push([
+        new Date(a.getFullYear(), a.getMonth() + r * 3, 1).getTime(),
+        new Date(a.getFullYear(), a.getMonth() + r * 3 + 3, 1).getTime()
+      ]);
+    }
+  }
+  const winStart = rows[0][0], winEnd = rows[rows.length - 1][1];
+
+  // Nav chrome
+  if (S.yearZoom != null) {
+    $("#yv-label").textContent = new Date(S.yearZoom).toLocaleDateString([], { month: "long", year: "numeric" });
+  } else {
+    const a1 = new Date(winStart), a2 = new Date(winEnd - 1);
+    $("#yv-label").textContent = a1.getMonth() === 0
+      ? String(a1.getFullYear())
+      : `${a1.toLocaleDateString([], { month: "short", year: "numeric" })} – ${a2.toLocaleDateString([], { month: "short", year: "numeric" })}`;
+  }
+  $("#yv-today").hidden = S.yearOffset === 0 && S.yearZoom == null;
+  $("#yv-unzoom").hidden = S.yearZoom == null;
+  $("#yv-modes").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.mode === S.yearMode));
+
+  // Visible projects — everything intersecting the window, finished
+  // included (their bars read fully saturated; that IS the year story).
+  const projs = S.projects
+    .filter(p => startOfDayTs(p.startDate || 0) < winEnd &&
+                 startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS > winStart)
+    .sort((x, y) => (x.startDate || 0) - (y.startDate || 0));
+  $("#yv-empty").hidden = projs.length !== 0;
+
+  // Global greedy lane packing: a project keeps ONE lane all year.
+  const laneOf = new Map(), laneEnds = [];
+  for (const p of projs) {
+    const s0 = startOfDayTs(p.startDate || 0), e0 = startOfDayTs(p.endDate || p.startDate || 0);
+    let li = laneEnds.findIndex(le => le < s0);
+    if (li === -1) { li = laneEnds.length; laneEnds.push(e0); } else laneEnds[li] = e0;
+    laneOf.set(p.id, li);
+  }
+  const LANE_H = 24, laneCount = Math.max(1, laneEnds.length);
+
+  for (const [rs, re] of rows) {
+    const span = re - rs;
+    const row = document.createElement("div");
+    row.className = "yv-row";
+
+    // Month headers flex-grown by day count (day ticks when zoomed).
+    const months = document.createElement("div");
+    months.className = "yv-months";
+    if (S.yearZoom != null) {
+      const dcount = Math.round(span / DAY_MS);
+      for (let d = 0; d < dcount; d++) {
+        const c = document.createElement("div");
+        c.className = "yv-month yv-day-tick";
+        c.style.flexGrow = 1;
+        c.textContent = d + 1;
+        months.append(c);
+      }
+    } else {
+      for (let m = 0; m < 3; m++) {
+        const ms = new Date(rs);
+        ms.setMonth(ms.getMonth() + m);
+        const me = new Date(ms.getFullYear(), ms.getMonth() + 1, 1);
+        const c = document.createElement("div");
+        c.className = "yv-month";
+        const nd = new Date(now);
+        if (nd.getFullYear() === ms.getFullYear() && nd.getMonth() === ms.getMonth()) c.classList.add("yv-now");
+        c.style.flexGrow = Math.round((me.getTime() - ms.getTime()) / DAY_MS);
+        c.textContent = ms.toLocaleDateString([], ms.getMonth() === 0 ? { month: "short", year: "numeric" } : { month: "short" });
+        c.title = "Zoom to this month";
+        c.addEventListener("click", () => { S.yearZoom = ms.getTime(); renderYear(); });
+        months.append(c);
+      }
+    }
+    row.append(months);
+
+    const lanes = document.createElement("div");
+    lanes.className = "yv-lanes";
+    lanes.style.height = `${laneCount * LANE_H + 4}px`;
+
+    // Gridlines: month boundaries, or faint day lines while zoomed.
+    if (S.yearZoom == null) {
+      for (let m = 1; m < 3; m++) {
+        const ms = new Date(rs);
+        ms.setMonth(ms.getMonth() + m);
+        const gl = document.createElement("div");
+        gl.className = "yv-gridline";
+        gl.style.left = `${((ms.getTime() - rs) / span) * 100}%`;
+        lanes.append(gl);
+      }
+    } else {
+      const dcount = Math.round(span / DAY_MS);
+      for (let d = 1; d < dcount; d++) {
+        const gl = document.createElement("div");
+        gl.className = "yv-gridline";
+        gl.style.opacity = ".45";
+        gl.style.left = `${(d / dcount) * 100}%`;
+        lanes.append(gl);
+      }
+    }
+
+    if (now >= rs && now < re) {
+      const t = document.createElement("div");
+      t.className = "yv-todayline";
+      t.style.left = `${((now - rs) / span) * 100}%`;
+      lanes.append(t);
+    }
+
+    for (const p of projs) {
+      const ps = startOfDayTs(p.startDate || 0);
+      const pe = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS; // end day inclusive
+      if (pe <= rs || ps >= re) continue;
+      const segS = Math.max(ps, rs), segE = Math.min(pe, re);
+      const bar = document.createElement("div");
+      bar.className = "yv-bar" + (ps < rs ? " cont-l" : "") + (pe > re ? " cont-r" : "");
+      bar.style.left = `${((segS - rs) / span) * 100}%`;
+      bar.style.width = `${((segE - segS) / span) * 100}%`;
+      bar.style.top = `${laneOf.get(p.id) * LANE_H + 2}px`;
+
+      // D30a: pale ghost of the project color, saturating left-to-right
+      // by pipeline % — computed against the WHOLE bar, clipped to this
+      // segment, so multi-quarter projects fill continuously.
+      const prog = projectProgress(p);
+      const fillT = ps + prog.pct * (pe - ps);
+      const fillPct = Math.max(0, Math.min(1, (fillT - segS) / (segE - segS))) * 100;
+      const c = p.color || "#4dd0c4";
+      bar.style.background = `linear-gradient(90deg, ${hexToRgba(c, 0.95)} ${fillPct}%, ${hexToRgba(c, 0.28)} ${fillPct}%)`;
+
+      const lbl = document.createElement("span");
+      lbl.className = "yv-bar-label";
+      lbl.textContent = p.name;
+      if (fillPct < 35) { // label sits over the ghost — go light-on-dark
+        lbl.style.color = "#dce7f0";
+        lbl.style.textShadow = "0 1px 2px rgba(0,0,0,.7)";
+      }
+      bar.append(lbl);
+      bar.title = yvDetails(p, prog);
+
+      // Stretch handles only where this segment shows a TRUE end.
+      if (ps >= rs) { const h = document.createElement("div"); h.className = "yv-handle l"; bar.append(h); }
+      if (pe <= re) { const h = document.createElement("div"); h.className = "yv-handle r"; bar.append(h); }
+      wireBarDrag(bar, p, span, lanes);
+      lanes.append(bar);
+    }
+    row.append(lanes);
+    grid.append(row);
+  }
+  renderYearLegend(projs);
+}
+
 function hexToRgba(hex, a) {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r},${g},${b},${a})`;
