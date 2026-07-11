@@ -1,18 +1,32 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.6.0
+// Version 0.7.0
+// 0.7.0 (D51/D60): configurable deadline hour (default 16 = 4 PM,
+// set from settings via setDeadlineHour) + per-tier ALLOWED DAYS.
+// "Weekday math" is now "working-day math": every tier declares
+// which days of the week count (default Mon–Fri). Stage offsets,
+// pipeline windows, date interception, and reschedule targets all
+// count only the owning tier's allowed days. isWeekend/addWeekdays/
+// weekendNeighbors remain as Mon–Fri wrappers for compatibility.
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // Most pipeline steps are weight, not deadlines; only dated stages
 // (real offsets or hard dues) drive chronology. Legacy phase
-// "during" now reads as UNDATED (this un-overdues Katie's data with
-// zero migration). Deadline fallback = project end.
-// Priority engine v2 (D43), weekday math (D45), windows (D48).
+// "during" now reads as UNDATED. Deadline fallback = project end.
+// Priority engine v2 (D43), windows (D48).
 // ============================================================
 
-export const QUEUE_VERSION = "0.6.0";
+export const QUEUE_VERSION = "0.7.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DEADLINE_HOUR = 17; // computed (date-only) deadlines are "by 5 PM"
+
+// D51: computed (date-only) deadlines are "due by this hour" (24-hr).
+// Default 4 PM; settings/config.deadlineHour overrides via the setter.
+let DEADLINE_HOUR = 16;
+export function setDeadlineHour(h) {
+  const n = parseInt(h, 10);
+  DEADLINE_HOUR = (!isNaN(n) && n >= 0 && n <= 23) ? n : 16;
+}
+export function getDeadlineHour() { return DEADLINE_HOUR; }
 
 const UNIT_MS = {
   minutes: 60 * 1000,
@@ -31,7 +45,49 @@ function addMonths(ts, n) {
   return d.getTime();
 }
 
-// ---------- Weekday math (D45: Katie works weekdays) ----------
+// ---------- Working-day math (D45 weekdays → D60 per-tier days) ----------
+
+/** Default working days: Mon–Fri (JS getDay: 0=Sun … 6=Sat). */
+export const WEEKDAYS = [1, 2, 3, 4, 5];
+
+/** Normalize a tier's allowedDays into a usable Set. Missing/empty →
+ *  Mon–Fri, which keeps every pre-D60 tier behaving exactly as before. */
+function allowedSet(allowedDays) {
+  return (Array.isArray(allowedDays) && allowedDays.length)
+    ? new Set(allowedDays) : new Set(WEEKDAYS);
+}
+
+export function isDayAllowed(ts, allowedDays) {
+  return allowedSet(allowedDays).has(new Date(ts).getDay());
+}
+
+/** Move n ALLOWED days from ts (n<0 = backward). Disallowed days don't
+ *  count. Guard prevents infinite loops on a pathological empty set. */
+export function addAllowedDays(ts, n, allowedDays) {
+  if (!n) return ts;
+  const ok = allowedSet(allowedDays);
+  let t = ts;
+  const step = n > 0 ? DAY_MS : -DAY_MS;
+  let left = Math.abs(n), guard = 0;
+  while (left > 0 && guard++ < 4000) {
+    t += step;
+    if (ok.has(new Date(t).getDay())) left--;
+  }
+  return t;
+}
+
+/** Nearest allowed day at-or-before / at-or-after ts (for the date
+ *  interception modal and duplicate-project snapping). */
+export function allowedNeighbors(ts, allowedDays) {
+  const ok = allowedSet(allowedDays);
+  let prev = ts, next = ts, guard = 0;
+  while (!ok.has(new Date(prev).getDay()) && guard++ < 14) prev -= DAY_MS;
+  guard = 0;
+  while (!ok.has(new Date(next).getDay()) && guard++ < 14) next += DAY_MS;
+  return { prev, next };
+}
+
+// Mon–Fri wrappers (pre-D60 API, still used for defaults).
 
 export function isWeekend(ts) {
   const dow = new Date(ts).getDay();
@@ -40,23 +96,13 @@ export function isWeekend(ts) {
 
 /** Move n WEEKDAYS from ts (n<0 = backward). Weekends don't count. */
 export function addWeekdays(ts, n) {
-  if (!n) return ts;
-  let t = ts;
-  const step = n > 0 ? DAY_MS : -DAY_MS;
-  let left = Math.abs(n);
-  while (left > 0) {
-    t += step;
-    if (!isWeekend(t)) left--;
-  }
-  return t;
+  return addAllowedDays(ts, n, WEEKDAYS);
 }
 
-/** Nearest Friday before / Monday after a weekend date (for the warning modal). */
+/** Nearest Friday before / Monday after a weekend date. */
 export function weekendNeighbors(ts) {
-  let fri = ts, mon = ts;
-  while (isWeekend(fri)) fri -= DAY_MS;
-  while (isWeekend(mon)) mon += DAY_MS;
-  return { fri, mon };
+  const { prev, next } = allowedNeighbors(ts, WEEKDAYS);
+  return { fri: prev, mon: next };
 }
 
 // ---------- Stage timing (D44) ----------
@@ -79,13 +125,14 @@ export function stageIsDated(s) {
   return n.dueAt != null || n.direction !== "none";
 }
 
-/** Computed target date: anchor(start|end) ± offsetDays WEEKDAYS, at 5 PM.
- *  Returns null for undated stages (D50). */
-export function stageScheduledAt(project, stage) {
+/** Computed target date: anchor(start|end) ± offsetDays counted in the
+ *  owning tier's ALLOWED days (D60; default Mon–Fri), at the deadline
+ *  hour (D51). Returns null for undated stages (D50). */
+export function stageScheduledAt(project, stage, allowedDays) {
   const s = normalizeStage(stage);
   if (s.direction === "none") return null;
   const base = s.anchor === "end" ? (project.endDate || 0) : (project.startDate || 0);
-  const dated = addWeekdays(base, s.direction === "before" ? -(s.offsetDays || 0) : (s.offsetDays || 0));
+  const dated = addAllowedDays(base, s.direction === "before" ? -(s.offsetDays || 0) : (s.offsetDays || 0), allowedDays);
   const d = new Date(dated);
   d.setHours(DEADLINE_HOUR, 0, 0, 0);
   return d.getTime();
@@ -93,28 +140,28 @@ export function stageScheduledAt(project, stage) {
 
 /** A stage's real deadline: manual hard due wins; else the computed target;
  *  null when the stage is undated (it's weight, not a deadline). */
-export function stageEffectiveDate(project, stage) {
-  return stage.dueAt ?? stageScheduledAt(project, stage);
+export function stageEffectiveDate(project, stage, allowedDays) {
+  return stage.dueAt ?? stageScheduledAt(project, stage, allowedDays);
 }
 
-function atFivePM(ts) { const d = new Date(ts); d.setHours(17, 0, 0, 0); return d.getTime(); }
+function atDeadlineHour(ts) { const d = new Date(ts); d.setHours(DEADLINE_HOUR, 0, 0, 0); return d.getTime(); }
 
 /** [first, last] effective dates across ALL stages — the pipeline window (D48). */
-export function projectPipelineWindow(project) {
+export function projectPipelineWindow(project, allowedDays) {
   const start = project.startDate || 0, end = project.endDate || 0;
   const dated = (project.stages || [])
-    .map(s => stageEffectiveDate(project, s))
+    .map(s => stageEffectiveDate(project, s, allowedDays))
     .filter(d => d != null);
   return [Math.min(start, ...dated), Math.max(end, ...dated)];
 }
 
 /** The NEXT dated commitment: earliest effective date among incomplete stages. */
-export function nextDeadline(project) {
+export function nextDeadline(project, allowedDays) {
   const st = project.stages || [];
   let best = null;
   st.forEach((s, i) => {
     if (s.completedAt) return;
-    const date = stageEffectiveDate(project, s);
+    const date = stageEffectiveDate(project, s, allowedDays);
     if (date == null) return; // undated = weight, not deadline (D50)
     if (!best || date < best.date) best = { date, stage: s, index: i };
   });
@@ -232,15 +279,16 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
     const stages = p.stages || [];
     const activeIdx = stages.findIndex(s => !s.completedAt);
     if (activeIdx === -1) continue; // complete
-    const [first, last] = projectPipelineWindow(p);
+    const allowedDays = tierById[p.tierId]?.allowedDays; // D60
+    const [first, last] = projectPipelineWindow(p, allowedDays);
     // D48: invisible until its earliest pipeline date; rides the queue through
     // its last date; past that it lives on "today" as expired until dealt with.
     const inWindow = viewingToday
       ? now >= startOfDay(first)
       : (dayEnd > startOfDay(first) && dayStart <= last);
     if (!inWindow) continue;
-    const nd = nextDeadline(p);
-    const deadline = nd ? nd.date : atFivePM(p.endDate || last);
+    const nd = nextDeadline(p, allowedDays);
+    const deadline = nd ? nd.date : atDeadlineHour(p.endDate || last);
     const expired = viewingToday && now > deadline;
     const prog = projectProgress(p);
     active.push({
