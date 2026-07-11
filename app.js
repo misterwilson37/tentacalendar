@@ -1,5 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.8.0 — "the smoke-test release"
+// 0.8.0:
+//  · D61: queue hides a tier's items on days outside its allowedDays
+//    (Katie's weekend queue is clear of Work; cards still show all).
+//  · D62: duplicate-for-next-year is a REVIEW FORM — name (with the
+//    year token auto-bumped, e.g. resv2606 → resv2706), dates, color,
+//    tier, workload all editable before creation; "Remind me in a
+//    month" snoozes it into a real task instead.
+//  · Date/time fields: task due defaults to today; clicking any
+//    date/time input opens the native picker (showPicker) where the
+//    browser supports it, instead of demanding the tiny icon.
+//  · Stage-editor rows: undated stages now GHOST their anchor/offset
+//    controls (visibility, not display) so columns stay aligned — the
+//    "name field ate the row" report was the layout collapsing into
+//    the vacancy left by display:none.
 // Version 0.7.0 — "the exit-checklist release"
 // 0.7.0:
 //  · DECISION MODAL v2 (D57): rows are LIVE (re-derived from real
@@ -36,10 +51,10 @@ import {
   buildQueue, projectProgress, remainingWork, normalizeStage,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.7.0";
+} from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.7.0";
+export const APP_VERSION = "0.8.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -90,6 +105,19 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#stages-cancel").addEventListener("click", () => { $("#stages-modal").hidden = true; });
   $("#stage-proj-add").addEventListener("click", () =>
     projStageRow({ name: "", direction: "none", anchor: "start", offsetDays: 0, completedAt: null, dueAt: null }, -1, true));
+  // Cleanup for pre-D50 experiments: rows saved as after/end/0 were
+  // "dated at project end" by accident — flip them to No date IN THE
+  // EDITOR (nothing writes until Save, so it's reviewable).
+  $("#stage-proj-undate").addEventListener("click", () => {
+    for (const row of document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")) {
+      if (row.querySelector(".st-dir").value === "after" &&
+          row.querySelector(".st-anchor").value === "end" &&
+          (parseInt(row.querySelector(".st-off").value, 10) || 0) === 0) {
+        row.querySelector(".st-dir").value = "none";
+        syncTimingRow(row);
+      }
+    }
+  });
   $("#decision-close").addEventListener("click", closeDecision);
 
   // Settings tabs (D52)
@@ -108,7 +136,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Duplicate-for-next-year modal (D59)
   $("#dup-yes").addEventListener("click", dupConfirm);
+  $("#dup-snooze").addEventListener("click", dupSnooze);
   $("#dup-no").addEventListener("click", () => { S.dupTarget = null; $("#dup-modal").hidden = true; });
+
+  // Any date/time field opens its native picker on click/focus where
+  // supported (Chromium). Safari ignores showPicker — typing still works.
+  document.addEventListener("click", ev => {
+    const inp = ev.target;
+    if (inp instanceof HTMLInputElement && (inp.type === "date" || inp.type === "time") && inp.showPicker) {
+      try { inp.showPicker(); } catch (_) { /* needs gesture / unsupported */ }
+    }
+  });
+
+  $("#task-date").value = toDateInput(new Date()); // due date defaults to today
 
   // Tap-to-reveal ⓘ popovers (phones can't hover).
   // D58: preventDefault() is load-bearing — when the ⓘ lives inside a
@@ -592,36 +632,98 @@ function openDuplicateModal(p) {
   if (!isDayAllowed(startDate, allowed)) startDate = allowedNeighbors(startDate, allowed).next;
   if (!isDayAllowed(endDate, allowed)) endDate = allowedNeighbors(endDate, allowed).prev;
   if (endDate < startDate) endDate = allowedNeighbors(startDate, allowed).next;
-  S.dupTarget = { projectId: p.id, startDate, endDate };
+  S.dupTarget = { projectId: p.id };
+  // D62: everything reviewable before anything is created.
   $("#dup-text").textContent =
-    `Set up "${p.name}" to run again ${fmtDay(startDate)} – ${fmtDay(endDate)}? ` +
-    `Its ${(p.stages || []).length} stages copy over (including any surgery) with every checkbox and hard due date reset.`;
-  $("#dup-yes").textContent = `Yes — duplicate for ${new Date(startDate).getFullYear()}`;
+    `Everything below is pre-filled for next year and editable — double-check before creating. ` +
+    `All ${(p.stages || []).length} stages copy over exactly as this project has them (surgery included), ` +
+    `with every checkbox and hard due date reset.`;
+  $("#dup-name").value = bumpYearTokens(p.name, new Date(p.startDate).getFullYear(), new Date(startDate).getFullYear());
+  $("#dup-start").value = toDateInput(new Date(startDate));
+  $("#dup-end").value = toDateInput(new Date(endDate));
+  $("#dup-color").value = p.color;
+  const taskTiers = S.tiers.filter(t => t.kind !== "anchor");
+  $("#dup-tier").innerHTML = taskTiers.map(t =>
+    `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
+  $("#dup-tier").value = p.tierId;
+  $("#dup-workload").value = String(p.workload || 2);
   $("#dup-modal").hidden = false;
 }
 
+/** D62: bump year tokens in a project name — the full year (2026→2027)
+ *  and Katie's YYNN codes (resv2606→resv2706, where the first two
+ *  digits are the two-digit year of the project's start). */
+function bumpYearTokens(name, fromYear, toYear) {
+  let out = String(name);
+  out = out.replace(new RegExp(`(^|\\D)${fromYear}(?=\\D|$)`, "g"), `$1${toYear}`);
+  const fyy = String(fromYear % 100).padStart(2, "0");
+  const tyy = String(toYear % 100).padStart(2, "0");
+  out = out.replace(new RegExp(`(^|\\D)${fyy}(\\d{2})(?=\\D|$)`, "g"), `$1${tyy}$2`);
+  return out;
+}
+
 function dupConfirm() {
+  const t = S.dupTarget;
+  if (!t) { $("#dup-modal").hidden = true; return; }
+  const p = S.projects.find(x => x.id === t.projectId);
+  if (!p) { S.dupTarget = null; $("#dup-modal").hidden = true; return; }
+  const name = $("#dup-name").value.trim() || p.name;
+  const startDate = new Date(`${$("#dup-start").value}T00:00`).getTime();
+  const endDate = new Date(`${$("#dup-end").value}T00:00`).getTime();
+  const tierId = $("#dup-tier").value;
+  const workload = parseInt($("#dup-workload").value, 10) || 2;
+  if (isNaN(startDate) || isNaN(endDate)) { alert("Both dates are needed."); return; }
+  if (endDate < startDate) { alert("Project can't end before it starts. (The octopus checked.)"); return; }
+  // Edited dates still respect the chosen tier's working days (D60).
+  const tier = S.tiers.find(x => x.id === tierId);
+  for (const [label, ts] of [["start", startDate], ["end", endDate]]) {
+    if (!isDayAllowed(ts, tier?.allowedDays)) {
+      const { prev, next } = allowedNeighbors(ts, tier?.allowedDays);
+      alert(`${fmtDay(ts)} is outside ${tier ? tier.name + "'s" : "this tier's"} working days — ` +
+        `try ${fmtDay(prev)} or ${fmtDay(next)} for the ${label} date.`);
+      return;
+    }
+  }
+  S.dupTarget = null;
+  $("#dup-modal").hidden = true;
+  const stages = (p.stages || []).map(sRaw => {
+    const st = normalizeStage(sRaw);
+    return {
+      name: st.name,
+      direction: st.direction || "none",
+      anchor: st.anchor || "start",
+      offsetDays: st.offsetDays || 0,
+      completedAt: null,
+      dueAt: null
+    };
+  });
+  addProjectWithStages({
+    name, color: $("#dup-color").value, tierId, workload, startDate, endDate, stages
+  }).then(ref => {
+    // Open the new card so the pipeline is immediately reviewable
+    // (✎⋮ from there for stage surgery — "Excel setup" → five steps).
+    if (ref?.id) { S.expandedProjects.add(ref.id); persistExpanded(); }
+  });
+}
+
+/** D62: "too soon after the fireworks" escape hatch — snooze the
+ *  duplication decision into a real task a month out. */
+function dupSnooze() {
   const t = S.dupTarget;
   S.dupTarget = null;
   $("#dup-modal").hidden = true;
   if (!t) return;
   const p = S.projects.find(x => x.id === t.projectId);
   if (!p) return;
-  const stages = (p.stages || []).map(sRaw => {
-    const s = normalizeStage(sRaw);
-    return {
-      name: s.name,
-      direction: s.direction || "none",
-      anchor: s.anchor || "start",
-      offsetDays: s.offsetDays || 0,
-      completedAt: null,
-      dueAt: null
-    };
-  });
-  addProjectWithStages({
-    name: p.name, color: p.color, tierId: p.tierId,
-    workload: p.workload || 2,
-    startDate: t.startDate, endDate: t.endDate, stages
+  const tier = S.tiers.find(x => x.id === p.tierId);
+  let due = Date.now() + 30 * DAY_MS;
+  if (!isDayAllowed(due, tier?.allowedDays)) due = allowedNeighbors(due, tier?.allowedDays).next;
+  const d = new Date(due); d.setHours(9, 0, 0, 0);
+  addTask({
+    title: `🔁 Set up next year's "${p.name}"?`,
+    tierId: p.tierId,
+    dueAt: d.getTime(),
+    escalation: { every: 1, unit: "days" }
   });
 }
 
@@ -691,17 +793,19 @@ function timingSelects(st) {
       <option value="before" ${dir === "before" ? "selected" : ""}>Before</option>
       <option value="after" ${dir === "after" ? "selected" : ""}>After</option>
     </select>
-    <select class="st-anchor" title="Counted from project start or project end" ${undated ? "hidden" : ""}>
+    <select class="st-anchor${undated ? " st-ghost" : ""}" title="Counted from project start or project end">
       <option value="start" ${st.anchor !== "end" ? "selected" : ""}>start</option>
       <option value="end" ${st.anchor === "end" ? "selected" : ""}>end</option>
     </select>
-    <label class="st-off-label" title="Weekday offset — weekends never count." ${undated ? "hidden" : ""}><input class="st-off" type="number" min="0" value="${st.offsetDays || 0}">wd</label>`;
+    <label class="st-off-label${undated ? " st-ghost" : ""}" title="Working-day offset — this tier's off days never count."><input class="st-off" type="number" min="0" value="${st.offsetDays || 0}">wd</label>`;
 }
 
 function syncTimingRow(row) {
+  // st-ghost (visibility) keeps the columns aligned across dated and
+  // undated rows — display:none let the name field swallow the space.
   const undated = row.querySelector(".st-dir").value === "none";
-  row.querySelector(".st-anchor").hidden = undated;
-  row.querySelector(".st-off-label").hidden = undated;
+  row.querySelector(".st-anchor").classList.toggle("st-ghost", undated);
+  row.querySelector(".st-off-label").classList.toggle("st-ghost", undated);
 }
 
 function projStageRow(st, origIndex, isNew) {
