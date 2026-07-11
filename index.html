@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.6.0 (banner and data-html-version move together, always)
+     Version 0.7.0 (banner and data-html-version move together, always)
+     0.7.0 (D62): duplicate modal is a review FORM (name/dates/color/
+     tier/workload + snooze button). css ?v= → 0.7.0, app.js ?v= → 0.8.0.
      0.6.0: settings modal split into tabs (Tiers / Pipeline / Timing)
      with deadline-hour (D51) + decision-threshold (D52) fields and
      #tier-color-hint (D55); new #uncheck-modal (D53) and #dup-modal
@@ -16,9 +18,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.6.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.7.0">
 </head>
-<body data-html-version="0.6.0">
+<body data-html-version="0.7.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -227,6 +229,7 @@
       <p class="hint">This edits THIS project only — the template in ⚙️ Settings is untouched. ✓ = already completed, ⏰ = has a hard due date; both survive renames and reordering. Offsets count this tier's working days.</p>
       <div id="stage-proj-editor"></div>
       <button id="stage-proj-add" class="mini">+ Add stage</button>
+      <button id="stage-proj-undate" class="mini" title="Early experiments saved stages as 'After end + 0wd', which dates them all at the project end. This flips every such row to No date — review, then Save.">Un-date all "+0wd end" stages</button>
       <div class="modal-foot">
         <span></span>
         <button id="stages-save" class="primary">Save stages</button>
@@ -273,13 +276,33 @@
     </div>
   </div>
 
-  <!-- ============ DUPLICATE FOR NEXT YEAR (D59) ============ -->
+  <!-- ============ DUPLICATE FOR NEXT YEAR (D59/D62) ============ -->
   <div id="dup-modal" class="modal-shell" hidden>
     <div class="modal-card modal-sm">
       <h3>🔁 Same time next year?</h3>
       <p id="dup-text" class="hint"></p>
+      <div class="form-row">
+        <label class="dup-wide">Name <input id="dup-name" type="text"></label>
+      </div>
+      <div class="form-row">
+        <label>Start <input id="dup-start" type="date"></label>
+        <label>End <input id="dup-end" type="date"></label>
+      </div>
+      <div class="form-row">
+        <label>Color <input id="dup-color" type="color"></label>
+        <label>Tier <select id="dup-tier"></select></label>
+        <label>Workload
+          <select id="dup-workload">
+            <option value="1">1 — light</option>
+            <option value="2">2 — standard</option>
+            <option value="3">3 — heavy</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">Stage-level tweaks (splitting "Excel setup" into five steps, new offsets) live in ✎⋮ on the new card — it opens expanded so you can review the pipeline right away.</p>
       <div class="weekend-choices">
-        <button id="dup-yes" class="primary"></button>
+        <button id="dup-yes" class="primary">Create next year's run</button>
+        <button id="dup-snooze" class="mini">🕐 Remind me in a month</button>
         <button id="dup-no" class="mini">No thanks</button>
       </div>
     </div>
@@ -288,6 +311,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.7.0"></script>
+  <script type="module" src="app.js?v=0.8.0"></script>
 </body>
 </html>
