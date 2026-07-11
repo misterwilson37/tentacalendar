@@ -1,5 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.15.0 — "the year that fits" (D70)
+// 0.15.0:
+//  · Annual view (né Year wall) auto-density is now WINDOW-FIT, like
+//    the timeline: month rows share the real screen height, GL clamps
+//    5–14; the floor is 3px borderless hairline bars, so a fully
+//    loaded Katie-year still fits one screen before it ever scrolls.
+//    (Column count mirrors the CSS breakpoints — change together.)
+//  · Annual week heights are UNIFORM (global max concurrency), so the
+//    12 calendars line up like a real wall instead of July towering
+//    over an empty August (Jake). Stacked Months keeps per-week fit.
+//  · Bar labels appear on ANY bar tall enough to hold them (≥16px and
+//    ≥3 days) — the Annual view included, e.g. with ▮ pinned.
+//  · NOT a bug, recorded for posterity: progress fill is positional in
+//    time (D30a) — a May–July project at 25% shows its saturation in
+//    MAY; a July-onward window shows only ghost. Jan–Dec reveals it.
 // Version 0.14.0 — "the whole year on the wall" (D69)
 // 0.14.0:
 //  · YEAR WALL layout (the view Jake was picturing all along): 12 mini
@@ -126,7 +141,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.14.0";
+export const APP_VERSION = "0.15.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1525,12 +1540,26 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
     return { mS, mE, weeks: packed };
   });
   const maxConc = months.reduce((mx, m) => Math.max(mx, 0, ...m.weeks.map(w => w.laneCount)), 0);
-  const pin = yvPinnedSize();                               // D69
-  const GL = pin ? pin.LANE
-    : wall ? (maxConc <= 3 ? 14 : maxConc <= 7 ? 10 : 8)    // wall auto: one notch thinner
-    : (maxConc <= 4 ? 20 : maxConc <= 9 ? 13 : 9);
-  const GB = GL - 4;
-  const gLabels = !wall && GB >= 14;                        // the wall never carries labels
+  const wallLanes = Math.max(1, maxConc);   // D70: Annual weeks are uniform
+  const pin = yvPinnedSize();               // D69: pins beat every auto
+  let GL, GB;
+  if (pin) { GL = pin.LANE; GB = pin.BAR; }
+  else if (wall) {
+    // D70: window-fit, timeline-style. Column count MIRRORS the CSS
+    // breakpoints (1150/850/520) — change both together.
+    const gw = grid.getBoundingClientRect().width || 1200;
+    const cols = gw >= 1150 ? 4 : gw >= 850 ? 3 : gw >= 520 ? 2 : 1;
+    const monthRows = Math.ceil(months.length / cols);
+    const avail = Math.max(240, window.innerHeight - grid.getBoundingClientRect().top - 110);
+    const maxWeeks = Math.max(...months.map(m => m.weeks.length));
+    GL = Math.floor((avail / monthRows - 40) / (maxWeeks * wallLanes));
+    GL = Math.max(5, Math.min(14, GL));     // floor = hairline
+    GB = Math.max(3, GL - (GL <= 8 ? 2 : 4)); // small lanes keep more of their budget
+  } else {
+    GL = maxConc <= 4 ? 20 : maxConc <= 9 ? 13 : 9;
+    GB = GL - 4;
+  }
+  const gLabels = GB >= 16 && true;         // D70: any bar tall enough speaks (wall included)
 
   const dows = wall ? ["S", "M", "T", "W", "T", "F", "S"]
                     : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -1583,7 +1612,7 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
 
       const lanes = document.createElement("div");
       lanes.className = "yvg-lanes";
-      lanes.style.height = `${Math.max(1, wk.laneCount) * GL + 3}px`;
+      lanes.style.height = `${(wall ? wallLanes : Math.max(1, wk.laneCount)) * GL + 3}px`; // D70: Annual lines up
       const span = wk.we - wk.ws;
       for (const g of wk.segs) {
         const bar = document.createElement("div");
@@ -1592,7 +1621,8 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
         bar.style.width = `${((g.segE - g.segS) / span) * 100}%`;
         bar.style.top = `${g.lane * GL}px`;
         bar.style.height = `${GB}px`;
-        bar.style.setProperty("--bar-r", GB >= 14 ? "5px" : "3px");
+        bar.style.setProperty("--bar-r", GB >= 14 ? "5px" : GB >= 5 ? "3px" : "2px");
+        if (GB <= 4) bar.classList.add("thin");             // D70: hairlines drop the border
         const prog = projectProgress(g.p);
         const fillT = g.ps + prog.pct * (g.pe - g.ps);
         const fillPct = Math.max(0, Math.min(1, (fillT - g.segS) / (g.segE - g.segS))) * 100;
