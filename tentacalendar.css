@@ -1,6 +1,12 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.13.0
+   Version 0.14.0
+   0.14.0 (D69): YEAR WALL — #yv-grid.yv-wall lays the 12 .yvg-month
+   blocks in a 4-column grid (3 rows of 4, Jake's wall of calendars),
+   with compact head/dow/day typography; container queries step the
+   wall to 3/2/1 columns as it narrows (1 column ≈ the stacked Months
+   layout, a graceful phone fallback). .yv-sizes control beside the
+   other toggles.
    0.13.0 (D68): month-grid layout (.yvg-*: month blocks, Sun–Sat dow
    header, week rows with a day-cell backdrop + bar lanes on top,
    weekend/out-of-month/today cell states), .yv-layouts toggle beside
@@ -57,7 +63,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.13.0";
+  --tc-version: "0.14.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -518,8 +524,9 @@ body.celebration-wave::after {
 .yv-nav { display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem; flex-wrap: wrap; }
 .yv-nav h2 { margin: 0; font-size: 1.15rem; }
 .yv-layouts { margin-left: auto; display: flex; gap: .3rem; }
-.yv-modes { display: flex; gap: .3rem; }
-.yv-modes .mini.active, .yv-layouts .mini.active { border-color: var(--accent); color: var(--accent); }
+.yv-modes, .yv-sizes { display: flex; gap: .3rem; align-items: center; }
+.yv-sizes-label { font-size: .7rem; color: var(--ink-dim); }
+.yv-modes .mini.active, .yv-layouts .mini.active, .yv-sizes .mini.active { border-color: var(--accent); color: var(--accent); }
 
 #yv-grid { container-type: inline-size; }
 .yv-row {
@@ -618,3 +625,15 @@ body.celebration-wave::after {
 }
 .yv-project-card { position: relative; max-width: 380px; width: 92vw; }
 .yv-modal-close { position: absolute; top: .55rem; right: .55rem; }
+
+
+/* ---------- D69: year wall (12 mini calendars, 4 × 3) ---------- */
+#yv-grid.yv-wall { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; }
+#yv-grid.yv-wall .yvg-month { margin-bottom: 0; padding: .3rem .45rem .45rem; }
+#yv-grid.yv-wall .yvg-head { font-size: .72rem; padding-bottom: .2rem; }
+#yv-grid.yv-wall .yvg-dow span { font-size: .55rem; }
+#yv-grid.yv-wall .yvg-day { font-size: .55rem; padding: 1px 0 0 2px; }
+#yv-grid.yv-wall .yvg-lanes { margin-top: 11px; }
+@container (max-width: 1150px) { #yv-grid.yv-wall { grid-template-columns: repeat(3, 1fr); } }
+@container (max-width: 850px)  { #yv-grid.yv-wall { grid-template-columns: repeat(2, 1fr); } }
+@container (max-width: 520px)  { #yv-grid.yv-wall { grid-template-columns: 1fr; } }
