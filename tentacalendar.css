@@ -1,6 +1,10 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.7.0
+   Version 0.8.0
+   0.8.0: #project-form labels get the SAME column-flex treatment as
+   #task-form (they never had a display rule, so each label's height
+   depended on how its inline contents wrapped — Jake's staggered
+   Starts/Ends screenshot); .snooze-row; .label-line.
    0.7.0: .st-ghost (undated stages keep their columns via visibility —
    the "name field ate the row" fix), dup review-form styles.
    0.6.0 (D56/D52/D60/D58): collapsible project cards — header row
@@ -19,7 +23,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.7.0";
+  --tc-version: "0.8.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -148,7 +152,8 @@ h3 { margin: 1.2rem 0 .5rem; font-size: .95rem; color: var(--ink-dim); text-tran
 
 /* ---------- Form ---------- */
 #task-form { display: flex; flex-direction: column; gap: .7rem; }
-#task-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--ink-dim); }
+#task-form label, #project-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--ink-dim); }
+#project-form .label-line { display: inline-flex; align-items: center; gap: .3rem; } /* "Workload ⓘ" stays one line */
 .form-row { display: flex; gap: .7rem; }
 .form-row label { flex: 1; }
 input[type="text"], input[type="date"], input[type="time"], input[type="number"], select {
@@ -418,3 +423,7 @@ body.celebration-wave::after {
 #dup-modal .dup-wide input { width: 100%; }
 #dup-modal select { min-width: 6rem; }
 #dup-modal input[type="color"] { width: 2.6rem; padding: 0; height: 2.1rem; }
+
+
+/* Dup snooze row (D62 rev) */
+.snooze-row { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
