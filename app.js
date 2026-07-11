@@ -1,5 +1,19 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.13.0 — "the wall calendar" (D68)
+// 0.13.0:
+//  · MONTH-GRID layout (Jake's "traditional view"): months stacked,
+//    Sun–Sat columns, weeks as rows; bars clip per week ∩ month with
+//    per-week lane packing (gcal-style), same drag/stretch/tap/fill.
+//    Toggle (▦ Month grid ⇄ ▬ Timeline) left of the mode buttons;
+//    grid is the default, choice persists (tc-year-layout). The
+//    days-in-a-row layout now has its name in the UI: a Gantt chart.
+//  · Timeline bars size to the WINDOW: total lanes share the real
+//    vertical space (clamped 9–34px lanes), re-flowing on resize —
+//    2K gets thick bars, phones get readable slivers.
+//  · ＋ New project FAB (bottom-right of the year view) reparents the
+//    REAL project form into a modal — listeners, color assistant, and
+//    working-day interception ride along — and returns it on close.
 // Version 0.12.0 — "days are key" (D66)
 // 0.12.0:
 //  · Day texture in BOTH year rows and month zoom: weekend shading
@@ -102,7 +116,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.12.0";
+export const APP_VERSION = "0.13.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -129,6 +143,7 @@ const S = {
   yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
   yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
   yearZoom: null,          // D18 month zoom: month-start ts, or null for the 12-month grid
+  yearLayout: localStorage.getItem("tc-year-layout") || "grid",  // D68: "grid" | "timeline"
   lastSuggestedColor: "#4dabf7",
   unsubs: []
 };
@@ -157,6 +172,18 @@ document.addEventListener("DOMContentLoaded", () => {
       S.yearOffset = 0; S.yearZoom = null;
       renderYear();
     }));
+  $("#yv-layouts").querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => {
+      S.yearLayout = b.dataset.layout;
+      localStorage.setItem("tc-year-layout", S.yearLayout);
+      renderYear();
+    }));
+  $("#yv-add-project").addEventListener("click", openYvProjectModal);
+  $("#yv-project-close").addEventListener("click", closeYvProjectModal);
+  window.addEventListener("resize", () => {           // D68: timeline resizes with the window
+    clearTimeout(yvResizeT);
+    yvResizeT = setTimeout(() => { if (S.view === "year") renderYear(); }, 150);
+  });
   $("#task-form").addEventListener("submit", onTaskFormSubmit);
   $("#task-cancel").addEventListener("click", cancelTaskEdit);
   $("#project-form").addEventListener("submit", onProjectFormSubmit);
@@ -1244,8 +1271,8 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function commitProject(payload) {
-  if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(cancelProjectEdit);
-  else addProject(payload).then(() => { $("#project-name").value = ""; suggestProjectColor(true); });
+  if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(() => { cancelProjectEdit(); closeYvProjectModal(); });
+  else addProject(payload).then(() => { $("#project-name").value = ""; suggestProjectColor(true); closeYvProjectModal(); }); // D68: new bar appears behind the closing modal
 }
 
 // ---------- Color conflict assistant (D40) ----------
@@ -1408,6 +1435,163 @@ function renderYearLegend(projs) {
   }
 }
 
+let yvResizeT = 0;
+
+// ---------- D68: ＋ New project modal (form reparenting) ----------
+let projFormReturn = null; // where the form goes home to
+
+function openYvProjectModal() {
+  const title = $("#project-form-title"), form = $("#project-form");
+  if (!projFormReturn) projFormReturn = { parent: title.parentElement, next: form.nextElementSibling };
+  $("#yv-project-slot").append(title, form);
+  $("#yv-project-modal").hidden = false;
+  $("#project-name").focus();
+}
+
+function closeYvProjectModal() {
+  const modal = $("#yv-project-modal");
+  if (modal.hidden) return;
+  modal.hidden = true;
+  const { parent, next } = projFormReturn;
+  parent.insertBefore($("#project-form-title"), next);
+  parent.insertBefore($("#project-form"), next);
+}
+
+// ---------- D68: month-grid layout ----------
+
+/** A month's Sun-anchored week windows: [{ws,we}] plus [mS,mE). */
+function gridWeeksOfMonth(monthStart) {
+  const d0 = new Date(monthStart);
+  const mE = new Date(d0.getFullYear(), d0.getMonth() + 1, 1).getTime();
+  const first = new Date(monthStart);
+  first.setDate(first.getDate() - first.getDay()); // back to Sunday
+  const weeks = [];
+  const c = new Date(first);
+  while (c.getTime() < mE) {
+    const ws = c.getTime();
+    const e = new Date(c);
+    e.setDate(e.getDate() + 7);
+    weeks.push([ws, e.getTime()]);
+    c.setDate(c.getDate() + 7);
+  }
+  return { mS: monthStart, mE, weeks };
+}
+
+/** Wall-calendar rendering: bars clip to week ∩ month (so shared
+ *  spillover weeks don't show the same bar in two month blocks), and
+ *  lanes pack PER WEEK, gcal-style. Drag works within a week row —
+ *  the live date readout still tracks past its edges. */
+function renderYearGrid(grid, monthsList, projs, now) {
+  // Pass 1: pack every week; the max concurrency sets the density.
+  const months = monthsList.map(m => {
+    const { mS, mE, weeks } = gridWeeksOfMonth(m);
+    const packed = weeks.map(([ws, we]) => {
+      const lo = Math.max(ws, mS), hi = Math.min(we, mE);
+      const segs = [], laneEnds = [];
+      for (const p of projs) {
+        const ps = startOfDayTs(p.startDate || 0);
+        const pe = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS;
+        const segS = Math.max(ps, lo), segE = Math.min(pe, hi);
+        if (segE <= segS) continue;
+        let li = laneEnds.findIndex(le => le <= segS);
+        if (li === -1) { li = laneEnds.length; laneEnds.push(segE); } else laneEnds[li] = segE;
+        segs.push({ p, ps, pe, segS, segE, lane: li });
+      }
+      return { ws, we, segs, laneCount: laneEnds.length };
+    });
+    return { mS, mE, weeks: packed };
+  });
+  const maxConc = months.reduce((mx, m) => Math.max(mx, 0, ...m.weeks.map(w => w.laneCount)), 0);
+  const GL = maxConc <= 4 ? 20 : maxConc <= 9 ? 13 : 9;   // lane height
+  const GB = GL - 4;                                       // bar height 16/9/5
+  const gLabels = GB >= 14;
+
+  const dows = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const todayTs = startOfDayTs(now);
+  for (const m of months) {
+    const box = document.createElement("div");
+    box.className = "yvg-month";
+    const md = new Date(m.mS);
+    const head = document.createElement("div");
+    head.className = "yvg-head";
+    const nd0 = new Date(now);
+    if (nd0.getFullYear() === md.getFullYear() && nd0.getMonth() === md.getMonth()) head.classList.add("yv-now");
+    head.textContent = md.toLocaleDateString([], { month: "long", year: "numeric" });
+    if (S.yearZoom == null) {
+      head.title = "Zoom to this month";
+      head.addEventListener("click", () => { S.yearZoom = m.mS; renderYear(); });
+    }
+    box.append(head);
+
+    const dowRow = document.createElement("div");
+    dowRow.className = "yvg-dow";
+    dows.forEach(d => {
+      const sp = document.createElement("span");
+      sp.textContent = d;
+      dowRow.append(sp);
+    });
+    box.append(dowRow);
+
+    for (const wk of m.weeks) {
+      const wkEl = document.createElement("div");
+      wkEl.className = "yvg-week";
+      const daysEl = document.createElement("div");
+      daysEl.className = "yvg-days";
+      const c = new Date(wk.ws);
+      for (let i = 0; i < 7; i++) {
+        const cell = document.createElement("div");
+        cell.className = "yvg-day";
+        const ts = c.getTime();
+        const inMonth = ts >= m.mS && ts < m.mE;
+        if (!inMonth) cell.classList.add("yvg-out");
+        if (c.getDay() === 0 || c.getDay() === 6) cell.classList.add("yvg-we");
+        if (inMonth && ts === todayTs) cell.classList.add("yvg-today");
+        cell.textContent = c.getDate();
+        daysEl.append(cell);
+        c.setDate(c.getDate() + 1);
+      }
+      wkEl.append(daysEl);
+
+      const lanes = document.createElement("div");
+      lanes.className = "yvg-lanes";
+      lanes.style.height = `${Math.max(1, wk.laneCount) * GL + 3}px`;
+      const span = wk.we - wk.ws;
+      for (const g of wk.segs) {
+        const bar = document.createElement("div");
+        bar.className = "yv-bar" + (g.ps < g.segS ? " cont-l" : "") + (g.pe > g.segE ? " cont-r" : "");
+        bar.style.left = `${((g.segS - wk.ws) / span) * 100}%`;
+        bar.style.width = `${((g.segE - g.segS) / span) * 100}%`;
+        bar.style.top = `${g.lane * GL}px`;
+        bar.style.height = `${GB}px`;
+        bar.style.setProperty("--bar-r", GB >= 14 ? "5px" : "3px");
+        const prog = projectProgress(g.p);
+        const fillT = g.ps + prog.pct * (g.pe - g.ps);
+        const fillPct = Math.max(0, Math.min(1, (fillT - g.segS) / (g.segE - g.segS))) * 100;
+        const col = g.p.color || "#4dd0c4";
+        bar.style.background = `linear-gradient(90deg, ${hexToRgba(col, 0.95)} ${fillPct}%, ${hexToRgba(col, 0.28)} ${fillPct}%)`;
+        if (gLabels && (g.segE - g.segS) >= 3 * DAY_MS) {
+          const lbl = document.createElement("span");
+          lbl.className = "yv-bar-label";
+          lbl.textContent = g.p.name;
+          if (fillPct < 35) {
+            lbl.style.color = "#dce7f0";
+            lbl.style.textShadow = "0 1px 2px rgba(0,0,0,.7)";
+          }
+          bar.append(lbl);
+        }
+        bar.title = yvDetails(g.p, prog);
+        if (g.ps === g.segS) { const h = document.createElement("div"); h.className = "yv-handle l"; bar.append(h); }
+        if (g.pe === g.segE) { const h = document.createElement("div"); h.className = "yv-handle r"; bar.append(h); }
+        wireBarDrag(bar, g.p, span, lanes);
+        lanes.append(bar);
+      }
+      wkEl.append(lanes);
+      box.append(wkEl);
+    }
+    grid.append(box);
+  }
+}
+
 function renderYear() {
   if (S.view !== "year" || !S.user) return;
   const grid = $("#yv-grid");
@@ -1451,6 +1635,22 @@ function renderYear() {
                  startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS > winStart)
     .sort((x, y) => (x.startDate || 0) - (y.startDate || 0));
   $("#yv-empty").hidden = projs.length !== 0;
+  $("#yv-layouts").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.layout === S.yearLayout));
+
+  // D68: the wall-calendar layout takes over here; the Gantt timeline
+  // continues below.
+  if (S.yearLayout === "grid") {
+    const monthsList = [];
+    if (S.yearZoom != null) monthsList.push(S.yearZoom);
+    else {
+      const a = yearAnchorMonth();
+      for (let m = 0; m < 12; m++) monthsList.push(new Date(a.getFullYear(), a.getMonth() + m, 1).getTime());
+    }
+    renderYearGrid(grid, monthsList, projs, now);
+    renderYearLegend(projs);
+    return;
+  }
 
   // Global greedy lane packing: a project keeps ONE lane all year.
   const laneOf = new Map(), laneEnds = [];
@@ -1460,11 +1660,18 @@ function renderYear() {
     if (li === -1) { li = laneEnds.length; laneEnds.push(e0); } else laneEnds[li] = e0;
     laneOf.set(p.id, li);
   }
-  const laneCount = Math.max(1, laneEnds.length);
-  // D66 density: full-height labeled bars up to 4 concurrent lanes,
-  // half-height to 9, quarter-height beyond — names move to hover/tap.
-  const LANE_H = laneCount <= 4 ? 24 : laneCount <= 9 ? 14 : 9;
-  const BAR_H = LANE_H - 4;                  // 20 / 10 / 5
+  // D68: bars size to the WINDOW — the rows' total lanes share the
+  // vertical space Jake actually has (2K gets thick bars, phones get
+  // slivers), clamped to 9–34px lanes; a resize re-flows (debounced).
+  const rowLanes = rows.map(([rs0, re0]) => projs.reduce((mx, p) => {
+    const ps0 = startOfDayTs(p.startDate || 0);
+    const pe0 = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS;
+    return (pe0 <= rs0 || ps0 >= re0) ? mx : Math.max(mx, laneOf.get(p.id) + 1);
+  }, 1));
+  const totalLanes = rowLanes.reduce((a, b) => a + b, 0);
+  const avail = Math.max(220, window.innerHeight - grid.getBoundingClientRect().top - 150);
+  const LANE_H = Math.max(9, Math.min(34, Math.floor((avail - rows.length * 46) / totalLanes)));
+  const BAR_H = LANE_H - 4;
   const showLabels = BAR_H >= 16;
 
   for (const [rs, re] of rows) {
