@@ -1,5 +1,15 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.14.0 — "the whole year on the wall" (D69)
+// 0.14.0:
+//  · YEAR WALL layout (the view Jake was picturing all along): 12 mini
+//    month calendars in a 4×3 grid — the wall of calendars. New
+//    default; ▦▦/▦/▬ toggle. Zooming a wall month renders it big
+//    (stacked-month styling). Wall bars never carry inline labels —
+//    hover/tap/legend speak. Wall auto-density runs one notch thinner.
+//  · BAR SIZE control (Jake): Auto (per-layout judgment, incl. the
+//    timeline's window fit) or pinned ▮ 20px / ▪ 10px / ▁ 5px bars —
+//    persisted per device (tc-year-barsize).
 // Version 0.13.0 — "the wall calendar" (D68)
 // 0.13.0:
 //  · MONTH-GRID layout (Jake's "traditional view"): months stacked,
@@ -116,7 +126,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.13.0";
+export const APP_VERSION = "0.14.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -143,7 +153,8 @@ const S = {
   yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
   yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
   yearZoom: null,          // D18 month zoom: month-start ts, or null for the 12-month grid
-  yearLayout: localStorage.getItem("tc-year-layout") || "grid",  // D68: "grid" | "timeline"
+  yearLayout: localStorage.getItem("tc-year-layout") || "wall",  // D68/D69: "wall" | "grid" | "timeline"
+  yearBarSize: localStorage.getItem("tc-year-barsize") || "auto", // D69: "auto" | "full" | "half" | "quarter"
   lastSuggestedColor: "#4dabf7",
   unsubs: []
 };
@@ -176,6 +187,12 @@ document.addEventListener("DOMContentLoaded", () => {
     b.addEventListener("click", () => {
       S.yearLayout = b.dataset.layout;
       localStorage.setItem("tc-year-layout", S.yearLayout);
+      renderYear();
+    }));
+  $("#yv-sizes").querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => {
+      S.yearBarSize = b.dataset.size;
+      localStorage.setItem("tc-year-barsize", S.yearBarSize);
       renderYear();
     }));
   $("#yv-add-project").addEventListener("click", openYvProjectModal);
@@ -1477,11 +1494,17 @@ function gridWeeksOfMonth(monthStart) {
   return { mS: monthStart, mE, weeks };
 }
 
+/** D69: the user-pinned bar sizing, or null when "auto" (each layout
+ *  then applies its own judgment). Pins are honest pixels everywhere. */
+function yvPinnedSize() {
+  return { full: { LANE: 24, BAR: 20 }, half: { LANE: 14, BAR: 10 }, quarter: { LANE: 9, BAR: 5 } }[S.yearBarSize] || null;
+}
+
 /** Wall-calendar rendering: bars clip to week ∩ month (so shared
  *  spillover weeks don't show the same bar in two month blocks), and
  *  lanes pack PER WEEK, gcal-style. Drag works within a week row —
  *  the live date readout still tracks past its edges. */
-function renderYearGrid(grid, monthsList, projs, now) {
+function renderYearGrid(grid, monthsList, projs, now, wall = false) {
   // Pass 1: pack every week; the max concurrency sets the density.
   const months = monthsList.map(m => {
     const { mS, mE, weeks } = gridWeeksOfMonth(m);
@@ -1502,11 +1525,15 @@ function renderYearGrid(grid, monthsList, projs, now) {
     return { mS, mE, weeks: packed };
   });
   const maxConc = months.reduce((mx, m) => Math.max(mx, 0, ...m.weeks.map(w => w.laneCount)), 0);
-  const GL = maxConc <= 4 ? 20 : maxConc <= 9 ? 13 : 9;   // lane height
-  const GB = GL - 4;                                       // bar height 16/9/5
-  const gLabels = GB >= 14;
+  const pin = yvPinnedSize();                               // D69
+  const GL = pin ? pin.LANE
+    : wall ? (maxConc <= 3 ? 14 : maxConc <= 7 ? 10 : 8)    // wall auto: one notch thinner
+    : (maxConc <= 4 ? 20 : maxConc <= 9 ? 13 : 9);
+  const GB = GL - 4;
+  const gLabels = !wall && GB >= 14;                        // the wall never carries labels
 
-  const dows = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dows = wall ? ["S", "M", "T", "W", "T", "F", "S"]
+                    : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const todayTs = startOfDayTs(now);
   for (const m of months) {
     const box = document.createElement("div");
@@ -1516,7 +1543,9 @@ function renderYearGrid(grid, monthsList, projs, now) {
     head.className = "yvg-head";
     const nd0 = new Date(now);
     if (nd0.getFullYear() === md.getFullYear() && nd0.getMonth() === md.getMonth()) head.classList.add("yv-now");
-    head.textContent = md.toLocaleDateString([], { month: "long", year: "numeric" });
+    head.textContent = wall
+      ? md.toLocaleDateString([], md.getMonth() === 0 ? { month: "short", year: "numeric" } : { month: "short" })
+      : md.toLocaleDateString([], { month: "long", year: "numeric" });
     if (S.yearZoom == null) {
       head.title = "Zoom to this month";
       head.addEventListener("click", () => { S.yearZoom = m.mS; renderYear(); });
@@ -1638,16 +1667,22 @@ function renderYear() {
   $("#yv-layouts").querySelectorAll("button").forEach(b =>
     b.classList.toggle("active", b.dataset.layout === S.yearLayout));
 
-  // D68: the wall-calendar layout takes over here; the Gantt timeline
-  // continues below.
-  if (S.yearLayout === "grid") {
+  $("#yv-sizes").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.size === S.yearBarSize));
+
+  // D68/D69: calendar layouts take over here; the Gantt continues below.
+  // A zoomed wall month renders BIG (stacked-month styling) — the wall
+  // cell look is for the 12-up overview only.
+  const wall = S.yearLayout === "wall" && S.yearZoom == null;
+  grid.classList.toggle("yv-wall", wall);
+  if (S.yearLayout !== "timeline") {
     const monthsList = [];
     if (S.yearZoom != null) monthsList.push(S.yearZoom);
     else {
       const a = yearAnchorMonth();
       for (let m = 0; m < 12; m++) monthsList.push(new Date(a.getFullYear(), a.getMonth() + m, 1).getTime());
     }
-    renderYearGrid(grid, monthsList, projs, now);
+    renderYearGrid(grid, monthsList, projs, now, wall);
     renderYearLegend(projs);
     return;
   }
@@ -1669,8 +1704,10 @@ function renderYear() {
     return (pe0 <= rs0 || ps0 >= re0) ? mx : Math.max(mx, laneOf.get(p.id) + 1);
   }, 1));
   const totalLanes = rowLanes.reduce((a, b) => a + b, 0);
+  const pin = yvPinnedSize();                               // D69: pins beat the window fit
   const avail = Math.max(220, window.innerHeight - grid.getBoundingClientRect().top - 150);
-  const LANE_H = Math.max(9, Math.min(34, Math.floor((avail - rows.length * 46) / totalLanes)));
+  const LANE_H = pin ? pin.LANE
+    : Math.max(9, Math.min(34, Math.floor((avail - rows.length * 46) / totalLanes)));
   const BAR_H = LANE_H - 4;
   const showLabels = BAR_H >= 16;
 
