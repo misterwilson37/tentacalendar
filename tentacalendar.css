@@ -1,6 +1,8 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.6.0
+   Version 0.7.0
+   0.7.0: .st-ghost (undated stages keep their columns via visibility —
+   the "name field ate the row" fix), dup review-form styles.
    0.6.0 (D56/D52/D60/D58): collapsible project cards — header row
    never wraps ([chevron][name wraps internally][pinned buttons]),
    dates on their own .project-dates line, finished-projects toggle;
@@ -17,7 +19,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.6.0";
+  --tc-version: "0.7.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -403,3 +405,16 @@ body.celebration-wave::after {
 }
 .t-day { display: inline-flex; align-items: center; gap: .12rem; white-space: nowrap; cursor: pointer; }
 .t-day input { width: auto; margin: 0; accent-color: var(--accent); }
+
+
+/* ---------- 0.7.0 additions ---------- */
+/* Undated stages: anchor/offset hold their space invisibly so every
+   editor row's columns line up (display:none let the name input
+   swallow the vacancy and the row read as broken). */
+.st-ghost { visibility: hidden; }
+
+/* Duplicate review form (D62) */
+#dup-modal .dup-wide { flex: 1 1 100%; }
+#dup-modal .dup-wide input { width: 100%; }
+#dup-modal select { min-width: 6rem; }
+#dup-modal input[type="color"] { width: 2.6rem; padding: 0; height: 2.1rem; }
