@@ -1,6 +1,13 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.10.0
+   Version 0.11.0
+   0.11.0 (D65, PHASE 2): year view — .yv-nav/.yv-modes, quarter rows
+   (.yv-row: month headers flex-grown by day count, .yv-lanes with
+   absolutely positioned .yv-bar segments), D30a ghost/fill via inline
+   gradients, today marker, month gridlines, continuation clipping,
+   drag handles (.yv-handle, touch-action:none), legend, and the D27
+   compact container query (labels hide when the grid is narrow).
+   #popover gains pre-line whitespace for multi-line bar details.
    0.10.0 (D64): responsive rows — queue/waiting/done lists are size
    containers; when a list is ≥540px wide the two-line row collapses
    to ONE line (checkbox · title+time · ▸ · chip · buttons), notes
@@ -32,7 +39,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.10.0";
+  --tc-version: "0.11.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -222,6 +229,7 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 
 /* Shared tap popover */
 #popover {
+  white-space: pre-line;
   position: fixed; z-index: 130;
   max-width: 300px;
   background: var(--panel-2);
@@ -480,4 +488,72 @@ body.celebration-wave::after {
   padding: .45rem .55rem;
   resize: vertical;
   min-height: 2.6rem;
+}
+
+
+/* ---------- D65: Year view (Phase 2) ---------- */
+#year-view { padding: 1rem; max-width: 1500px; margin: 0 auto; }
+.yv-nav { display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem; flex-wrap: wrap; }
+.yv-nav h2 { margin: 0; font-size: 1.15rem; }
+.yv-modes { margin-left: auto; display: flex; gap: .3rem; }
+.yv-modes .mini.active { border-color: var(--accent); color: var(--accent); }
+
+#yv-grid { container-type: inline-size; }
+.yv-row {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .4rem .6rem .6rem;
+  margin-bottom: .6rem;
+}
+.yv-months { display: flex; }
+.yv-month {
+  font-size: .78rem; color: var(--ink-dim); font-weight: 600;
+  padding: .1rem .3rem .25rem; min-width: 0;
+  border-left: 1px solid var(--line);
+  cursor: pointer; user-select: none;
+}
+.yv-month:first-child { border-left: none; }
+.yv-month:hover { color: var(--ink); }
+.yv-month.yv-now { color: var(--accent); }
+.yv-day-tick { cursor: default; text-align: center; padding: .1rem 0 .25rem; font-weight: 400; }
+.yv-day-tick:hover { color: var(--ink-dim); }
+
+.yv-lanes { position: relative; }
+.yv-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.yv-todayline { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); opacity: .8; z-index: 2; }
+
+.yv-bar {
+  position: absolute; height: 20px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.14);
+  display: flex; align-items: center;
+  overflow: hidden;
+  cursor: grab; touch-action: none; user-select: none;
+  z-index: 1;
+}
+.yv-bar:active { cursor: grabbing; }
+.yv-bar.cont-l { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; }
+.yv-bar.cont-r { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
+.yv-bar.dragging { z-index: 3; box-shadow: 0 0 8px rgba(77,208,196,.5); }
+.yv-bar-label {
+  font-size: .68rem; font-weight: 700; color: #0a0f14;
+  padding: 0 .35rem; white-space: nowrap; overflow: hidden;
+  pointer-events: none; text-shadow: 0 0 3px rgba(255,255,255,.25);
+}
+.yv-handle {
+  position: absolute; top: 0; bottom: 0; width: 10px;
+  cursor: ew-resize; touch-action: none;
+}
+.yv-handle.l { left: 0; } .yv-handle.r { right: 0; }
+
+#yv-legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin-top: .2rem; }
+.yv-key { display: flex; align-items: center; gap: .35rem; font-size: .8rem; color: var(--ink-dim); }
+.yv-key .swatch { width: .8rem; height: .8rem; border-radius: 3px; flex-shrink: 0; }
+
+/* D27 compact: on a narrow grid (projector slice / phone) bar labels
+   hide — the legend and tap-popover carry the names. */
+@container (max-width: 700px) {
+  .yv-bar-label { display: none; }
+  .yv-month { font-size: .68rem; padding-left: .15rem; }
 }
