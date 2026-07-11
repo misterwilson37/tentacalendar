@@ -1,6 +1,12 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.7.0
+// Version 0.8.0
+// 0.8.0 (D61): the queue respects tier working days — when the VIEWED
+// day isn't in a tier's allowedDays, that tier's tasks and project
+// stages don't appear (Katie's Saturday is clear of Work items; the
+// project cards still show everything, and Monday brings it all back,
+// including the decision modal). Events/anchors are unaffected, as
+// are Done-today and Waiting.
 // 0.7.0 (D51/D60): configurable deadline hour (default 16 = 4 PM,
 // set from settings via setDeadlineHour) + per-tier ALLOWED DAYS.
 // "Weekday math" is now "working-day math": every tier declares
@@ -9,13 +15,9 @@
 // count only the owning tier's allowed days. isWeekend/addWeekdays/
 // weekendNeighbors remain as Mon–Fri wrappers for compatibility.
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
-// Most pipeline steps are weight, not deadlines; only dated stages
-// (real offsets or hard dues) drive chronology. Legacy phase
-// "during" now reads as UNDATED. Deadline fallback = project end.
-// Priority engine v2 (D43), windows (D48).
 // ============================================================
 
-export const QUEUE_VERSION = "0.7.0";
+export const QUEUE_VERSION = "0.8.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -230,6 +232,13 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
   const viewingToday = now >= dayStart && now < dayEnd;
   const tierById = Object.fromEntries(tiers.map(t => [t.id, t]));
   const rankOf = id => tierById[id]?.rank ?? 999;
+  // D61: is the VIEWED day outside this tier's working days? Off-day
+  // tiers vanish from the queue (not from cards, Done, or Waiting).
+  const viewDow = new Date(viewDay).getDay();
+  const offDay = tierId => {
+    const t = tierById[tierId];
+    return !!t && t.kind !== "anchor" && !allowedSet(t.allowedDays).has(viewDow);
+  };
   const hidden = id => hiddenTierIds.has(id);
 
   // --- Events (anchors) ---
@@ -256,6 +265,7 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
       continue;
     }
     if (t.dueAt == null) { waiting.push(t); continue; }
+    if (offDay(t.tierId)) continue; // D61
     const dueThisDay = t.dueAt >= dayStart && t.dueAt < dayEnd;
     const overdueIntoToday = viewingToday && t.dueAt < dayStart;
     if (!(dueThisDay || overdueIntoToday)) continue;
@@ -276,6 +286,7 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
   // --- Projects (one item each: active stage shown, next deadline sorted) ---
   for (const p of projects) {
     if (hidden(p.tierId)) continue;
+    if (offDay(p.tierId)) continue; // D61
     const stages = p.stages || [];
     const activeIdx = stages.findIndex(s => !s.completedAt);
     if (activeIdx === -1) continue; // complete
