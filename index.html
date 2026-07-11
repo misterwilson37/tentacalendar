@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.11.0 (banner and data-html-version move together, always)
+     Version 0.12.0 (banner and data-html-version move together, always)
+     0.12.0 (D69): ▦▦ Year wall layout button (new default) + Bars
+     size control (Auto/▮/▪/▁). css ?v= → 0.14.0, app → 0.14.0.
      0.11.0 (D68): year-view layout toggle (Month grid ⇄ Timeline),
      ＋ New project FAB, #yv-project-modal shell (the REAL form gets
      reparented in, listeners intact). css ?v= → 0.13.0, app → 0.13.0.
@@ -33,9 +35,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.13.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.14.0">
 </head>
-<body data-html-version="0.11.0">
+<body data-html-version="0.12.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -171,8 +173,16 @@
         <button id="yv-today" class="mini" hidden>back to now</button>
         <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
         <div class="yv-layouts" id="yv-layouts" title="Month grid: weeks as rows, Sun–Sat — the wall-calendar look. Timeline: days in one long row per quarter (a Gantt chart).">
-          <button data-layout="grid" class="mini">▦ Month grid</button>
+          <button data-layout="wall" class="mini">▦▦ Year wall</button>
+          <button data-layout="grid" class="mini">▦ Months</button>
           <button data-layout="timeline" class="mini">▬ Timeline</button>
+        </div>
+        <div class="yv-sizes" id="yv-sizes" title="Bar thickness: Auto fits the layout (and your window); ▮ pins thick 20px, ▪ medium 10px, ▁ thin 5px.">
+          <span class="yv-sizes-label">Bars</span>
+          <button data-size="auto" class="mini">Auto</button>
+          <button data-size="full" class="mini">▮</button>
+          <button data-size="half" class="mini">▪</button>
+          <button data-size="quarter" class="mini">▁</button>
         </div>
         <div class="yv-modes" id="yv-modes" title="What sits top-left: January, the current quarter, or the current month (rolling 12 months either way)">
           <button data-mode="calendar" class="mini">Jan–Dec</button>
@@ -372,6 +382,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.13.0"></script>
+  <script type="module" src="app.js?v=0.14.0"></script>
 </body>
 </html>
