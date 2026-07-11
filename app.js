@@ -1,5 +1,16 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.12.0 — "days are key" (D66)
+// 0.12.0:
+//  · Day texture in BOTH year rows and month zoom: weekend shading
+//    blocks, faint day gridlines, stronger Monday week lines (month
+//    boundaries remain strongest). Compact grids shed day lines first.
+//  · Adaptive bar density for Katie's real concurrency: ≤4 lanes =
+//    full 20px bars with inline labels; ≤9 = half-height 10px; beyond
+//    = quarter-height 5px. Thin bars drop inline labels — hover titles,
+//    tap popovers, and the legend carry the names (Jake's suggestion).
+//  · Rows now size to the lanes they actually use (a quiet quarter is
+//    a short quarter) while every project keeps its one global lane.
 // Version 0.11.0 — "PHASE 2: the year view" (D65)
 // 0.11.0:
 //  · Header 📅 toggles between Today and a quarter-aligned year view:
@@ -91,7 +102,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.11.0";
+export const APP_VERSION = "0.12.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1449,7 +1460,12 @@ function renderYear() {
     if (li === -1) { li = laneEnds.length; laneEnds.push(e0); } else laneEnds[li] = e0;
     laneOf.set(p.id, li);
   }
-  const LANE_H = 24, laneCount = Math.max(1, laneEnds.length);
+  const laneCount = Math.max(1, laneEnds.length);
+  // D66 density: full-height labeled bars up to 4 concurrent lanes,
+  // half-height to 9, quarter-height beyond — names move to hover/tap.
+  const LANE_H = laneCount <= 4 ? 24 : laneCount <= 9 ? 14 : 9;
+  const BAR_H = LANE_H - 4;                  // 20 / 10 / 5
+  const showLabels = BAR_H >= 16;
 
   for (const [rs, re] of rows) {
     const span = re - rs;
@@ -1488,9 +1504,35 @@ function renderYear() {
 
     const lanes = document.createElement("div");
     lanes.className = "yv-lanes";
-    lanes.style.height = `${laneCount * LANE_H + 4}px`;
+    const rowMax = projs.reduce((mx, p) => {
+      const ps0 = startOfDayTs(p.startDate || 0);
+      const pe0 = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS;
+      return (pe0 <= rs || ps0 >= re) ? mx : Math.max(mx, laneOf.get(p.id));
+    }, 0);
+    lanes.style.height = `${(rowMax + 1) * LANE_H + 4}px`; // only the lanes this row uses
 
-    // Gridlines: month boundaries, or faint day lines while zoomed.
+    // D66 day texture (both views): weekend shading, faint day lines,
+    // stronger Monday week lines; month boundaries strongest.
+    const cur = new Date(rs);
+    while (cur.getTime() < re) {
+      const ts = cur.getTime();
+      if (cur.getDay() === 6) {                 // Saturday → shade through Sunday
+        const wkEnd = new Date(cur);
+        wkEnd.setDate(wkEnd.getDate() + 2);
+        const w = document.createElement("div");
+        w.className = "yv-weekend";
+        w.style.left = `${((ts - rs) / span) * 100}%`;
+        w.style.width = `${((Math.min(wkEnd.getTime(), re) - ts) / span) * 100}%`;
+        lanes.append(w);
+      }
+      if (ts !== rs && cur.getDate() !== 1) {   // 1sts get the month line below
+        const gl = document.createElement("div");
+        gl.className = "yv-gridline " + (cur.getDay() === 1 ? "yv-weekline" : "yv-dayline");
+        gl.style.left = `${((ts - rs) / span) * 100}%`;
+        lanes.append(gl);
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
     if (S.yearZoom == null) {
       for (let m = 1; m < 3; m++) {
         const ms = new Date(rs);
@@ -1498,15 +1540,6 @@ function renderYear() {
         const gl = document.createElement("div");
         gl.className = "yv-gridline";
         gl.style.left = `${((ms.getTime() - rs) / span) * 100}%`;
-        lanes.append(gl);
-      }
-    } else {
-      const dcount = Math.round(span / DAY_MS);
-      for (let d = 1; d < dcount; d++) {
-        const gl = document.createElement("div");
-        gl.className = "yv-gridline";
-        gl.style.opacity = ".45";
-        gl.style.left = `${(d / dcount) * 100}%`;
         lanes.append(gl);
       }
     }
@@ -1528,6 +1561,8 @@ function renderYear() {
       bar.style.left = `${((segS - rs) / span) * 100}%`;
       bar.style.width = `${((segE - segS) / span) * 100}%`;
       bar.style.top = `${laneOf.get(p.id) * LANE_H + 2}px`;
+      bar.style.height = `${BAR_H}px`;
+      bar.style.setProperty("--bar-r", BAR_H >= 16 ? "6px" : "3px");
 
       // D30a: pale ghost of the project color, saturating left-to-right
       // by pipeline % — computed against the WHOLE bar, clipped to this
@@ -1538,14 +1573,16 @@ function renderYear() {
       const c = p.color || "#4dd0c4";
       bar.style.background = `linear-gradient(90deg, ${hexToRgba(c, 0.95)} ${fillPct}%, ${hexToRgba(c, 0.28)} ${fillPct}%)`;
 
-      const lbl = document.createElement("span");
-      lbl.className = "yv-bar-label";
-      lbl.textContent = p.name;
-      if (fillPct < 35) { // label sits over the ghost — go light-on-dark
-        lbl.style.color = "#dce7f0";
-        lbl.style.textShadow = "0 1px 2px rgba(0,0,0,.7)";
+      if (showLabels) { // thin bars speak through hover/tap/legend (D66)
+        const lbl = document.createElement("span");
+        lbl.className = "yv-bar-label";
+        lbl.textContent = p.name;
+        if (fillPct < 35) { // label sits over the ghost — go light-on-dark
+          lbl.style.color = "#dce7f0";
+          lbl.style.textShadow = "0 1px 2px rgba(0,0,0,.7)";
+        }
+        bar.append(lbl);
       }
-      bar.append(lbl);
       bar.title = yvDetails(p, prog);
 
       // Stretch handles only where this segment shows a TRUE end.
