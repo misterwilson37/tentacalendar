@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.12.0 (banner and data-html-version move together, always)
+     Version 0.12.1 (banner and data-html-version move together, always)
+     0.12.1 (D70): "Year wall" → "Annual" (Jake's rename). css ?v= →
+     0.15.0, app → 0.15.0.
      0.12.0 (D69): ▦▦ Year wall layout button (new default) + Bars
      size control (Auto/▮/▪/▁). css ?v= → 0.14.0, app → 0.14.0.
      0.11.0 (D68): year-view layout toggle (Month grid ⇄ Timeline),
@@ -35,9 +37,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.14.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.15.0">
 </head>
-<body data-html-version="0.12.0">
+<body data-html-version="0.12.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -173,7 +175,7 @@
         <button id="yv-today" class="mini" hidden>back to now</button>
         <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
         <div class="yv-layouts" id="yv-layouts" title="Month grid: weeks as rows, Sun–Sat — the wall-calendar look. Timeline: days in one long row per quarter (a Gantt chart).">
-          <button data-layout="wall" class="mini">▦▦ Year wall</button>
+          <button data-layout="wall" class="mini">▦▦ Annual</button>
           <button data-layout="grid" class="mini">▦ Months</button>
           <button data-layout="timeline" class="mini">▬ Timeline</button>
         </div>
@@ -382,6 +384,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.14.0"></script>
+  <script type="module" src="app.js?v=0.15.0"></script>
 </body>
 </html>
