@@ -1,6 +1,8 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.7.0
+// Version 0.8.0
+// 0.8.0 (D63): tasks carry an optional `notes` string (title stays
+// short, details expand under the row). Additive — missing = none.
 // 0.7.0: rewindFollowUps (D53 un-complete rewind), addProjectWithStages
 // (D59 duplicate-for-next-year), per-tier allowedDays in seed (D60,
 // Personal seeds 7-day), config seeds deadlineHour 16 + 
@@ -23,7 +25,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.7.0";
+export const STORE_VERSION = "0.8.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -151,9 +153,9 @@ export function subscribeConfig(cb) {
 
 // ---------- Task CRUD ----------
 
-export async function addTask({ title, tierId, dueAt, escalation, projectId = null }) {
+export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null }) {
   return addDoc(col("tasks"), {
-    title, tierId, dueAt, escalation,
+    title, tierId, dueAt, escalation, notes,
     projectId,
     completedAt: null,
     parentTaskId: null,
