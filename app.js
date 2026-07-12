@@ -1,5 +1,14 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.17.0 — "Katie's quarters" (D72)
+// 0.17.0:
+//  · The Annual is QUARTERS: 4 rows × 3 months (Katie caught the 3×4
+//    orientation error). Wider months serve the future kiosk column.
+//  · PER-QUARTER uniform week heights (Jake's idea): each row of
+//    months sizes to ITS OWN max weekly concurrency — July's 9-project
+//    pileup only taxes Q3; empty quarters collapse. Fit math solves GL
+//    across the actual quarter mix, so today's load lands ~6px bars in
+//    a NORMAL window (fullscreen no longer required).
 // Version 0.16.0 — "nickel and dime" (D71)
 // 0.16.0:
 //  · Annual reclaims its pixels: dow row dropped (weekend shading +
@@ -154,7 +163,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.16.0";
+export const APP_VERSION = "0.17.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1558,26 +1567,38 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
     return { mS, mE, weeks: packed };
   });
   const maxConc = months.reduce((mx, m) => Math.max(mx, 0, ...m.weeks.map(w => w.laneCount)), 0);
-  const wallLanes = Math.max(1, maxConc);   // D70: Annual weeks are uniform
   const pin = yvPinnedSize();               // D69: pins beat every auto
   let GL, GB;
-  if (pin) { GL = pin.LANE; GB = pin.BAR; }
-  else if (wall) {
-    // D70: window-fit, timeline-style. Column count MIRRORS the CSS
-    // breakpoints (1150/850/520) — change both together.
+  if (wall) {
+    // D72: rows ARE quarters. Columns MIRROR the CSS breakpoints
+    // (850/520 → 3/2/1) — change both together. Each visual row of
+    // months sizes to ITS OWN max weekly concurrency (Jake), so the
+    // fit solves GL across the real quarter mix instead of letting
+    // one loaded week tax the whole year.
     const rect = grid.getBoundingClientRect();
     const gw = rect.width || 1200;
-    const cols = gw >= 1150 ? 4 : gw >= 850 ? 3 : gw >= 520 ? 2 : 1;
-    const monthRows = Math.ceil(months.length / cols);
-    // D71: DOCUMENT-space top — viewport-space made bars GROW when a
-    // re-render happened while scrolled down.
-    const docTop = rect.top + window.scrollY;
-    const avail = Math.max(240, window.innerHeight - docTop - 110);
-    const maxWeeks = Math.max(...months.map(m => m.weeks.length));
-    GL = Math.floor((avail / monthRows - 26) / (maxWeeks * wallLanes)); // 26 = honest month chrome (D71)
-    GL = Math.max(3, Math.min(14, GL));     // floor = 2px hairline bars
-    GB = Math.max(2, GL - (GL <= 4 ? 1 : GL <= 8 ? 2 : 4));
-  } else {
+    const cols = gw >= 850 ? 3 : gw >= 520 ? 2 : 1;
+    const stats = [];
+    for (let i = 0; i < months.length; i += cols) {
+      const g = months.slice(i, i + cols);
+      const st = {
+        lanes: Math.max(1, ...g.flatMap(m => m.weeks.map(w => w.laneCount))),
+        weeks: Math.max(...g.map(m => m.weeks.length))
+      };
+      g.forEach(m => { m.rowLanes = st.lanes; });
+      stats.push(st);
+    }
+    if (pin) { GL = pin.LANE; GB = pin.BAR; }
+    else {
+      const docTop = rect.top + window.scrollY;               // D71: document-space
+      const avail = Math.max(240, window.innerHeight - docTop - 110);
+      const denom = Math.max(1, stats.reduce((a, st) => a + st.weeks * st.lanes, 0));
+      GL = Math.floor((avail - stats.length * 26 - (stats.length - 1) * 10) / denom);
+      GL = Math.max(3, Math.min(14, GL));   // floor = 2px hairline bars
+      GB = Math.max(2, GL - (GL <= 4 ? 1 : GL <= 8 ? 2 : 4));
+    }
+  } else if (pin) { GL = pin.LANE; GB = pin.BAR; }
+  else {
     GL = maxConc <= 4 ? 20 : maxConc <= 9 ? 13 : 9;
     GB = GL - 4;
   }
@@ -1636,7 +1657,7 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
 
       const lanes = document.createElement("div");
       lanes.className = "yvg-lanes";
-      lanes.style.height = `${(wall ? wallLanes : Math.max(1, wk.laneCount)) * GL + 2}px`; // D70 uniform / D71 trimmed
+      lanes.style.height = `${(wall ? m.rowLanes : Math.max(1, wk.laneCount)) * GL + 2}px`; // D72: uniform per QUARTER row
       const span = wk.we - wk.ws;
       for (const g of wk.segs) {
         const bar = document.createElement("div");
