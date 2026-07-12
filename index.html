@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.13.5 (banner and data-html-version move together, always)
+     Version 0.14.0 (banner and data-html-version move together, always)
+     0.14.0 (D78): phone chrome — #jump-add ＋ in the header (scrolls
+     to the task form; swaps to Today view first if needed) and
+     #signout-bottom ("Log out", in words, at the very bottom). Both
+     phone-only via the 1000px stacked-layout query; the ⏻ square
+     hides there. css ?v= → 0.19.0, app → 0.20.0.
      0.13.5 (D77): css ?v= → 0.18.1, app → 0.19.2. Reference bump only.
      0.13.4 (D76): app ?v= → 0.19.1. Reference bump only.
      0.13.3 (D74): css ?v= → 0.18.0, app → 0.19.0. Reference bump only.
@@ -44,9 +49,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.18.1">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.19.0">
 </head>
-<body data-html-version="0.13.5">
+<body data-html-version="0.14.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -72,6 +77,7 @@
         <span id="user-label" class="user"></span>
         <button id="view-toggle" class="icon-btn" title="Year view">📅</button>
         <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+        <button id="jump-add" class="icon-btn" title="Jump to Add a task">＋</button>
         <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
       </div>
     </header>
@@ -207,6 +213,10 @@
       <p class="hint">Drag a bar to move a project — across weeks, months, and rows · drag either end to stretch or shrink it · tap a bar for details · tap a month name to zoom in. Dates keep to the project tier's working days.</p>
       <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
     </section>
+
+    <!-- D78: phone-only, in words, at the very bottom — where a
+         logout belongs on a device you rarely log out of. -->
+    <button id="signout-bottom">Log out</button>
 
     <!-- D68: the REAL project form is reparented in here from the form
          panel while this is open — listeners, color assistant, and the
@@ -393,6 +403,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.19.2"></script>
+  <script type="module" src="app.js?v=0.20.0"></script>
 </body>
 </html>
