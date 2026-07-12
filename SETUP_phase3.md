@@ -1,5 +1,5 @@
 # SETUP-PHASE3.md — The Calendar Poll (Cloud Functions, step 1 of 3)
-**Version 0.1.0** | D75 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
+**Version 0.1.1** | D75/D79 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
 
 **What you get:** every hour, `pollCalendars` reads the Google Calendars attached to your anchor tiers (Home, Business) and mirrors events into `eventsCache`. The web app has been subscribed to that collection since v0.1.0 — events appear in the Today queue (with 30-min pin behavior) the moment the first poll runs. **No client deploy needed.**
 
@@ -21,21 +21,26 @@ Go to **console.cloud.google.com** (same Google account; pick the **tentacalenda
 4. **Cloud Scheduler API**
 
 ## Part 3 — Create the function (the paste job)
+*(Rewritten 0.1.1 — Google folded Functions into Cloud Run, so your screen says "Deploy a web service / Create a batch job / Write a function." That last section is us.)*
 
-1. Cloud Console search → **Cloud Run functions** → **Create function**.
-2. Settings:
-   - **Environment:** 2nd gen · **Name:** `pollCalendars` · **Region:** `us-east1`
-   - **Trigger:** HTTPS · **Authentication:** **Allow unauthenticated invocations** (the shared secret below is the lock; simplest browser-only path)
-3. **Runtime, build… (expand):** Runtime service account: leave the default (note for Part 4). **Runtime environment variables** — add TWO:
+1. On that Cloud Run screen, under **Write a function**, click the **Node.js** tile.
+2. Top of the form:
+   - **Service name:** `pollcalendars` — **all lowercase** (Cloud Run enforces it; only the *entry point* keeps the capital C)
+   - **Region:** `us-east1`
+   - **Runtime:** Node.js 20 if offered, otherwise the newest Node LTS (the code is compatible)
+3. **Authentication:** choose **Allow unauthenticated invocations** (may appear as "Allow public access" under a Security heading). The shared secret below is the actual lock.
+4. Expand **Containers, Volumes, Networking, Security** → **Variables & Secrets** tab → **Add variable**, twice:
    - `POLL_SECRET` = a long random string you invent (25+ chars; save it — you'll use it twice more)
    - `TZ` = `America/Chicago`
-4. **Next** → Runtime **Node.js 20** → **Entry point:** `pollCalendars`
-5. Inline editor: replace **index.js** with the repo's `functions/index.js`; replace **package.json** with `functions/package.json`.
-6. **Deploy** (first build takes a few minutes). Copy the function **URL** from the trigger tab.
+5. **Create.** You land in the inline **source editor**:
+   - **Function entry point:** `pollCalendars` (capital C lives here)
+   - Replace **index.js** with the repo's `functions/index.js`; replace **package.json** with `functions/package.json`
+   - **Save and redeploy** (first build takes a few minutes)
+6. The service **URL** sits at the top of the service page — copy it. (Missed the env vars? **Edit & deploy new revision** → Variables & Secrets → redeploy.)
 
 ## Part 4 — Share the calendars with the robot
 
-1. On the function's **Details** page find **Service account** (looks like `PROJECT_NUMBER-compute@developer.gserviceaccount.com`). Copy that email.
+1. On the service's page find **Service account** (Security or Revisions tab in the new UI) (looks like `PROJECT_NUMBER-compute@developer.gserviceaccount.com`). Copy that email.
 2. **Jake and Katie, each, in Google Calendar (web):** hover the calendar in the left list → ⋮ → **Settings and sharing** → **Share with specific people or groups** → **Add** → paste the service-account email → permission **"See all event details"** → Send.
 3. While you're there, copy each calendar's **Calendar ID** (Settings → *Integrate calendar* → Calendar ID; personal primaries are just your Gmail address).
 4. In **Tentacalendar → ⚙️ Settings**, paste each Calendar ID into its anchor tier (Home, Business). The field's placeholder repeats these instructions.
@@ -53,7 +58,7 @@ curl -H "x-poll-secret: YOUR_SECRET" "https://YOUR-FUNCTION-URL?force=1"
 ## Part 6 — Put it on a schedule
 
 1. Cloud Console → **Cloud Scheduler** → **Create job**.
-2. **Name:** `poll-calendars-hourly` · **Region:** `us-east1` · **Frequency:** `7 * * * *` (hourly at :07 — off the top-of-hour stampede) · **Timezone:** America/Chicago.
+2. **Name:** `poll-calendars-hourly` (Scheduler allows dashes) · **Region:** `us-east1` · **Frequency:** `7 * * * *` (hourly at :07 — off the top-of-hour stampede) · **Timezone:** America/Chicago.
 3. **Target:** HTTP · **URL:** the function URL (no `?force=1` — sleep hours apply) · **Method:** GET · **Headers:** add `x-poll-secret` = your secret.
 4. Create, then **Force run** once and check its status turns green.
 
