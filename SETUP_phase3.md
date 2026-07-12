@@ -1,5 +1,5 @@
 # SETUP-PHASE3.md — The Calendar Poll (Cloud Functions, step 1 of 3)
-**Version 0.1.1** | D75/D79 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
+**Version 0.1.2** | D75/D79 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
 
 **What you get:** every hour, `pollCalendars` reads the Google Calendars attached to your anchor tiers (Home, Business) and mirrors events into `eventsCache`. The web app has been subscribed to that collection since v0.1.0 — events appear in the Today queue (with 30-min pin behavior) the moment the first poll runs. **No client deploy needed.**
 
@@ -28,7 +28,12 @@ Go to **console.cloud.google.com** (same Google account; pick the **tentacalenda
    - **Service name:** `pollcalendars` — **all lowercase** (Cloud Run enforces it; only the *entry point* keeps the capital C)
    - **Region:** `us-east1`
    - **Runtime:** Node.js 20 if offered, otherwise the newest Node LTS (the code is compatible)
-3. **Authentication:** choose **Allow unauthenticated invocations** (may appear as "Allow public access" under a Security heading). The shared secret below is the actual lock.
+3. The rest of the form, top to bottom (0.1.2 — matches the form field-for-field):
+   - **Trigger (optional):** SKIP — do not Add trigger. The service URL is HTTP-invocable by default; Scheduler just calls it.
+   - **Authentication:** **Allow public access** (Google's IAM layer off; our x-poll-secret header is the actual lock)
+   - **Billing:** **Request-based** (default — you pay for seconds of actual polling, not idle time)
+   - **Service scaling:** **Auto**, **minimum 0** (scales to zero between polls = free; ignore the "set to 1" cold-start nudge — irrelevant for an hourly cron), **maximum 1** (this job never needs parallelism; caps any retry storm)
+   - **Ingress:** **All** (NOT Internal — Scheduler and your curl arrive from the public internet); leave the load-balancer checkbox unchecked
 4. Expand **Containers, Volumes, Networking, Security** → **Variables & Secrets** tab → **Add variable**, twice:
    - `POLL_SECRET` = a long random string you invent (25+ chars; save it — you'll use it twice more)
    - `TZ` = `America/Chicago`
