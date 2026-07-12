@@ -1,5 +1,15 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.18.0 — "carry it anywhere" (D73)
+// 0.18.0:
+//  · CROSS-ROW DRAGGING: drags hit-test against every week/row
+//    rectangle (captured at grab time), so "what date is under the
+//    pointer" replaces horizontal pixel math. Move a bar from the 12th
+//    up a row to the 5th, across months, or between Gantt quarters —
+//    the bar lifts and follows the pointer; the nav label reads live
+//    dates; release commits with the usual working-day snapping.
+//    Edge-drags use the same date math (width preview stays in-row;
+//    the label guides).
 // Version 0.17.0 — "Katie's quarters" (D72)
 // 0.17.0:
 //  · The Annual is QUARTERS: 4 rows × 3 months (Katie caught the 3×4
@@ -163,7 +173,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.17.0";
+export const APP_VERSION = "0.18.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1417,6 +1427,26 @@ function commitBarDrag(p, ns, ne) {
   updateProject(p.id, { startDate: ns, endDate: ne });
 }
 
+/** D73: which DATE is under the pointer? Nearest tagged row by
+ *  vertical distance (so drags between rows/months/quarters resolve),
+ *  x clamped inside it, day index by fraction of the row's window. */
+function yvDateAt(clientX, clientY, rowMap) {
+  let best = null, bd = Infinity;
+  for (const w of rowMap) {
+    const r = w.rect;
+    const dy = clientY < r.top ? r.top - clientY : clientY > r.bottom ? clientY - r.bottom : 0;
+    if (dy < bd) { bd = dy; best = w; }
+  }
+  if (!best) return null;
+  const r = best.rect;
+  const fx = Math.min(Math.max(clientX, r.left), r.right - 1);
+  const idx = Math.min(best.days - 1, Math.max(0, Math.floor((fx - r.left) / r.width * best.days)));
+  const d = new Date(best.ws);
+  d.setDate(d.getDate() + idx);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 /** D32 pointer plumbing. Listeners live on document during the drag so
  *  re-renders can't orphan the gesture; the grabbed bar previews via
  *  transform/width only, and truth is committed on release (Firestore's
@@ -1426,31 +1456,39 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
     if (yvDragging || (ev.button != null && ev.button !== 0)) return;
     const mode = ev.target.classList && ev.target.classList.contains("yv-handle")
       ? (ev.target.classList.contains("l") ? "start" : "end") : "move";
-    const laneW = lanes.getBoundingClientRect().width || 1;
-    const msPerPx = rowSpanMs / laneW;
-    const originX = ev.clientX;
+    const laneRect = lanes.getBoundingClientRect();
+    const pxPerDay = (laneRect.width || 1) / Math.max(1, rowSpanMs / DAY_MS);
+    const originX = ev.clientX, originY = ev.clientY;
     const baseW = bar.getBoundingClientRect().width;
     const s0 = startOfDayTs(p.startDate || 0);
     const e0 = startOfDayTs(p.endDate || p.startDate || 0);
+    // D73: snapshot every tagged row so the drag resolves dates across
+    // weeks, months, and quarter rows.
+    const rowMap = [...$("#yv-grid").querySelectorAll("[data-ws]")].map(el => ({
+      rect: el.getBoundingClientRect(), ws: +el.dataset.ws, days: +el.dataset.days
+    }));
+    const grabDate = yvDateAt(ev.clientX, ev.clientY, rowMap) ?? s0;
     let moved = false, ns = s0, ne = e0;
     yvDragging = true;
     const onMove = e => {
-      const dx = e.clientX - originX;
-      if (!moved && Math.abs(dx) < 4) return;
+      const dx = e.clientX - originX, dy = e.clientY - originY;
+      if (!moved && Math.hypot(dx, dy) < 4) return;
       moved = true;
       bar.classList.add("dragging");
-      const dDays = Math.round(dx * msPerPx / DAY_MS);
+      const under = yvDateAt(e.clientX, e.clientY, rowMap);
+      const dDays = under == null ? 0 : Math.round((under - grabDate) / DAY_MS);
       ns = s0; ne = e0;
       if (mode !== "end") ns += dDays * DAY_MS;
       if (mode !== "start") ne += dDays * DAY_MS;
       if (ne < ns) { if (mode === "start") ns = ne; else ne = ns; }
-      const px = dDays * DAY_MS / msPerPx;
-      if (mode === "move") bar.style.transform = `translateX(${px}px)`;
-      else if (mode === "start") {
+      if (mode === "move") {
+        bar.style.transform = `translate(${dx}px, ${dy}px)`; // lifted card follows the pointer
+      } else if (mode === "start") {
+        const px = dDays * pxPerDay;
         bar.style.transform = `translateX(${Math.min(px, baseW - 8)}px)`;
         bar.style.width = `${Math.max(8, baseW - px)}px`;
       } else {
-        bar.style.width = `${Math.max(8, baseW + px)}px`;
+        bar.style.width = `${Math.max(8, baseW + dDays * pxPerDay)}px`;
       }
       $("#yv-label").textContent = `${fmtDay(ns)} → ${fmtDay(ne)}`;
       e.preventDefault();
@@ -1657,6 +1695,8 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
 
       const lanes = document.createElement("div");
       lanes.className = "yvg-lanes";
+      lanes.dataset.ws = wk.ws;                             // D73: drag hit-testing
+      lanes.dataset.days = 7;
       lanes.style.height = `${(wall ? m.rowLanes : Math.max(1, wk.laneCount)) * GL + 2}px`; // D72: uniform per QUARTER row
       const span = wk.we - wk.ws;
       for (const g of wk.segs) {
@@ -1824,6 +1864,8 @@ function renderYear() {
 
     const lanes = document.createElement("div");
     lanes.className = "yv-lanes";
+    lanes.dataset.ws = rs;                                  // D73: drag hit-testing
+    lanes.dataset.days = Math.round(span / DAY_MS);
     const rowMax = projs.reduce((mx, p) => {
       const ps0 = startOfDayTs(p.startDate || 0);
       const pe0 = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS;
