@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.14.1 (banner and data-html-version move together, always)
+     Version 0.15.0 (banner and data-html-version move together, always)
+     0.15.0 (D80): #allday-strip above the queue — all-day events land
+     here as ambient banners, not 12:00 AM queue rows. css ?v= →
+     0.20.0, app → 0.21.0.
      0.14.1 (D79): lang="en" → "en-US". Native time pickers take their
      12/24-hour cycle from the DEVICE setting in Chromium, but engines
      that consult page language (Firefox family, some webviews) treat
@@ -55,9 +58,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.19.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.20.0">
 </head>
-<body data-html-version="0.14.1">
+<body data-html-version="0.15.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -101,6 +104,7 @@
         <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
 
         <div id="pinned" hidden></div>
+        <div id="allday-strip" hidden></div>
         <div id="queue"></div>
 
         <div id="waiting" hidden>
@@ -409,6 +413,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.20.0"></script>
+  <script type="module" src="app.js?v=0.21.0"></script>
 </body>
 </html>
