@@ -1,5 +1,13 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.21.0 — "things that are happening" (D80)
+// 0.21.0:
+//  · All-day events render as an ambient BANNER STRIP above the queue
+//    (tier-tinted pills, "Zoo Camp · day 3/5"), not as 12:00 AM rows —
+//    the shape Jake described: not tasks, not appointments, just truth
+//    to glance at. No checkbox, no pin, no expiry; multi-days show
+//    their span; hover shows the full date range. Timed events remain
+//    queue anchors exactly as designed since D3.
 // Version 0.20.0 — "phone chrome" (D78)
 // 0.20.0:
 //  · ＋ in the header (phone widths only) scrolls straight to the
@@ -206,10 +214,10 @@ import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.8.0";
+} from "./queue.js?v=0.9.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.20.0";
+export const APP_VERSION = "0.21.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -492,6 +500,31 @@ function render() {
     tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
     now, viewDay: S.viewDay, hiddenTierIds: S.hiddenTierIds
   });
+
+  // D80: the all-day shelf — ambient, checkbox-free, above the fold.
+  const strip = $("#allday-strip");
+  if (strip) {
+    strip.innerHTML = "";
+    strip.hidden = !(q.banners && q.banners.length);
+    (q.banners || []).forEach(b => {
+      const pill = document.createElement("span");
+      pill.className = "banner";
+      const c = b.tier?.color || "#4dd0c4";
+      pill.style.borderLeftColor = c;
+      pill.style.background = hexToRgba(c, 0.14);
+      pill.textContent = b.title;
+      if (b.dayTotal > 1) {
+        const sp = document.createElement("span");
+        sp.className = "banner-span";
+        sp.textContent = ` · day ${b.dayN}/${b.dayTotal}`;
+        pill.append(sp);
+      }
+      pill.title = b.dayTotal > 1
+        ? `${b.title} — ${fmtDay(b.start)} → ${fmtDay((b.end || b.start) - 1)}`
+        : `${b.title} — ${fmtDay(b.start)}`;
+      strip.append(pill);
+    });
+  }
 
   const sameDay = new Date(S.viewDay).toDateString() === new Date(now).toDateString();
   $("#day-label").textContent = sameDay ? `Today — ${fmtDay(S.viewDay)}` : fmtDay(S.viewDay);
