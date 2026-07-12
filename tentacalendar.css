@@ -1,6 +1,10 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.18.1
+   Version 0.19.0
+   0.19.0 (D78): phone chrome — #jump-add and #signout-bottom exist
+   only inside the 1000px stacked-layout query (where the scroll pain
+   lives); there the header's ⏻ square hides and "Log out" appears in
+   words at the very bottom.
    0.18.1 (D77): .yv-bar.dragging dims in place (the ghost IS the
    preview now — no more chip straying over neighboring months).
    0.18.0 (D74): .yv-ghost — the drag drop-preview: dashed accent
@@ -78,7 +82,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.18.1";
+  --tc-version: "0.19.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -658,3 +662,23 @@ body.celebration-wave::after {
 #yv-grid.yv-wall .yvg-head { padding-bottom: .1rem; }
 @container (max-width: 850px)  { #yv-grid.yv-wall { grid-template-columns: repeat(2, 1fr); } }
 @container (max-width: 520px)  { #yv-grid.yv-wall { grid-template-columns: 1fr; } }
+
+
+/* ---------- D78: phone chrome ---------- */
+#jump-add, #signout-bottom { display: none; }
+@media (max-width: 1000px) {
+  #jump-add { display: inline-flex; align-items: center; justify-content: center; font-size: 1.05rem; }
+  #signout-btn { display: none; }
+  #signout-bottom {
+    display: block;
+    margin: 1.6rem auto 2.2rem;
+    padding: .55rem 1.4rem;
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--ink-dim);
+    font-size: .85rem;
+    cursor: pointer;
+  }
+  #signout-bottom:hover { color: var(--ink); border-color: var(--ink-dim); }
+}
