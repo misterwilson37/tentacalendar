@@ -1,6 +1,399 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
+     Version 0.13.1 (banner and data-html-version move together, always)
+     0.13.1 (D72): css ?v= → 0.17.0, app → 0.17.0. Reference bump only.
+     0.13.0 (D71): ⛶ fullscreen button, 🧵 hairline bar pin. css ?v= →
+     0.16.0, app → 0.16.0.
+     0.12.1 (D70): "Year wall" → "Annual" (Jake's rename). css ?v= →
+     0.15.0, app → 0.15.0.
+     0.12.0 (D69): ▦▦ Year wall layout button (new default) + Bars
+     size control (Auto/▮/▪/▁). css ?v= → 0.14.0, app → 0.14.0.
+     0.11.0 (D68): year-view layout toggle (Month grid ⇄ Timeline),
+     ＋ New project FAB, #yv-project-modal shell (the REAL form gets
+     reparented in, listeners intact). css ?v= → 0.13.0, app → 0.13.0.
+     0.10.1: css ?v= → 0.12.0, app ?v= → 0.12.0 (D66 day texture +
+     density; form-overflow fix). Reference bump only.
+     0.10.0 (D65, PHASE 2): year view — header 📅 toggle, #year-view
+     section (nav, mode buttons, grid, legend, empty state, drag hint).
+     css ?v= → 0.11.0, app ?v= → 0.11.0.
+     0.9.1 (D64): css ?v= → 0.10.0 (responsive one-line rows). No markup
+     change — reference bump only.
+     0.9.0 (D63): #task-notes textarea. css ?v= → 0.9.0, app ?v= → 0.10.0.
+     0.8.0 (D62 rev): dup modal gains pipeline-review button + 1d/7d/30d
+     snooze row; project-form labels get task-form column treatment
+     (the staggered Starts/Ends); un-dater covers both remnant flavors.
+     css ?v= → 0.8.0, app.js ?v= → 0.9.0.
+     0.7.0 (D62): duplicate modal is a review FORM (name/dates/color/
+     tier/workload + snooze button). css ?v= → 0.7.0, app.js ?v= → 0.8.0.
+     0.6.0: settings modal split into tabs (Tiers / Pipeline / Timing)
+     with deadline-hour (D51) + decision-threshold (D52) fields and
+     #tier-color-hint (D55); new #uncheck-modal (D53) and #dup-modal
+     (D59); decision-modal hint rewritten for ✓/🕐 (D57); Workload ⓘ
+     gains a hover title (D58). css ?v= → 0.6.0, app.js ?v= → 0.7.0.
+     0.5.x: filter chips, workload, due/stages/weekend/decision modals
+     + shared popover (all OUTSIDE #drift-wrap, D37), D49 ?v= ritual.
+     ============================================================ -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tentacalendar</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.17.0">
+</head>
+<body data-html-version="0.13.1">
+
+  <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
+       ancestor becomes the containing block for position:fixed descendants,
+       which broke the settings modal's viewport centering. The modal and the
+       confetti canvas must stay OUTSIDE this div. -->
+  <div id="drift-wrap">
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="logo">🐙</div>
+      <h1>Tentacalendar</h1>
+      <p class="tagline">The to-do list that refuses to let go.</p>
+      <button id="signin-btn" class="primary">Sign in with Google</button>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app-screen" hidden>
+    <header>
+      <div class="brand">🐙 Tentacalendar <span id="version" class="version"></span></div>
+      <div class="header-right">
+        <span id="user-label" class="user"></span>
+        <button id="view-toggle" class="icon-btn" title="Year view">📅</button>
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+        <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- ===== Queue column ===== -->
+      <section id="queue-panel">
+        <div class="day-nav">
+          <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
+          <h2 id="day-label">Today</h2>
+          <button id="day-next" class="icon-btn" title="Next day">▶</button>
+          <button id="day-today" class="mini" hidden>back to today</button>
+        </div>
+
+        <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
+
+        <div id="pinned" hidden></div>
+        <div id="queue"></div>
+
+        <div id="waiting" hidden>
+          <h3>Waiting on…</h3>
+          <div id="waiting-list"></div>
+        </div>
+
+        <div id="done" hidden>
+          <h3>Done today <span id="done-count" class="badge-done"></span></h3>
+          <div id="done-list"></div>
+        </div>
+      </section>
+
+      <!-- ===== Projects column (Katie's pipeline) ===== -->
+      <section id="projects-panel">
+        <h3>Projects</h3>
+        <p id="projects-empty" class="hint">No projects yet. Create one on the right — its whole pipeline comes with it.</p>
+        <div id="projects-list"></div>
+      </section>
+
+      <!-- ===== Forms column ===== -->
+      <section id="form-panel">
+        <h3 id="task-form-title">New task</h3>
+        <form id="task-form">
+          <input id="task-title" type="text" placeholder="What needs doing?" required>
+          <textarea id="task-notes" rows="2" placeholder="Details (optional — tucked behind a ▸ under the task)"></textarea>
+          <label>Tier
+            <select id="task-tier"></select>
+          </label>
+          <div class="form-row">
+            <label>Due date <input id="task-date" type="date" required></label>
+            <label>Time <input id="task-time" type="time" value="09:00"></label>
+          </div>
+          <label class="esc-label">If ignored, nag again every
+            <span class="esc-inputs">
+              <input id="task-esc-n" type="number" min="1" value="1">
+              <select id="task-esc-unit">
+                <option value="minutes">minutes</option>
+                <option value="hours" selected>hours</option>
+                <option value="days">days</option>
+                <option value="weeks">weeks</option>
+                <option value="months">months</option>
+              </select>
+            </span>
+          </label>
+          <div class="form-actions">
+            <button type="submit" id="task-submit" class="primary">Add to the tentacles</button>
+            <button type="button" id="task-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish.</p>
+
+        <h3 id="project-form-title">New project</h3>
+        <form id="project-form">
+          <input id="project-name" type="text" placeholder="Project name (e.g. Alabama Farmers)" required>
+          <div class="form-row">
+            <label>Color <input id="project-color" type="color" value="#4dabf7"></label>
+            <label>Stage tier <select id="project-tier"></select></label>
+          </div>
+          <div class="form-row">
+            <label>Starts <input id="project-start" type="date" required></label>
+            <label>Ends <input id="project-end" type="date" required></label>
+          </div>
+          <label><span class="label-line">Workload <span class="info-dot" title="How heavy is this project overall? Ties in the queue break toward heavier projects with more pipeline remaining. (Tap for details.)" data-info="How heavy is this project overall? A 10-million project and a 30k project can share a pipeline but not a calendar. Ties in the queue break toward heavier projects with more pipeline remaining.">i</span></span>
+            <select id="project-workload">
+              <option value="1">Light (1)</option>
+              <option value="2" selected>Standard (2)</option>
+              <option value="3">Heavy (3)</option>
+            </select>
+          </label>
+          <p class="hint warn" id="project-color-hint"></p>
+          <div class="form-actions">
+            <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
+            <button type="button" id="project-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
+      </section>
+    </main>
+
+    <!-- ============ YEAR VIEW (Phase 2, D65) ============
+         Toggled with the header 📅; quarter-aligned 4 rows × 3 months
+         (D31 modes), progress ghost-fill bars (D30a), drag to move /
+         edge-drag to stretch (D32), month-tap zoom (D18), legend +
+         tap-for-details (D27). -->
+    <section id="year-view" hidden>
+      <div class="yv-nav">
+        <button id="yv-prev" class="icon-btn" title="Back one year (one month while zoomed)">◀</button>
+        <h2 id="yv-label">Year</h2>
+        <button id="yv-next" class="icon-btn" title="Forward one year (one month while zoomed)">▶</button>
+        <button id="yv-today" class="mini" hidden>back to now</button>
+        <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
+        <button id="yv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+        <div class="yv-layouts" id="yv-layouts" title="Month grid: weeks as rows, Sun–Sat — the wall-calendar look. Timeline: days in one long row per quarter (a Gantt chart).">
+          <button data-layout="wall" class="mini">▦▦ Annual</button>
+          <button data-layout="grid" class="mini">▦ Months</button>
+          <button data-layout="timeline" class="mini">▬ Timeline</button>
+        </div>
+        <div class="yv-sizes" id="yv-sizes" title="Bar thickness: Auto fits the layout (and your window); ▮ pins thick 20px, ▪ medium 10px, ▁ thin 5px.">
+          <span class="yv-sizes-label">Bars</span>
+          <button data-size="auto" class="mini">Auto</button>
+          <button data-size="full" class="mini">▮</button>
+          <button data-size="half" class="mini">▪</button>
+          <button data-size="quarter" class="mini">▁</button>
+          <button data-size="hair" class="mini" title="Hairline: 2px color threads — see the year, tap for details, edit elsewhere">🧵</button>
+        </div>
+        <div class="yv-modes" id="yv-modes" title="What sits top-left: January, the current quarter, or the current month (rolling 12 months either way)">
+          <button data-mode="calendar" class="mini">Jan–Dec</button>
+          <button data-mode="quarter" class="mini">Quarter first</button>
+          <button data-mode="month" class="mini">Month first</button>
+        </div>
+      </div>
+      <div id="yv-grid"></div>
+      <p id="yv-empty" class="hint" hidden>No projects land in this window. Create one in Today view — its bar shows up here.</p>
+      <div id="yv-legend"></div>
+      <p class="hint">Drag a bar to move a project · drag either end to stretch or shrink it · tap a bar for details · tap a month name to zoom in. Dates keep to the project tier's working days.</p>
+      <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
+    </section>
+
+    <!-- D68: the REAL project form is reparented in here from the form
+         panel while this is open — listeners, color assistant, and the
+         working-day interception all come along for free. -->
+    <div id="yv-project-modal" class="modal-shell" hidden>
+      <div class="modal-card yv-project-card">
+        <button id="yv-project-close" class="icon-btn yv-modal-close" title="Close">✕</button>
+        <div id="yv-project-slot"></div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /drift-wrap -->
+
+  <!-- ============ SETTINGS MODAL (tabbed, D52) ============ -->
+  <div id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>⚙️ Settings</h2>
+        <button id="settings-close" class="icon-btn">✕</button>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tiers">Tiers</button>
+        <button class="tab-btn" data-tab="pipeline">Pipeline</button>
+        <button class="tab-btn" data-tab="timing">Timing</button>
+      </div>
+
+      <div class="tab-pane" data-pane="tiers">
+        <h3>Tiers (priority queue)</h3>
+        <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. The day toggles are the tier's working days: reschedules land on them, project dates outside them get flagged, and pipeline offsets only count them (weekend jobs → check Sa/Su). Hover anything in a row for an explanation.</p>
+        <div id="tier-editor"></div>
+        <p class="hint" id="tier-color-hint"></p>
+        <button id="tier-add" class="mini">+ Add tier</button>
+      </div>
+
+      <div class="tab-pane" data-pane="pipeline" hidden>
+        <h3>Project stage template</h3>
+        <p class="hint">The universal pipeline copied into every NEW project (existing projects keep their own copy). <em>No date</em> = the stage is pipeline weight — it just has to happen before the next dated thing. <em>Before/After</em> = a real target date, offset in working days from project start or end. A stage never surfaces before its predecessors are checked, whatever its date.</p>
+        <div id="stage-template-editor"></div>
+        <button id="stage-add" class="mini">+ Add stage</button>
+      </div>
+
+      <div class="tab-pane" data-pane="timing" hidden>
+        <h3>Timing</h3>
+        <div class="form-row">
+          <label>Computed stage deadlines count as due by <input id="cfg-deadline-hour" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
+        </div>
+        <p class="hint">Stages dated by pipeline math (not hard ⏰ dues) are "due by this hour" on their day — so a 9 AM task outranks them, and midnight doesn't flip them red.</p>
+        <div class="form-row">
+          <label>🐙 Decision time opens after <input id="cfg-decision-days" type="number" min="1" max="30"> day(s) overdue</label>
+        </div>
+        <div class="form-row">
+          <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr clock: 9 = 9 AM, 21 = 9 PM)</span></label>
+        </div>
+        <div class="form-row">
+          <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
+          <label>until <input id="cfg-sleep-end" type="number" min="0" max="23"> :00</label>
+        </div>
+        <div class="form-row">
+          <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
+        </div>
+        <p class="hint" id="poll-cost-hint"></p>
+      </div>
+
+      <div class="modal-foot">
+        <span id="versions-line" class="hint-inline"></span>
+        <button id="settings-save" class="primary">Save settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DUE-DATE DIALOG ============ -->
+  <div id="due-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3 id="due-title">Hard due date</h3>
+      <div class="form-row">
+        <label>Date <input id="due-date" type="date"></label>
+        <label>Time <input id="due-time" type="time" value="17:00"></label>
+      </div>
+      <div class="modal-foot">
+        <button id="due-clear" class="mini">Clear due date</button>
+        <span class="flex-spring"></span>
+        <button id="due-cancel" class="mini">Cancel</button>
+        <button id="due-save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PER-PROJECT STAGE EDITOR ============ -->
+  <div id="stages-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="stages-title">✎ Stages</h2>
+        <button id="stages-cancel" class="icon-btn">✕</button>
+      </div>
+      <p class="hint">This edits THIS project only — the template in ⚙️ Settings is untouched. ✓ = already completed, ⏰ = has a hard due date; both survive renames and reordering. Offsets count this tier's working days.</p>
+      <div id="stage-proj-editor"></div>
+      <button id="stage-proj-add" class="mini">+ Add stage</button>
+      <button id="stage-proj-undate" class="mini" title="Early experiments and the old editors saved stages as 'After + 0wd' (from start OR end), silently dating them. This flips every such row to No date — review, then Save.">Un-date all "+0wd" stages</button>
+      <div class="modal-foot">
+        <span></span>
+        <button id="stages-save" class="primary">Save stages</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ WORKING-DAY DATE CHECK (D45→D60) ============ -->
+  <div id="weekend-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3>🗓️ Working-day check</h3>
+      <p id="weekend-text"></p>
+      <div class="weekend-choices">
+        <button id="weekend-yes" class="mini">Yes, keep it</button>
+        <button id="weekend-fri" class="primary"></button>
+        <button id="weekend-mon" class="primary"></button>
+        <button id="weekend-back" class="mini">Go back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OVERDUE DECISION TIME (D46/D57) ============ -->
+  <div id="decision-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>🐙 Decision time</h2>
+        <button id="decision-close" class="icon-btn">✕</button>
+      </div>
+      <p class="hint">These have been overdue past your check-in threshold (⚙️ Timing). ✓ completes the next step, 🕐 pushes the deadline to the next working day at 9 AM — or close this and live dangerously; it won't ask again until tomorrow.</p>
+      <div id="decision-list"></div>
+    </div>
+  </div>
+
+  <!-- ============ UN-COMPLETE REWIND (D53) ============ -->
+  <div id="uncheck-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3 id="uncheck-title">↩️ Un-complete?</h3>
+      <p id="uncheck-text" class="hint"></p>
+      <div class="weekend-choices">
+        <button id="uncheck-oops" class="primary">Oops — keep it done</button>
+        <button id="uncheck-rewind" class="primary">Un-complete & pull follow-ups back to "Waiting on…"</button>
+        <button id="uncheck-keep" class="mini">Un-complete, but follow-ups keep their dates</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DUPLICATE FOR NEXT YEAR (D59/D62) ============ -->
+  <div id="dup-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3>🔁 Same time next year?</h3>
+      <p id="dup-text" class="hint"></p>
+      <div class="form-row">
+        <label class="dup-wide">Name <input id="dup-name" type="text"></label>
+      </div>
+      <div class="form-row">
+        <label>Start <input id="dup-start" type="date"></label>
+        <label>End <input id="dup-end" type="date"></label>
+      </div>
+      <div class="form-row">
+        <label>Color <input id="dup-color" type="color"></label>
+        <label>Tier <select id="dup-tier"></select></label>
+        <label>Workload
+          <select id="dup-workload">
+            <option value="1">1 — light</option>
+            <option value="2">2 — standard</option>
+            <option value="3">3 — heavy</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">✎⋮ below edits next year's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
+      <div class="weekend-choices">
+        <button id="dup-stages" class="mini">✎⋮ Review the pipeline first…</button>
+        <button id="dup-yes" class="primary">Create next year's run</button>
+        <div class="snooze-row"><span class="hint-inline">🕐 Remind me in</span>
+          <button id="dup-snooze-1" class="mini">a day</button>
+          <button id="dup-snooze-7" class="mini">a week</button>
+          <button id="dup-snooze-30" class="mini">a month</button>
+        </div>
+        <button id="dup-no" class="mini">No thanks</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared tap-popover for ⓘ dots -->
+  <div id="popover" hidden></div>
+
+  <script type="module" src="app.js?v=0.17.0"></script>
+</body>
+</html><!DOCTYPE html>
+<!-- ============================================================
+     Tentacalendar — index.html
      Version 0.13.0 (banner and data-html-version move together, always)
      0.13.0 (D71): ⛶ fullscreen button, 🧵 hairline bar pin. css ?v= →
      0.16.0, app → 0.16.0.
