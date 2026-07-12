@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.14.0 (banner and data-html-version move together, always)
+     Version 0.14.1 (banner and data-html-version move together, always)
+     0.14.1 (D79): lang="en" → "en-US". Native time pickers take their
+     12/24-hour cycle from the DEVICE setting in Chromium, but engines
+     that consult page language (Firefox family, some webviews) treat
+     bare "en" as ambiguous — en-US pins them to AM/PM. The primary
+     fix for Katie's military-time picker is her phone's "Use 24-hour
+     format" setting (see SETUP.md quick hits).
      0.14.0 (D78): phone chrome — #jump-add ＋ in the header (scrolls
      to the task form; swaps to Today view first if needed) and
      #signout-bottom ("Log out", in words, at the very bottom). Both
@@ -43,7 +49,7 @@
      0.5.x: filter chips, workload, due/stages/weekend/decision modals
      + shared popover (all OUTSIDE #drift-wrap, D37), D49 ?v= ritual.
      ============================================================ -->
-<html lang="en">
+<html lang="en-US">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -51,7 +57,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
   <link rel="stylesheet" href="tentacalendar.css?v=0.19.0">
 </head>
-<body data-html-version="0.14.0">
+<body data-html-version="0.14.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
