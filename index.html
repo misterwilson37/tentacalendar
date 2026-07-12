@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.13.2 (banner and data-html-version move together, always)
+     Version 0.13.3 (banner and data-html-version move together, always)
+     0.13.3 (D74): css ?v= → 0.18.0, app → 0.19.0. Reference bump only.
      0.13.2 (D73): hint mentions cross-row drags. app ?v= → 0.18.0.
      0.13.1 (D72): css ?v= → 0.17.0, app → 0.17.0. Reference bump only.
      0.13.0 (D71): ⛶ fullscreen button, 🧵 hairline bar pin. css ?v= →
@@ -41,9 +42,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.17.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.18.0">
 </head>
-<body data-html-version="0.13.2">
+<body data-html-version="0.13.3">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -390,6 +391,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.18.0"></script>
+  <script type="module" src="app.js?v=0.19.0"></script>
 </body>
 </html>
