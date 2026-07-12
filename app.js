@@ -1,5 +1,17 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.19.1 — "the resolver learns left from right" (D76)
+// 0.19.1 (BUGFIX, Jake's mid-drag screenshot):
+//  · D73's date resolver measured only VERTICAL distance to rows — but
+//    D72 put three months side-by-side, so April's week row "won" for
+//    pointers inside June (same y-band, DOM order), x clamped to
+//    April's edge, and EVERY horizontal position resolved to the same
+//    date → horizontal drags dead, vertical ±7s fine. Now true 2D
+//    distance; inside a rect is distance zero for that rect alone.
+//  · Ghosts clipped to weeks but not MONTHS, so a shared spillover
+//    week (May 31–Jun 6 lives in both May's and June's blocks) lit up
+//    twice. Lanes now carry data-clip-s/e; ghosts draw only where the
+//    bar will actually render.
 // Version 0.19.0 — "the ghost knows where it lands" (D74)
 // 0.19.0:
 //  · DROP GHOSTS: while dragging, dashed accent slots render at body
@@ -181,7 +193,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.19.0";
+export const APP_VERSION = "0.19.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1444,10 +1456,13 @@ function yvShowGhosts(ns, ne, rowMap) {
   yvClearGhosts();
   const endEx = ne + DAY_MS; // inclusive end day → exclusive bound
   for (const w of rowMap) {
+    // D76: clip to where the bar will actually render (week ∩ month in
+    // the calendar layouts) — no more twin ghosts in spillover weeks.
+    const lo = w.clipS || w.ws;
     const rd = new Date(w.ws);
     rd.setDate(rd.getDate() + w.days);
-    const rowEnd = rd.getTime();
-    const segS = Math.max(ns, w.ws), segE = Math.min(endEx, rowEnd);
+    const hi = w.clipE || rd.getTime();
+    const segS = Math.max(ns, lo), segE = Math.min(endEx, hi);
     if (segE <= segS) continue;
     const d0 = Math.round((segS - w.ws) / DAY_MS);
     const d1 = Math.round((segE - w.ws) / DAY_MS);
@@ -1469,8 +1484,12 @@ function yvDateAt(clientX, clientY, rowMap) {
   let best = null, bd = Infinity;
   for (const w of rowMap) {
     const r = w.rect;
-    const dy = clientY < r.top ? r.top - clientY : clientY > r.bottom ? clientY - r.bottom : 0;
-    if (dy < bd) { bd = dy; best = w; }
+    // D76: TRUE 2D distance — months sit side-by-side (D72), so rows
+    // share y-bands; vertical-only distance let April answer for June.
+    const ddx = clientX < r.left ? r.left - clientX : clientX > r.right ? clientX - r.right : 0;
+    const ddy = clientY < r.top ? r.top - clientY : clientY > r.bottom ? clientY - r.bottom : 0;
+    const d2 = ddx * ddx + ddy * ddy;
+    if (d2 < bd) { bd = d2; best = w; }
   }
   if (!best) return null;
   const r = best.rect;
@@ -1500,7 +1519,8 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
     // D73: snapshot every tagged row so the drag resolves dates across
     // weeks, months, and quarter rows.
     const rowMap = [...$("#yv-grid").querySelectorAll("[data-ws]")].map(el => ({
-      rect: el.getBoundingClientRect(), ws: +el.dataset.ws, days: +el.dataset.days
+      rect: el.getBoundingClientRect(), ws: +el.dataset.ws, days: +el.dataset.days,
+      clipS: +el.dataset.clipS, clipE: +el.dataset.clipE   // D76
     }));
     const grabDate = yvDateAt(ev.clientX, ev.clientY, rowMap) ?? s0;
     let moved = false, ns = s0, ne = e0;
@@ -1734,6 +1754,8 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
       lanes.className = "yvg-lanes";
       lanes.dataset.ws = wk.ws;                             // D73: drag hit-testing
       lanes.dataset.days = 7;
+      lanes.dataset.clipS = Math.max(wk.ws, m.mS);          // D76: ghosts respect the
+      lanes.dataset.clipE = Math.min(wk.we, m.mE);          // month-clip, like bars do
       lanes.style.height = `${(wall ? m.rowLanes : Math.max(1, wk.laneCount)) * GL + 2}px`; // D72: uniform per QUARTER row
       const span = wk.we - wk.ws;
       for (const g of wk.segs) {
@@ -1903,6 +1925,7 @@ function renderYear() {
     lanes.className = "yv-lanes";
     lanes.dataset.ws = rs;                                  // D73: drag hit-testing
     lanes.dataset.days = Math.round(span / DAY_MS);
+    lanes.dataset.clipS = rs; lanes.dataset.clipE = re;     // D76: ghost clip = full row
     const rowMax = projs.reduce((mx, p) => {
       const ps0 = startOfDayTs(p.startDate || 0);
       const pe0 = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS;
