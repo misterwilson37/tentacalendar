@@ -1,5 +1,13 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.19.0 — "the ghost knows where it lands" (D74)
+// 0.19.0:
+//  · DROP GHOSTS: while dragging, dashed accent slots render at body
+//    level in EVERY row the new dates cross — the landing zone is
+//    visible truth, matching the nav label. The lifted chip still
+//    follows the pointer; the ghost is where it lands. Ghosts survive
+//    mid-drag re-renders (they're body-level fixed, and the rowMap
+//    rects remain valid).
 // Version 0.18.0 — "carry it anywhere" (D73)
 // 0.18.0:
 //  · CROSS-ROW DRAGGING: drags hit-test against every week/row
@@ -173,7 +181,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.18.0";
+export const APP_VERSION = "0.19.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1427,6 +1435,33 @@ function commitBarDrag(p, ns, ne) {
   updateProject(p.id, { startDate: ns, endDate: ne });
 }
 
+// ---------- D74: drag drop-ghosts ----------
+let yvGhosts = [];
+function yvClearGhosts() { yvGhosts.forEach(g => g.remove()); yvGhosts = []; }
+
+/** Dashed landing slots for [ns..ne] in every row they cross. */
+function yvShowGhosts(ns, ne, rowMap) {
+  yvClearGhosts();
+  const endEx = ne + DAY_MS; // inclusive end day → exclusive bound
+  for (const w of rowMap) {
+    const rd = new Date(w.ws);
+    rd.setDate(rd.getDate() + w.days);
+    const rowEnd = rd.getTime();
+    const segS = Math.max(ns, w.ws), segE = Math.min(endEx, rowEnd);
+    if (segE <= segS) continue;
+    const d0 = Math.round((segS - w.ws) / DAY_MS);
+    const d1 = Math.round((segE - w.ws) / DAY_MS);
+    const g = document.createElement("div");
+    g.className = "yv-ghost";
+    g.style.left = `${w.rect.left + (d0 / w.days) * w.rect.width}px`;
+    g.style.width = `${Math.max(4, ((d1 - d0) / w.days) * w.rect.width)}px`;
+    g.style.top = `${w.rect.top}px`;
+    g.style.height = `${w.rect.height}px`;
+    document.body.append(g);
+    yvGhosts.push(g);
+  }
+}
+
 /** D73: which DATE is under the pointer? Nearest tagged row by
  *  vertical distance (so drags between rows/months/quarters resolve),
  *  x clamped inside it, day index by fraction of the row's window. */
@@ -1490,6 +1525,7 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
       } else {
         bar.style.width = `${Math.max(8, baseW + dDays * pxPerDay)}px`;
       }
+      yvShowGhosts(ns, ne, rowMap);                       // D74: the landing zone, lit
       $("#yv-label").textContent = `${fmtDay(ns)} → ${fmtDay(ne)}`;
       e.preventDefault();
     };
@@ -1497,6 +1533,7 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", finish);
       document.removeEventListener("pointercancel", finish);
+      yvClearGhosts();                                      // D74
       yvDragging = false;
       if (moved) {
         yvTapSquelch = true;
