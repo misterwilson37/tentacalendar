@@ -1,6 +1,9 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.19.0
+   Version 0.20.0
+   0.20.0 (D80): #allday-strip + .banner pills — tier-tinted, ambient,
+   above the queue; "things that are happening" get a shelf of their
+   own instead of impersonating midnight appointments.
    0.19.0 (D78): phone chrome — #jump-add and #signout-bottom exist
    only inside the 1000px stacked-layout query (where the scroll pain
    lives); there the header's ⏻ square hides and "Log out" appears in
@@ -82,7 +85,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.19.0";
+  --tc-version: "0.20.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -682,3 +685,17 @@ body.celebration-wave::after {
   }
   #signout-bottom:hover { color: var(--ink); border-color: var(--ink-dim); }
 }
+
+
+/* ---------- D80: all-day banner strip ---------- */
+#allday-strip { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .6rem; }
+#allday-strip[hidden] { display: none; }
+.banner {
+  font-size: .78rem; color: var(--ink);
+  padding: .22rem .6rem; border-radius: 999px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+.banner .banner-span { color: var(--ink-dim); }
