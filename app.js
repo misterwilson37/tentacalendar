@@ -1,5 +1,13 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.20.0 — "phone chrome" (D78)
+// 0.20.0:
+//  · ＋ in the header (phone widths only) scrolls straight to the
+//    Add-a-task form and focuses the title (keyboard up, ready to
+//    type). If you're in the year view it swaps to Today first — the
+//    form lives there. No modal, per Jake: just the shortcut.
+//  · "Log out", in words, at the very bottom (phone only); the ⏻
+//    mystery-square hides at those widths.
 // Version 0.19.2 — "the ghost is the preview" (D77)
 // 0.19.2 (Jake: "it ends up where it's supposed to, but it strays
 // into May first"):
@@ -201,7 +209,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.19.2";
+export const APP_VERSION = "0.20.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -239,6 +247,12 @@ document.addEventListener("DOMContentLoaded", () => {
   reportVersions();
   $("#signin-btn").addEventListener("click", () => signIn().catch(err => alert(err.message)));
   $("#signout-btn").addEventListener("click", () => signOutUser());
+  $("#signout-bottom").addEventListener("click", () => signOutUser());  // D78
+  $("#jump-add").addEventListener("click", () => {                      // D78
+    if (S.view === "year") setView("day"); // the form lives in Today
+    $("#task-form").scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => $("#task-title").focus({ preventScroll: true }), 350);
+  });
   $("#settings-btn").addEventListener("click", openSettings);
   $("#settings-close").addEventListener("click", closeSettings);
   $("#day-prev").addEventListener("click", () => shiftDay(-1));
