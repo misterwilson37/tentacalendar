@@ -1,5 +1,13 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.19.2 — "the ghost is the preview" (D77)
+// 0.19.2 (Jake: "it ends up where it's supposed to, but it strays
+// into May first"):
+//  · The pointer-following chip RETIRES. During a drag the original
+//    bar dims in place; the ghosts — now TINTED in the project's own
+//    color — are the entire moving preview. Nothing strays anywhere;
+//    the transform/width preview code (source of two rounds of visual
+//    bugs) is deleted outright.
 // Version 0.19.1 — "the resolver learns left from right" (D76)
 // 0.19.1 (BUGFIX, Jake's mid-drag screenshot):
 //  · D73's date resolver measured only VERTICAL distance to rows — but
@@ -193,7 +201,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.19.1";
+export const APP_VERSION = "0.19.2";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1451,8 +1459,9 @@ function commitBarDrag(p, ns, ne) {
 let yvGhosts = [];
 function yvClearGhosts() { yvGhosts.forEach(g => g.remove()); yvGhosts = []; }
 
-/** Dashed landing slots for [ns..ne] in every row they cross. */
-function yvShowGhosts(ns, ne, rowMap) {
+/** Tinted landing slots for [ns..ne] in every row they cross —
+ *  D77: colored like the project; they ARE the drag preview. */
+function yvShowGhosts(ns, ne, rowMap, color) {
   yvClearGhosts();
   const endEx = ne + DAY_MS; // inclusive end day → exclusive bound
   for (const w of rowMap) {
@@ -1468,6 +1477,10 @@ function yvShowGhosts(ns, ne, rowMap) {
     const d1 = Math.round((segE - w.ws) / DAY_MS);
     const g = document.createElement("div");
     g.className = "yv-ghost";
+    if (color) {
+      g.style.background = hexToRgba(color, 0.4);
+      g.style.borderColor = color;
+    }
     g.style.left = `${w.rect.left + (d0 / w.days) * w.rect.width}px`;
     g.style.width = `${Math.max(4, ((d1 - d0) / w.days) * w.rect.width)}px`;
     g.style.top = `${w.rect.top}px`;
@@ -1510,10 +1523,7 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
     if (yvDragging || (ev.button != null && ev.button !== 0)) return;
     const mode = ev.target.classList && ev.target.classList.contains("yv-handle")
       ? (ev.target.classList.contains("l") ? "start" : "end") : "move";
-    const laneRect = lanes.getBoundingClientRect();
-    const pxPerDay = (laneRect.width || 1) / Math.max(1, rowSpanMs / DAY_MS);
     const originX = ev.clientX, originY = ev.clientY;
-    const baseW = bar.getBoundingClientRect().width;
     const s0 = startOfDayTs(p.startDate || 0);
     const e0 = startOfDayTs(p.endDate || p.startDate || 0);
     // D73: snapshot every tagged row so the drag resolves dates across
@@ -1536,16 +1546,7 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
       if (mode !== "end") ns += dDays * DAY_MS;
       if (mode !== "start") ne += dDays * DAY_MS;
       if (ne < ns) { if (mode === "start") ns = ne; else ne = ns; }
-      if (mode === "move") {
-        bar.style.transform = `translate(${dx}px, ${dy}px)`; // lifted card follows the pointer
-      } else if (mode === "start") {
-        const px = dDays * pxPerDay;
-        bar.style.transform = `translateX(${Math.min(px, baseW - 8)}px)`;
-        bar.style.width = `${Math.max(8, baseW - px)}px`;
-      } else {
-        bar.style.width = `${Math.max(8, baseW + dDays * pxPerDay)}px`;
-      }
-      yvShowGhosts(ns, ne, rowMap);                       // D74: the landing zone, lit
+      yvShowGhosts(ns, ne, rowMap, p.color);              // D77: the tinted ghost IS the preview
       $("#yv-label").textContent = `${fmtDay(ns)} → ${fmtDay(ne)}`;
       e.preventDefault();
     };
