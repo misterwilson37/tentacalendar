@@ -1,5 +1,5 @@
 # SETUP-PHASE3.md — The Calendar Poll (Cloud Functions, step 1 of 3)
-**Version 0.1.2** | D75/D79 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
+**Version 0.1.4** | D75/D79 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
 
 **What you get:** every hour, `pollCalendars` reads the Google Calendars attached to your anchor tiers (Home, Business) and mirrors events into `eventsCache`. The web app has been subscribed to that collection since v0.1.0 — events appear in the Today queue (with 30-min pin behavior) the moment the first poll runs. **No client deploy needed.**
 
@@ -35,13 +35,16 @@ Go to **console.cloud.google.com** (same Google account; pick the **tentacalenda
    - **Service scaling:** **Auto**, **minimum 0** (scales to zero between polls = free; ignore the "set to 1" cold-start nudge — irrelevant for an hourly cron), **maximum 1** (this job never needs parallelism; caps any retry storm)
    - **Ingress:** **All** (NOT Internal — Scheduler and your curl arrive from the public internet); leave the load-balancer checkbox unchecked
 4. Expand **Containers, Volumes, Networking, Security** → **Variables & Secrets** tab → **Add variable**, twice:
-   - `POLL_SECRET` = a long random string you invent (25+ chars; save it — you'll use it twice more)
+   - `POLL_SECRET` = a long random string you invent — 25–40 chars, **letters/digits/dashes only** (it travels in an HTTP header)
    - `TZ` = `America/Chicago`
+
+> **What IS the poll secret?** A password you invent for the function. The URL allows public access, so the function's first line rejects any request that doesn't carry a matching `x-poll-secret` header. Without it, a stranger with the URL could only trigger extra polls (nuisance + pennies — they can't read or change your data), and with the secret they can't even do that. **You'll use it exactly twice more:** the curl test (Part 5) and the Scheduler header (Part 6) — then never in daily life. **Don't memorize it, don't commit it:** it lives ONLY in this env var and the Scheduler job, and it's always recoverable in the console (service → Edit & deploy new revision → Variables & Secrets). Contrast with config.js's Firebase values, which are safe on GitHub — those are identifiers; this is a key.
 5. **Create.** You land in the inline **source editor**:
    - **Function entry point:** `pollCalendars` (capital C lives here)
    - Replace **index.js** with the repo's `functions/index.js`; replace **package.json** with `functions/package.json`
    - **Save and redeploy** (first build takes a few minutes)
-6. The service **URL** sits at the top of the service page — copy it. (Missed the env vars? **Edit & deploy new revision** → Variables & Secrets → redeploy.)
+6. The service **URL** sits at the top of the service page — copy it **to a scratch note**: it's used in exactly two places, the curl test (Part 5) and the Scheduler target (Part 6). **The URL is NOT a secret** — it's the street address; POLL_SECRET is the key. Strangers with the address get 403s.
+7. **Did the variables take?** Two checks: (a) service → **Revisions** tab → current revision → its panel lists env vars in plain text; (b) better, the Part-5 curl report now prints `"tz"` (should say America/Chicago) and refuses with a distinct `"POLL_SECRET env var is not set"` message if you missed that one (functions 0.1.1 fails closed).
 
 ## Part 4 — Share the calendars with the robot
 
