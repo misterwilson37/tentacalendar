@@ -1,5 +1,18 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.16.0 — "nickel and dime" (D71)
+// 0.16.0:
+//  · Annual reclaims its pixels: dow row dropped (weekend shading +
+//    day numbers carry the structure), month chrome estimate honest
+//    (26px), lane padding trimmed, auto floor now GL 3 → 2px hairline
+//    bars. Jake's real numbers (≈1070px, 10 lanes, 6-week Aug) now
+//    land at GL 3 with ~145px slack; ⛶ fullscreen buys GL 4.
+//  · FIT-MATH BUG: measurements were viewport-space, so rendering
+//    while scrolled inflated avail and bars GREW after you scrolled.
+//    Now document-space (rect.top + scrollY) in Annual AND timeline.
+//  · 🧵 hairline pin (LANE 3 / BAR 2, borderless): see the whole year
+//    as color threads; tap for details; edit at bigger sizes.
+//  · ⛶ fullscreen toggle in the year nav; fullscreenchange re-fits.
 // Version 0.15.0 — "the year that fits" (D70)
 // 0.15.0:
 //  · Annual view (né Year wall) auto-density is now WINDOW-FIT, like
@@ -141,7 +154,7 @@ import {
 } from "./queue.js?v=0.8.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.15.0";
+export const APP_VERSION = "0.16.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -210,6 +223,11 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("tc-year-barsize", S.yearBarSize);
       renderYear();
     }));
+  $("#yv-fullscreen").addEventListener("click", () => {  // D71: reclaim the browser chrome
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
+  document.addEventListener("fullscreenchange", () => { if (S.view === "year") renderYear(); });
   $("#yv-add-project").addEventListener("click", openYvProjectModal);
   $("#yv-project-close").addEventListener("click", closeYvProjectModal);
   window.addEventListener("resize", () => {           // D68: timeline resizes with the window
@@ -1512,7 +1530,7 @@ function gridWeeksOfMonth(monthStart) {
 /** D69: the user-pinned bar sizing, or null when "auto" (each layout
  *  then applies its own judgment). Pins are honest pixels everywhere. */
 function yvPinnedSize() {
-  return { full: { LANE: 24, BAR: 20 }, half: { LANE: 14, BAR: 10 }, quarter: { LANE: 9, BAR: 5 } }[S.yearBarSize] || null;
+  return { full: { LANE: 24, BAR: 20 }, half: { LANE: 14, BAR: 10 }, quarter: { LANE: 9, BAR: 5 }, hair: { LANE: 3, BAR: 2 } }[S.yearBarSize] || null;
 }
 
 /** Wall-calendar rendering: bars clip to week ∩ month (so shared
@@ -1547,14 +1565,18 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
   else if (wall) {
     // D70: window-fit, timeline-style. Column count MIRRORS the CSS
     // breakpoints (1150/850/520) — change both together.
-    const gw = grid.getBoundingClientRect().width || 1200;
+    const rect = grid.getBoundingClientRect();
+    const gw = rect.width || 1200;
     const cols = gw >= 1150 ? 4 : gw >= 850 ? 3 : gw >= 520 ? 2 : 1;
     const monthRows = Math.ceil(months.length / cols);
-    const avail = Math.max(240, window.innerHeight - grid.getBoundingClientRect().top - 110);
+    // D71: DOCUMENT-space top — viewport-space made bars GROW when a
+    // re-render happened while scrolled down.
+    const docTop = rect.top + window.scrollY;
+    const avail = Math.max(240, window.innerHeight - docTop - 110);
     const maxWeeks = Math.max(...months.map(m => m.weeks.length));
-    GL = Math.floor((avail / monthRows - 40) / (maxWeeks * wallLanes));
-    GL = Math.max(5, Math.min(14, GL));     // floor = hairline
-    GB = Math.max(3, GL - (GL <= 8 ? 2 : 4)); // small lanes keep more of their budget
+    GL = Math.floor((avail / monthRows - 26) / (maxWeeks * wallLanes)); // 26 = honest month chrome (D71)
+    GL = Math.max(3, Math.min(14, GL));     // floor = 2px hairline bars
+    GB = Math.max(2, GL - (GL <= 4 ? 1 : GL <= 8 ? 2 : 4));
   } else {
     GL = maxConc <= 4 ? 20 : maxConc <= 9 ? 13 : 9;
     GB = GL - 4;
@@ -1581,14 +1603,16 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
     }
     box.append(head);
 
-    const dowRow = document.createElement("div");
-    dowRow.className = "yvg-dow";
-    dows.forEach(d => {
-      const sp = document.createElement("span");
-      sp.textContent = d;
-      dowRow.append(sp);
-    });
-    box.append(dowRow);
+    if (!wall) { // D71: the Annual view spends these pixels on lanes instead
+      const dowRow = document.createElement("div");
+      dowRow.className = "yvg-dow";
+      dows.forEach(d => {
+        const sp = document.createElement("span");
+        sp.textContent = d;
+        dowRow.append(sp);
+      });
+      box.append(dowRow);
+    }
 
     for (const wk of m.weeks) {
       const wkEl = document.createElement("div");
@@ -1612,7 +1636,7 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
 
       const lanes = document.createElement("div");
       lanes.className = "yvg-lanes";
-      lanes.style.height = `${(wall ? wallLanes : Math.max(1, wk.laneCount)) * GL + 3}px`; // D70: Annual lines up
+      lanes.style.height = `${(wall ? wallLanes : Math.max(1, wk.laneCount)) * GL + 2}px`; // D70 uniform / D71 trimmed
       const span = wk.we - wk.ws;
       for (const g of wk.segs) {
         const bar = document.createElement("div");
@@ -1735,7 +1759,8 @@ function renderYear() {
   }, 1));
   const totalLanes = rowLanes.reduce((a, b) => a + b, 0);
   const pin = yvPinnedSize();                               // D69: pins beat the window fit
-  const avail = Math.max(220, window.innerHeight - grid.getBoundingClientRect().top - 150);
+  const docTop = grid.getBoundingClientRect().top + window.scrollY; // D71: document-space
+  const avail = Math.max(220, window.innerHeight - docTop - 150);
   const LANE_H = pin ? pin.LANE
     : Math.max(9, Math.min(34, Math.floor((avail - rows.length * 46) / totalLanes)));
   const BAR_H = LANE_H - 4;
