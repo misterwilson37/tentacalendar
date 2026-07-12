@@ -1,5 +1,5 @@
 # SETUP-PHASE3.md — The Calendar Poll (Cloud Functions, step 1 of 3)
-**Version 0.1.4** | D75/D79 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
+**Version 0.1.5** | D75/D79/D80 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
 
 **What you get:** every hour, `pollCalendars` reads the Google Calendars attached to your anchor tiers (Home, Business) and mirrors events into `eventsCache`. The web app has been subscribed to that collection since v0.1.0 — events appear in the Today queue (with 30-min pin behavior) the moment the first poll runs. **No client deploy needed.**
 
@@ -48,7 +48,7 @@ Go to **console.cloud.google.com** (same Google account; pick the **tentacalenda
 
 ## Part 4 — Share the calendars with the robot
 
-1. On the service's page find **Service account** (Security or Revisions tab in the new UI) (looks like `PROJECT_NUMBER-compute@developer.gserviceaccount.com`). Copy that email.
+1. Find the **Service account** email (Jake's confirmed path: **Services** in the left nav → click `pollcalendars` → **Revisions** tab → under the latest deployment, **Security** in the right-hand panel). It looks like `PROJECT_NUMBER-compute@developer.gserviceaccount.com` — the number matches the messagingSenderId in config.js, a handy sanity check (looks like `PROJECT_NUMBER-compute@developer.gserviceaccount.com`). Copy that email.
 2. **Jake and Katie, each, in Google Calendar (web):** hover the calendar in the left list → ⋮ → **Settings and sharing** → **Share with specific people or groups** → **Add** → paste the service-account email → permission **"See all event details"** → Send.
 3. While you're there, copy each calendar's **Calendar ID** (Settings → *Integrate calendar* → Calendar ID; personal primaries are just your Gmail address).
 4. In **Tentacalendar → ⚙️ Settings**, paste each Calendar ID into its anchor tier (Home, Business). The field's placeholder repeats these instructions.
