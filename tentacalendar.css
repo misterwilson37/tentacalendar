@@ -1,6 +1,9 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.16.0
+   Version 0.17.0
+   0.17.0 (D72, Katie's catch): the Annual is QUARTERS — 4 rows × 3
+   months (was 3×4). Breakpoints now 850/520 → 3/2/1 columns,
+   MIRRORED in renderYearGrid (change together).
    0.16.0 (D71): Annual compaction — dow row is skipped by JS in wall
    mode, month padding/lane clearance tightened (.yvg-lanes margin 13px
    in wall), so the fit math's 26px/month chrome estimate is honest.
@@ -70,7 +73,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.16.0";
+  --tc-version: "0.17.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -636,13 +639,12 @@ body.celebration-wave::after {
 
 
 /* ---------- D69: year wall (12 mini calendars, 4 × 3) ---------- */
-#yv-grid.yv-wall { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; }
+#yv-grid.yv-wall { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; } /* D72: rows ARE quarters */
 #yv-grid.yv-wall .yvg-month { margin-bottom: 0; padding: .3rem .45rem .45rem; }
 #yv-grid.yv-wall .yvg-head { font-size: .72rem; padding-bottom: .2rem; }
 #yv-grid.yv-wall .yvg-dow span { font-size: .55rem; }
 #yv-grid.yv-wall .yvg-day { font-size: .55rem; padding: 1px 0 0 2px; }
 #yv-grid.yv-wall .yvg-lanes { margin-top: 13px; } /* day numbers only — no dow row in wall (D71) */
 #yv-grid.yv-wall .yvg-head { padding-bottom: .1rem; }
-@container (max-width: 1150px) { #yv-grid.yv-wall { grid-template-columns: repeat(3, 1fr); } }
 @container (max-width: 850px)  { #yv-grid.yv-wall { grid-template-columns: repeat(2, 1fr); } }
 @container (max-width: 520px)  { #yv-grid.yv-wall { grid-template-columns: 1fr; } }
