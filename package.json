@@ -1,0 +1,12 @@
+{
+  "name": "tentacalendar-functions",
+  "version": "0.1.0",
+  "description": "Tentacalendar Cloud Functions — Phase 3 (D75). Deployed via Google Cloud Console inline editor.",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0",
+    "firebase-admin": "^12.1.0",
+    "googleapis": "^140.0.0"
+  }
+}
