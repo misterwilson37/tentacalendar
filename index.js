@@ -1,6 +1,11 @@
 // ============================================================
 // Tentacalendar — Cloud Functions
-// functions/index.js — Version 0.1.0 (D75, Phase 3 step 1: the poll)
+// functions/index.js — Version 0.1.1 (D75, Phase 3 step 1: the poll)
+// 0.1.1: an UNSET POLL_SECRET now refuses everything with a distinct
+// message (previously undefined === undefined let header-less requests
+// through an unset lock — Jake's "did I miss the variables?" question
+// exposed it). The JSON report now includes tz + localHour, so one
+// curl verifies BOTH env vars.
 //
 // pollCalendars: reads Google Calendar events for every anchor tier
 // with a gcalCalendarId and mirrors them into eventsCache. The web
@@ -27,7 +32,7 @@ const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "0.1.0";
+const FUNCTIONS_VERSION = "0.1.1";
 const WS = "primary"; // one workspace (HANDOFF D12)
 
 admin.initializeApp();
@@ -65,6 +70,10 @@ function parseWhen(when) {
 
 functions.http("pollCalendars", async (req, res) => {
   try {
+    if (!process.env.POLL_SECRET) {
+      // Fail CLOSED: an unset lock must not mean an open door.
+      return res.status(403).json({ error: "POLL_SECRET env var is not set on this service — add it under Variables & Secrets and redeploy" });
+    }
     if (req.get("x-poll-secret") !== process.env.POLL_SECRET) {
       return res.status(403).json({ error: "bad or missing x-poll-secret" });
     }
@@ -92,7 +101,13 @@ functions.http("pollCalendars", async (req, res) => {
     const timeMin = new Date(Date.now() - LOOKBACK_MS).toISOString();
     const timeMax = new Date(Date.now() + HORIZON_MS).toISOString();
     const evCol = db.collection(`workspaces/${WS}/eventsCache`);
-    const report = { version: FUNCTIONS_VERSION, window: { timeMin, timeMax }, tiers: {} };
+    const report = {
+      version: FUNCTIONS_VERSION,
+      tz: process.env.TZ || "(unset — running in UTC; set TZ=America/Chicago)",
+      localHour: new Date().getHours(),
+      window: { timeMin, timeMax },
+      tiers: {}
+    };
 
     for (const tier of calTiers) {
       const lead = tier.defaultLeadWindowMinutes ?? 30;
