@@ -1,5 +1,5 @@
 # SETUP.md — Tentacalendar Phase 1 Setup Guide
-**Version 0.2.2** | Everything here is doable in ~20 minutes, costs $0, and needs no credit card.
+**Version 0.2.3** | Everything here is doable in ~20 minutes, costs $0, and needs no credit card.
 
 > **v0.2.0 notes:** config.js now ships with BOTH allowlist emails already filled in (Jake + Katie) — only the Firebase config values still need pasting. **Recommended browser: Microsoft Edge, signed into your PERSONAL Google account** (Chromium core without the county-managed-Chrome problem, and none of Brave's shields that eat OAuth popups; works identically on Mac and PC). Safari also works. The sumnerk12.net account isn't on the allowlist — personal accounts only. Calendar IDs now live on each Calendar-type tier in ⚙️ Settings, with the where-to-find-it instructions in the field itself.
 
@@ -71,3 +71,4 @@ First sign-in by either of you auto-seeds the workspace: your six tiers (Home, B
 - **Settings modal is open on page load, covering the sign-in screen** → you're running cached pre-0.3.0 CSS. Hard-refresh (Cmd+Shift+R). If it persists, verify tentacalendar.css?v=0.3.0 in index.html actually deployed.
 - **Version number in the header doesn't match what you shipped** → hard-refresh (Ctrl+Shift+R); the ?v= query strings on script/css tags handle most cache-busting, but the browser can cling to index.html itself.
 - **Signed in but bounced back to the sign-in screen** → the account you picked isn't in ALLOWED_EMAILS in config.js.
+- **The badge shows an OLDER css/app version than the file on GitHub** → your browser cached stale content UNDER the new ?v= URL (a deploy-race: index.html landed and was loaded before the css/app finished propagating, so the old body got cached against the fresh query string). Hard-refresh (Cmd+Shift+R) evicts it. The badge reads --tc-version from the stylesheet your browser is ACTUALLY applying — this symptom is the badge working, not lying.
