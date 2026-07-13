@@ -1,5 +1,19 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.23.0 — "time passes, follow-ups flex" (D82, Otto's finale)
+// 0.23.0:
+//  · Passed timed events sink into an EARLIER TODAY box (dimmed,
+//    struck time) instead of loitering in the live queue — today's
+//    view only; past/future days show everything in place.
+//  · Follow-ups get a real dialog (two prompt()s retired) with an
+//    amount + minutes/hours/days/weeks unit. Storage stays offsetDays
+//    (fractional — store.js's materialization already multiplies), so
+//    store.js is untouched. Waiting rows display "+45m/+2h/+3d/+1w".
+// Version 0.22.0 — "the mirror has a home" (D81)
+// 0.22.0: ⚙️ Settings → Calendar gains "Mirror tasks to calendar ID"
+// (config.mirrorCalendarId), consumed by functions 0.2.0's hourly
+// reconcile. Blank = off. The function refuses polled calendars
+// (loop guard); the hint says so too.
 // Version 0.21.0 — "things that are happening" (D80)
 // 0.21.0:
 //  · All-day events render as an ambient BANNER STRIP above the queue
@@ -214,10 +228,10 @@ import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.9.0";
+} from "./queue.js?v=0.10.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.21.0";
+export const APP_VERSION = "0.23.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -256,6 +270,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#signin-btn").addEventListener("click", () => signIn().catch(err => alert(err.message)));
   $("#signout-btn").addEventListener("click", () => signOutUser());
   $("#signout-bottom").addEventListener("click", () => signOutUser());  // D78
+  $("#fu-save").addEventListener("click", saveFollowUpModal);            // D82
+  $("#fu-cancel").addEventListener("click", () => { $("#followup-modal").hidden = true; fuTarget = null; });
   $("#jump-add").addEventListener("click", () => {                      // D78
     if (S.view === "year") setView("day"); // the form lives in Today
     $("#task-form").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -526,6 +542,28 @@ function render() {
     });
   }
 
+  // D82: passed events sink here (today only), dimmed with struck time.
+  const earlier = $("#earlier"), earlierList = $("#earlier-list");
+  if (earlier) {
+    earlierList.innerHTML = "";
+    earlier.hidden = !(q.passedEvents && q.passedEvents.length);
+    (q.passedEvents || []).forEach(pe => {
+      const row = document.createElement("div");
+      row.className = "row past-event";
+      const c = pe.tier?.color || "#4dd0c4";
+      const when = pe.end
+        ? `${fmtTime(pe.start)}–${fmtTime(pe.end)}`
+        : fmtTime(pe.start);
+      row.innerHTML = `<div class="row-main"><strong>${esc(pe.title)}</strong><span class="sub">${when}</span></div>`;
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = pe.tier?.name || "";
+      chip.style.background = hexToRgba(c, 0.18);
+      row.append(chip);
+      earlierList.append(row);
+    });
+  }
+
   const sameDay = new Date(S.viewDay).toDateString() === new Date(now).toDateString();
   $("#day-label").textContent = sameDay ? `Today — ${fmtDay(S.viewDay)}` : fmtDay(S.viewDay);
   $("#day-today").hidden = sameDay;
@@ -713,15 +751,9 @@ function renderWaiting(waiting) {
     row.className = "row waiting-row";
     rowScaffold(row, {
       lead: null, tier,
-      mainHTML: `<strong>${esc(t.title)}</strong><span class="sub">+${t.offsetDays}d after: ${esc(parent ? parent.title : "(deleted task)")}</span>`,
+      mainHTML: `<strong>${esc(t.title)}</strong><span class="sub">+${fmtOffset(t.offsetDays)} after: ${esc(parent ? parent.title : "(deleted task)")}</span>`,
       buttons: [
-        iconBtn("✎", "Edit title / offset", () => {
-          const title = prompt("Follow-up title:", t.title);
-          if (title === null) return;
-          const days = parseInt(prompt("Days after parent completion:", t.offsetDays), 10);
-          if (isNaN(days)) return;
-          updateTask(t.id, { title: title.trim() || t.title, offsetDays: days });
-        }),
+        iconBtn("✎", "Edit title / offset", () => openFollowUpModal({ mode: "edit", task: t })),
         iconBtn("✕", "Delete", () => deleteTask(t.id))
       ],
       notes: t.notes || "",
@@ -2148,12 +2180,54 @@ function resolveUncheck(choice) {
   setTaskDone(t.id, false);                           // "keep": un-done, follow-ups stay dated
 }
 
+/** D82: "+45m", "+2h", "+3d", "+1w" from fractional offsetDays. */
+function fmtOffset(days) {
+  const m = Math.round((days || 0) * 1440);
+  if (m > 0 && m % 10080 === 0) return `${m / 10080}w`;
+  if (m > 0 && m % 1440 === 0) return `${m / 1440}d`;
+  if (m > 0 && m % 60 === 0) return `${m / 60}h`;
+  return `${m}m`;
+}
+
+/** Decompose fractional days into the friendliest {n, unit}. */
+function splitOffset(days) {
+  const m = Math.round((days || 0) * 1440);
+  if (m > 0 && m % 10080 === 0) return { n: m / 10080, unit: "weeks" };
+  if (m > 0 && m % 1440 === 0) return { n: m / 1440, unit: "days" };
+  if (m > 0 && m % 60 === 0) return { n: m / 60, unit: "hours" };
+  return { n: Math.max(1, m), unit: "minutes" };
+}
+
+const OFFSET_UNIT_DAYS = { minutes: 1 / 1440, hours: 1 / 24, days: 1, weeks: 7 };
+let fuTarget = null; // {mode:"create", item} | {mode:"edit", task}
+
+function openFollowUpModal(target) {
+  fuTarget = target;
+  const isEdit = target.mode === "edit";
+  $("#fu-heading").textContent = isEdit ? "Edit follow-up" : `Follow-up to "${(target.item || target.task).title}"`;
+  const t = isEdit ? target.task : null;
+  $("#fu-title").value = isEdit ? t.title : `Follow up: ${target.item.title}`;
+  const { n, unit } = splitOffset(isEdit ? t.offsetDays : 3);
+  $("#fu-n").value = n;
+  $("#fu-unit").value = unit;
+  $("#followup-modal").hidden = false;
+  $("#fu-title").focus();
+}
+
+function saveFollowUpModal() {
+  const title = $("#fu-title").value.trim();
+  const n = Math.max(1, parseInt($("#fu-n").value, 10) || 0);
+  const unit = $("#fu-unit").value;
+  if (!title || !OFFSET_UNIT_DAYS[unit]) return;
+  const offsetDays = n * OFFSET_UNIT_DAYS[unit];
+  if (fuTarget?.mode === "edit") updateTask(fuTarget.task.id, { title, offsetDays });
+  else if (fuTarget?.mode === "create") addFollowUp(fuTarget.item.id, { title, offsetDays, tierId: fuTarget.item.tier?.id || fuTarget.item.raw.tierId });
+  $("#followup-modal").hidden = true;
+  fuTarget = null;
+}
+
 function followUpPrompt(item) {
-  const title = prompt(`Follow-up to "${item.title}":`, `Follow up: ${item.title}`);
-  if (!title) return;
-  const days = parseInt(prompt("How many days after completion?", "3"), 10);
-  if (isNaN(days)) return;
-  addFollowUp(item.id, { title, offsetDays: days, tierId: item.tier?.id || item.raw.tierId });
+  openFollowUpModal({ mode: "create", item });
 }
 
 // ---------- Settings ----------
@@ -2173,6 +2247,7 @@ function openSettings() {
   $("#cfg-sleep-start").value = c.sleepStart ?? 22;
   $("#cfg-sleep-end").value = c.sleepEnd ?? 6;
   $("#cfg-poll").value = c.pollIntervalMinutes ?? 60;
+  $("#cfg-mirror-cal").value = c.mirrorCalendarId ?? "";  // D81
   $("#cfg-deadline-hour").value = c.deadlineHour ?? 16;   // D51
   $("#cfg-decision-days").value = c.decisionThresholdDays ?? 2; // D52
   updatePollCostHint();
@@ -2300,6 +2375,7 @@ function onSaveSettings() {
   saveConfig({
     carryoverWriteHour: clampInt($("#cfg-carryover").value, 0, 23, 9),
     pollIntervalMinutes: clampInt($("#cfg-poll").value, 5, 1440, 60),
+    mirrorCalendarId: $("#cfg-mirror-cal").value.trim(),   // D81
     sleepStart: clampInt($("#cfg-sleep-start").value, 0, 23, 22),
     sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6),
     deadlineHour: clampInt($("#cfg-deadline-hour").value, 0, 23, 16),      // D51
