@@ -1,6 +1,10 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.9.0
+// Version 0.10.0
+// 0.10.0 (D82): timed events whose window has PASSED (end — or start
+// +1h grace when endless — is behind now) leave the live list for a
+// passedEvents array, TODAY only; viewing other days shows everything
+// in place (a past day is all "passed"; a future day, none).
 // 0.9.0 (D80): ALL-DAY events split out of the chronological queue
 // into a BANNERS list — "things that are happening" (Zoo Camp week,
 // parents in town) vs "things to go to at a time." Banners carry
@@ -24,7 +28,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.9.0";
+export const QUEUE_VERSION = "0.10.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -261,9 +265,18 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
     })
     .sort((a, b) => (rankOf(a.tier?.id) - rankOf(b.tier?.id)) || (a.start - b.start));
 
-  // --- Events (anchors) ---
+  // --- Events (anchors); D82: past windows sink out of the live list,
+  // but only when the view IS today ---
+  // (viewingToday already computed above for pin/escalation logic)
+  const isPast = e => viewingToday && (e.end ?? e.start + 3600000) <= now;
+  const passedEvents = events
+    .filter(e => !e.allDay && !hidden(e.tierId) && isPast(e))
+    .filter(e => e.start < dayEnd && (e.end || e.start) >= dayStart)
+    .map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end || null, tier: tierById[e.tierId] || null }))
+    .sort((a, b) => a.start - b.start);
+
   const dayEvents = events
-    .filter(e => !e.allDay && !hidden(e.tierId))
+    .filter(e => !e.allDay && !hidden(e.tierId) && !isPast(e))
     .filter(e => e.start < dayEnd && (e.end || e.start) >= dayStart)
     .map(e => ({
       kind: "event", id: e.id, title: e.title,
@@ -359,7 +372,7 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
   doneToday.sort((a, b) => b.completedAt - a.completedAt);
   waiting.sort((a, b) => rankOf(a.tierId) - rankOf(b.tierId));
 
-  return { pinned, items, waiting, doneToday, banners };
+  return { pinned, items, waiting, doneToday, banners, passedEvents };
 }
 
 export function fmtTime(ts) {
