@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.17.0 (banner and data-html-version move together, always)
+     Version 0.17.1 (banner and data-html-version move together, always)
+     0.17.1 (D83): app ?v= → 0.23.1. Reference bump only.
      0.17.0 (D82): #earlier box (passed events sink here, today only)
      + #followup-modal (title, amount, minutes/hours/days/weeks unit —
      retires two prompt()s). css ?v= → 0.21.0, app → 0.23.0, queue →
@@ -66,7 +67,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
   <link rel="stylesheet" href="tentacalendar.css?v=0.21.0">
 </head>
-<body data-html-version="0.17.0">
+<body data-html-version="0.17.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -447,6 +448,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.23.0"></script>
+  <script type="module" src="app.js?v=0.23.1"></script>
 </body>
 </html>
