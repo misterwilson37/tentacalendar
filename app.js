@@ -1,5 +1,10 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.23.1 — "the clock says where" (D83)
+// 0.23.1: decision-modal rows now SAY the 🕐 plan in the sub line
+// ("🕐 → Mon, Jul 13 9 AM") instead of hiding it in a hover tooltip —
+// phones have no hover, and Jake read the silent auto-reschedule as
+// "the modal just closes." Behavior unchanged: 🕐 IS the reschedule.
 // Version 0.23.0 — "time passes, follow-ups flex" (D82, Otto's finale)
 // 0.23.0:
 //  · Passed timed events sink into an EARLIER TODAY box (dimmed,
@@ -231,7 +236,7 @@ import {
 } from "./queue.js?v=0.10.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.23.0";
+export const APP_VERSION = "0.23.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1262,6 +1267,14 @@ function renderDecision() {
     const days = Math.floor((now - overdueSince) / DAY_MS);
     const row = document.createElement("div");
     row.className = "row decision-row";
+    // D60: reschedule lands on the tier's next ALLOWED day — a weekend
+    // check is unnecessary by construction (disallowed days are skipped).
+    const target = (() => {
+      const t = addAllowedDays(now, 1, it.tier?.allowedDays);
+      const d = new Date(t); d.setHours(9, 0, 0, 0); return d.getTime();
+    })();
+    // D83: say the plan out loud — tooltips don't exist on phones.
+    const plan = ` · 🕐 → ${fmtDay(target)} 9 AM`;
     const main = document.createElement("div");
     main.className = "row-main";
     if (it.kind === "stage") {
@@ -1270,18 +1283,12 @@ function renderDecision() {
       const dl = it.deadlineStageIndex !== it.stageIndex
         ? ` · deadline: ${esc(it.deadlineStageName)}` : "";
       main.innerHTML = `<strong>${esc(it.projectName)}: ${esc(it.title)}</strong>` +
-        `<span class="sub">${days} day${days === 1 ? "" : "s"} overdue${dl}</span>`;
+        `<span class="sub">${days} day${days === 1 ? "" : "s"} overdue${dl}${plan}</span>`;
     } else {
       main.innerHTML = `<strong>${esc(it.title)}</strong>` +
-        `<span class="sub">${days} day${days === 1 ? "" : "s"} overdue</span>`;
+        `<span class="sub">${days} day${days === 1 ? "" : "s"} overdue${plan}</span>`;
     }
     row.append(main);
-    // D60: reschedule lands on the tier's next ALLOWED day — a weekend
-    // check is unnecessary by construction (disallowed days are skipped).
-    const target = (() => {
-      const t = addAllowedDays(now, 1, it.tier?.allowedDays);
-      const d = new Date(t); d.setHours(9, 0, 0, 0); return d.getTime();
-    })();
     row.append(
       iconBtn("✓", it.kind === "stage" ? `Mark "${it.title}" done` : "Mark it done", ev => {
         if (it.kind === "stage") onStageToggle(it.projectId, it.stageIndex, true, ev);
