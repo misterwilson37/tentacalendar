@@ -1,5 +1,5 @@
 # SETUP-PHASE3.md — The Calendar Poll (Cloud Functions, step 1 of 3)
-**Version 0.1.5** | D75/D79/D80 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
+**Version 0.2.0** | D75/D79/D80/D81 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
 
 **What you get:** every hour, `pollCalendars` reads the Google Calendars attached to your anchor tiers (Home, Business) and mirrors events into `eventsCache`. The web app has been subscribed to that collection since v0.1.0 — events appear in the Today queue (with 30-min pin behavior) the moment the first poll runs. **No client deploy needed.**
 
@@ -80,7 +80,22 @@ curl -H "x-poll-secret: YOUR_SECRET" "https://YOUR-FUNCTION-URL?force=1"
 - TTT. Curl during sleep hours WITHOUT `force=1` → `{"skipped":"sleep hours"}`.
 - UUU. Wrong secret → 403. No secret → 403.
 
+## Part 7 — The mirror (Phase 3 step 2, D81): tasks → Google Calendar
+
+**What you get:** every dated, incomplete task appears as a 30-minute event on a dedicated calendar (at its HONEST due time — escalation stays in the app). Complete or delete a task and its event vanishes on the next sync. Reconciled hourly with the poll; self-healing.
+
+1. **Create a dedicated calendar.** Google Calendar (web) → left panel → + next to "Other calendars" → **Create new calendar** → name it **Tentacalendar** → Create.
+   ⚠️ **Never attach this calendar to a tier.** Mirroring into a polled calendar boomerangs every task back into the queue as its own event. The function refuses if you try, but don't try.
+2. **Share it with the robot, WRITE this time:** calendar Settings and sharing → Share with specific people → the service-account email → permission **"Make changes to events."** (Katie sees it by normal sharing or it just being on the family account.)
+3. Copy its **Calendar ID** (Settings → Integrate calendar — looks like `abc123…@group.calendar.google.com`).
+4. In **Tentacalendar → ⚙️ Settings → Calendar**, paste it into **"Mirror tasks to calendar ID"** → Save. (Requires app v0.22.0.)
+5. **Re-paste the function:** open the service → Edit source → replace index.js with functions 0.2.0 → Save and redeploy. (package.json unchanged.)
+6. **Update the Scheduler job:** Cloud Scheduler → edit `poll-calendars-hourly` → URL gets `?job=all` appended → save. One hourly ping now polls AND mirrors.
+7. **Test:** `curl -H "x-poll-secret: …" "URL?job=all&force=1"` → the report now nests under `jobs`: `{"jobs":{"poll":{"tiers":…},"mirror":{"active":N,"created":N,…}}}`. Then look at the Tentacalendar calendar in GCal — your dated tasks, as 30-minute blocks.
+
+**Mirror smoke tests:** VV1 create a dated task → next sync (or forced curl) puts it on the calendar; VV2 complete it → event disappears; VV3 reschedule it → event moves; VV4 a "Waiting on…" task never appears; VV5 set the mirror ID to a tier's calendar → the report returns the loop-guard error and writes nothing.
+
 ## What's next (in Jake's confirmed order, D75)
-1. ✅ **Poll** (this document)
-2. **Mirror** — dated tasks pushed *to* GCal (`mirroredGcalEventId` field has been waiting in the schema since v0.1.0; needs calendar **write** permission for the robot: "Make changes to events")
-3. **Carryover** — the 9 AM writes (`carryoverWriteHour`), a second Scheduler job
+1. ✅ **Poll** (Parts 1–6)
+2. ✅ **Mirror** (Part 7) — note: the schema's `mirroredGcalEventId` field ended up UNUSED; the calendar's own `tcTaskId` tags are the ledger (cleaner: no task writes)
+3. **Carryover** — the 9 AM writes (`carryoverWriteHour`); likely a third `?job=` on the same service
