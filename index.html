@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.15.0 (banner and data-html-version move together, always)
+     Version 0.17.0 (banner and data-html-version move together, always)
+     0.17.0 (D82): #earlier box (passed events sink here, today only)
+     + #followup-modal (title, amount, minutes/hours/days/weeks unit —
+     retires two prompt()s). css ?v= → 0.21.0, app → 0.23.0, queue →
+     0.10.0.
+     0.16.0 (D81): ⚙️ Settings gains the Mirror calendar ID field
+     (cfg-mirror-cal). app ?v= → 0.22.0; css unchanged.
      0.15.0 (D80): #allday-strip above the queue — all-day events land
      here as ambient banners, not 12:00 AM queue rows. css ?v= →
      0.20.0, app → 0.21.0.
@@ -58,9 +64,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.20.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.21.0">
 </head>
-<body data-html-version="0.15.0">
+<body data-html-version="0.17.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -110,6 +116,11 @@
         <div id="waiting" hidden>
           <h3>Waiting on…</h3>
           <div id="waiting-list"></div>
+        </div>
+
+        <div id="earlier" hidden>
+          <h3>Earlier today</h3>
+          <div id="earlier-list"></div>
         </div>
 
         <div id="done" hidden>
@@ -224,6 +235,27 @@
       <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
     </section>
 
+    <!-- D82: follow-up create/edit — retires the prompt() pair -->
+    <div id="followup-modal" class="modal-shell" hidden>
+      <div class="modal-card">
+        <h3 id="fu-heading">Follow-up</h3>
+        <label>Title <input id="fu-title" type="text"></label>
+        <label>Materializes
+          <input id="fu-n" type="number" min="1" step="1" value="3" style="width:4.5rem">
+          <select id="fu-unit">
+            <option value="minutes">minutes</option>
+            <option value="hours">hours</option>
+            <option value="days" selected>days</option>
+            <option value="weeks">weeks</option>
+          </select>
+          after completion</label>
+        <div class="modal-actions">
+          <button id="fu-save" class="primary">Save</button>
+          <button id="fu-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- D78: phone-only, in words, at the very bottom — where a
          logout belongs on a device you rarely log out of. -->
     <button id="signout-bottom">Log out</button>
@@ -288,6 +320,8 @@
         </div>
         <div class="form-row">
           <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
+          <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
+          <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
         </div>
         <p class="hint" id="poll-cost-hint"></p>
       </div>
@@ -413,6 +447,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.21.0"></script>
+  <script type="module" src="app.js?v=0.23.0"></script>
 </body>
 </html>
