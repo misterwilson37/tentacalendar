@@ -1,6 +1,16 @@
 // ============================================================
 // Tentacalendar — Cloud Functions
-// functions/index.js — Version 0.1.1 (D75, Phase 3 step 1: the poll)
+// functions/index.js — Version 0.2.0 (D81, Phase 3 step 2: the MIRROR)
+// 0.2.0: one service, two jobs, routed by ?job= — "poll" (default),
+// "mirror", or "all" (what the Scheduler should call). The mirror
+// reconciles dated, incomplete tasks onto a DEDICATED write-shared
+// calendar (cfg.mirrorCalendarId): create missing, patch drifted
+// (title/time), delete completed/deleted/undated. Events are tagged
+// with extendedProperties.private.tcTaskId, so the CALENDAR is the
+// sync ledger — no task-doc writes, no schema changes. Honest due
+// times only (escalation theater stays in the app). 30-min blocks.
+// LOOP GUARD: refuses to mirror into any calendar attached to a tier.
+// Scope widened readonly → calendar (rw).
 // 0.1.1: an UNSET POLL_SECRET now refuses everything with a distinct
 // message (previously undefined === undefined let header-less requests
 // through an unset lock — Jake's "did I miss the variables?" question
@@ -32,7 +42,7 @@ const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "0.1.1";
+const FUNCTIONS_VERSION = "0.2.0";
 const WS = "primary"; // one workspace (HANDOFF D12)
 
 admin.initializeApp();
@@ -84,32 +94,52 @@ functions.http("pollCalendars", async (req, res) => {
       return res.json({ version: FUNCTIONS_VERSION, skipped: "sleep hours" });
     }
 
-    // Anchor tiers with a calendar attached (⚙️ Settings).
     const tiersSnap = await db.collection(`workspaces/${WS}/tiers`).get();
-    const calTiers = tiersSnap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(t => t.kind === "anchor" && t.gcalCalendarId);
-    if (!calTiers.length) {
-      return res.json({ version: FUNCTIONS_VERSION, warning: "no anchor tiers have a gcalCalendarId — set them in ⚙️ Settings" });
-    }
+    const allTiers = tiersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const calTiers = allTiers.filter(t => t.kind === "anchor" && t.gcalCalendarId);
 
     const auth = new google.auth.GoogleAuth({
-      scopes: ["https://www.googleapis.com/auth/calendar.readonly"]
+      scopes: ["https://www.googleapis.com/auth/calendar"] // rw: the mirror writes
     });
     const cal = google.calendar({ version: "v3", auth });
+    const job = String(req.query.job || "poll").toLowerCase();
 
-    const timeMin = new Date(Date.now() - LOOKBACK_MS).toISOString();
-    const timeMax = new Date(Date.now() + HORIZON_MS).toISOString();
-    const evCol = db.collection(`workspaces/${WS}/eventsCache`);
     const report = {
       version: FUNCTIONS_VERSION,
       tz: process.env.TZ || "(unset — running in UTC; set TZ=America/Chicago)",
       localHour: new Date().getHours(),
-      window: { timeMin, timeMax },
-      tiers: {}
+      job,
+      jobs: {}
     };
 
-    for (const tier of calTiers) {
+    if (job === "poll" || job === "all") {
+      report.jobs.poll = calTiers.length
+        ? await runPoll(cal, calTiers)
+        : { warning: "no anchor tiers have a gcalCalendarId — set them in ⚙️ Settings" };
+    }
+    if (job === "mirror" || job === "all") {
+      try {
+        report.jobs.mirror = await runMirror(cal, cfg, allTiers);
+      } catch (err) {
+        report.jobs.mirror = { error: String(err.message || err) };
+      }
+    }
+
+    return res.json(report);
+  } catch (err) {
+    console.error("sync failed:", err);
+    return res.status(500).json({ error: String(err.message || err) });
+  }
+});
+
+/** Phase 3 step 1: calendars → eventsCache (unchanged logic, extracted). */
+async function runPoll(cal, calTiers) {
+  const timeMin = new Date(Date.now() - LOOKBACK_MS).toISOString();
+  const timeMax = new Date(Date.now() + HORIZON_MS).toISOString();
+  const evCol = db.collection(`workspaces/${WS}/eventsCache`);
+  const out = { window: { timeMin, timeMax }, tiers: {} };
+
+  for (const tier of calTiers) {
       const lead = tier.defaultLeadWindowMinutes ?? 30;
       const fresh = [];
       let pageToken;
@@ -144,7 +174,7 @@ functions.http("pollCalendars", async (req, res) => {
         // Most common cause: calendar not shared with the service
         // account, or a typo'd calendar ID. Report and keep going —
         // one bad tier must not starve the others.
-        report.tiers[tier.name] = { error: String(err.message || err) };
+        out.tiers[tier.name] = { error: String(err.message || err) };
         continue;
       }
 
@@ -154,12 +184,78 @@ functions.http("pollCalendars", async (req, res) => {
       oldSnap.docs.forEach(d => ops.push(b => b.delete(d.ref)));
       fresh.forEach(e => ops.push(b => b.set(evCol.doc(), e)));
       await commitChunked(ops);
-      report.tiers[tier.name] = { removed: oldSnap.size, written: fresh.length };
-    }
-
-    return res.json(report);
-  } catch (err) {
-    console.error("pollCalendars failed:", err);
-    return res.status(500).json({ error: String(err.message || err) });
+      out.tiers[tier.name] = { removed: oldSnap.size, written: fresh.length };
   }
-});
+  return out;
+}
+
+/** Phase 3 step 2 (D81): tasks → the dedicated mirror calendar.
+ *  Reconcile, don't append: the calendar's tcTaskId tags ARE the
+ *  ledger. Dated + incomplete tasks exist there; everything else
+ *  gets removed. Honest dueAt only — no escalation theater. */
+async function runMirror(cal, cfg, allTiers) {
+  const calId = (cfg.mirrorCalendarId || "").trim();
+  if (!calId) return { skipped: "no mirrorCalendarId in ⚙️ Settings → Calendar" };
+  // LOOP GUARD: mirroring into a polled calendar would feed every
+  // task back into the queue as its own doppelgänger anchor.
+  const clash = allTiers.find(t => t.gcalCalendarId === calId);
+  if (clash) return { error: `mirrorCalendarId is the same calendar tier "${clash.name}" polls — that's a feedback loop. Use a dedicated calendar.` };
+
+  const tierName = {};
+  allTiers.forEach(t => { tierName[t.id] = t.name; });
+
+  const tasksSnap = await db.collection(`workspaces/${WS}/tasks`).get();
+  const want = new Map(); // taskId → desired event fields
+  tasksSnap.docs.forEach(d => {
+    const t = d.data();
+    if (!t.dueAt || t.completedAt) return;   // waiting + done don't mirror
+    want.set(d.id, { title: t.title || "(untitled)", dueAt: t.dueAt, tier: tierName[t.tierId] || "" });
+  });
+
+  const have = new Map(); // taskId → existing event
+  let pageToken;
+  do {
+    const r = await cal.events.list({
+      calendarId: calId,
+      privateExtendedProperty: "tcApp=tentacalendar",
+      maxResults: 250,
+      pageToken
+    });
+    (r.data.items || []).forEach(ev => {
+      if (ev.status === "cancelled") return;
+      const tid = ev.extendedProperties?.private?.tcTaskId;
+      if (tid) have.set(tid, ev);
+    });
+    pageToken = r.data.nextPageToken;
+  } while (pageToken);
+
+  const body = (id, w) => ({
+    summary: w.title,
+    description: `Tentacalendar${w.tier ? " · " + w.tier : ""}`,
+    start: { dateTime: new Date(w.dueAt).toISOString() },
+    end: { dateTime: new Date(w.dueAt + 30 * 60000).toISOString() },
+    extendedProperties: { private: { tcApp: "tentacalendar", tcTaskId: id } }
+  });
+
+  let created = 0, updated = 0, removed = 0;
+  for (const [id, w] of want) {
+    const ev = have.get(id);
+    if (!ev) {
+      await cal.events.insert({ calendarId: calId, requestBody: body(id, w) });
+      created++;
+    } else {
+      const evStart = ev.start?.dateTime ? Date.parse(ev.start.dateTime) : null;
+      if (ev.summary !== w.title || evStart !== w.dueAt) {
+        await cal.events.patch({ calendarId: calId, eventId: ev.id, requestBody: body(id, w) });
+        updated++;
+      }
+    }
+  }
+  for (const [id, ev] of have) {
+    if (!want.has(id)) {
+      await cal.events.delete({ calendarId: calId, eventId: ev.id });
+      removed++;
+    }
+  }
+  return { calendar: calId, active: want.size, created, updated, removed };
+}
