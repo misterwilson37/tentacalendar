@@ -1,6 +1,17 @@
 // ============================================================
 // Tentacalendar — Cloud Functions
-// functions/index.js — Version 0.2.0 (D81, Phase 3 step 2: the MIRROR)
+// functions/index.js — Version 0.3.0 (D87, Phase 3 step 3: the CARRYOVER)
+// 0.3.0: PHASE 3 IS COMPLETE. Third job, ?job=carryover (and in "all"):
+// a task in a ❗ midnightCarryover tier that was due before today began
+// and still isn't checked gets "❗ <task>" on today's calendar at
+// config.carryoverWriteHour (default 9), tomato colorId 11 — D14, the
+// "nothing silently disappears" promise. Deliberately NOT hour-triggered:
+// "due before today started" is true whenever it runs, so the first
+// waking tick (~06:07, past the 22–6 sleep gate) writes the 9 AM landing
+// and no cron hiccup can skip a morning. Its own tag namespace
+// (tcApp=tentacalendar-carryover) so the mirror — same calendar, keyed by
+// tcTaskId — can't see these and patch the ❗ back to the due time.
+// Reconciles TODAY only: create / re-time / delete-when-done; history stands.
 // 0.2.0: one service, two jobs, routed by ?job= — "poll" (default),
 // "mirror", or "all" (what the Scheduler should call). The mirror
 // reconciles dated, incomplete tasks onto a DEDICATED write-shared
@@ -42,7 +53,7 @@ const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "0.2.0";
+const FUNCTIONS_VERSION = "0.3.0";
 const WS = "primary"; // one workspace (HANDOFF D12)
 
 admin.initializeApp();
@@ -67,6 +78,21 @@ function isAsleep(cfg) {
   const hour = new Date().getHours(); // local, thanks to TZ env var
   const s = cfg.sleepStart ?? 22, e = cfg.sleepEnd ?? 6;
   return s > e ? (hour >= s || hour < e) : (hour >= s && hour < e);
+}
+
+/** Local midnight of the day containing ts (TZ env makes this Nashville). */
+function startOfLocalDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+
+/** YYYY-MM-DD in LOCAL time — half of a carryover event's identity. */
+function localDateKey(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** config.carryoverWriteHour, sane-guarded (D14 default 9 AM). */
+function carryHour(cfg) {
+  const n = parseInt(cfg.carryoverWriteHour, 10);
+  return (!isNaN(n) && n >= 0 && n <= 23) ? n : 9;
 }
 
 /** All-day events arrive as bare dates; TZ makes this local midnight.
@@ -122,6 +148,13 @@ functions.http("pollCalendars", async (req, res) => {
         report.jobs.mirror = await runMirror(cal, cfg, allTiers);
       } catch (err) {
         report.jobs.mirror = { error: String(err.message || err) };
+      }
+    }
+    if (job === "carryover" || job === "all") {
+      try {
+        report.jobs.carryover = await runCarryover(cal, cfg, allTiers);
+      } catch (err) {
+        report.jobs.carryover = { error: String(err.message || err) };
       }
     }
 
@@ -258,4 +291,123 @@ async function runMirror(cal, cfg, allTiers) {
     }
   }
   return { calendar: calId, active: want.size, created, updated, removed };
+}
+
+/** Phase 3 step 3 (D14/D87): THE CARRYOVER — nothing silently disappears.
+ *
+ *  A task in a ❗ midnightCarryover tier that was due BEFORE today began
+ *  and still isn't checked gets an event on TODAY's calendar at
+ *  config.carryoverWriteHour (default 9 AM), titled "❗ <task>", tomato
+ *  (colorId 11 — D14). One per task per day.
+ *
+ *  NO HOUR TRIGGER, on purpose. "Due before today started" is true
+ *  whenever this runs, so the first waking tick of the day does the job
+ *  (the 22–6 sleep gate means ~06:07, three hours of lead on a 9 AM
+ *  landing) and a missed tick, an outage, or a changed Scheduler cadence
+ *  can never silently skip a morning. Hour-gating would have been one
+ *  cron hiccup away from a lie.
+ *
+ *  SEPARATE TAG NAMESPACE (tcApp=tentacalendar-carryover): the mirror
+ *  queries tcApp=tentacalendar and keys its ledger by tcTaskId, so a
+ *  shared tag would give it two events for one task and it would patch
+ *  the ❗ back to the honest due time. These two jobs write to the same
+ *  calendar and must not be able to see each other's events.
+ *
+ *  Reconciles TODAY only (the mirror's idiom — the calendar is the
+ *  ledger): creates what's missing, re-times if carryoverWriteHour
+ *  changed, deletes today's ❗ once the task is done/rescheduled/undated.
+ *  Earlier days are never touched — history stands.
+ */
+async function runCarryover(cal, cfg, allTiers) {
+  const calId = (cfg.mirrorCalendarId || "").trim();
+  if (!calId) return { skipped: "no mirrorCalendarId in ⚙️ Settings → Timing — the carryover writes to the same dedicated calendar as the mirror" };
+  // Same loop guard as the mirror: never write into a calendar we poll.
+  const clash = allTiers.find(t => t.gcalCalendarId === calId);
+  if (clash) return { error: `mirrorCalendarId is the same calendar tier "${clash.name}" polls — that's a feedback loop. Use a dedicated calendar.` };
+
+  const carryTiers = new Map();
+  allTiers.forEach(t => { if (t.midnightCarryover) carryTiers.set(t.id, t.name); });
+  if (!carryTiers.size) return { skipped: "no tier has ❗ carryover checked (⚙️ Settings → Tiers)" };
+
+  const now = Date.now();
+  const todayStart = startOfLocalDay(now);
+  const landing = new Date(now);
+  landing.setHours(carryHour(cfg), 0, 0, 0);   // today at the carryover hour, DST-safe
+  const landsAt = landing.getTime();
+  const key = localDateKey(landsAt);
+
+  // WANT: missed + still open + in a ❗ tier.
+  const tasksSnap = await db.collection(`workspaces/${WS}/tasks`).get();
+  const want = new Map(); // "taskId#YYYY-MM-DD" → fields
+  tasksSnap.docs.forEach(d => {
+    const t = d.data();
+    if (t.completedAt) return;              // done
+    if (t.dueAt == null) return;            // Waiting — never due, never missed
+    if (!carryTiers.has(t.tierId)) return;  // tier opted out
+    if (t.dueAt >= todayStart) return;      // due today or later = not missed YET
+    want.set(`${d.id}#${key}`, {
+      taskId: d.id,
+      title: t.title || "(untitled)",
+      dueAt: t.dueAt,
+      tier: carryTiers.get(t.tierId) || ""
+    });
+  });
+
+  // HAVE: today's carryover events only (timeMin bounds the read; the
+  // key check keeps a changed write-hour from dragging in a stale day).
+  const have = new Map();
+  let pageToken;
+  do {
+    const r = await cal.events.list({
+      calendarId: calId,
+      privateExtendedProperty: "tcApp=tentacalendar-carryover",
+      timeMin: new Date(todayStart).toISOString(),
+      maxResults: 250,
+      pageToken
+    });
+    (r.data.items || []).forEach(ev => {
+      if (ev.status === "cancelled") return;
+      const k = ev.extendedProperties?.private?.tcCarryKey;
+      if (k && k.endsWith(`#${key}`)) have.set(k, ev);
+    });
+    pageToken = r.data.nextPageToken;
+  } while (pageToken);
+
+  const body = (k, w) => ({
+    summary: `❗ ${w.title}`,
+    description: `Tentacalendar carryover${w.tier ? " · " + w.tier : ""} — was due ${new Date(w.dueAt).toLocaleString()} and wasn't checked off.`,
+    colorId: "11", // tomato (D14)
+    start: { dateTime: new Date(landsAt).toISOString() },
+    end: { dateTime: new Date(landsAt + 30 * 60000).toISOString() },
+    extendedProperties: { private: { tcApp: "tentacalendar-carryover", tcCarryKey: k, tcTaskId: w.taskId } }
+  });
+
+  let created = 0, retimed = 0, removed = 0;
+  for (const [k, w] of want) {
+    const ev = have.get(k);
+    if (!ev) {
+      await cal.events.insert({ calendarId: calId, requestBody: body(k, w) });
+      created++;
+    } else {
+      const evStart = ev.start?.dateTime ? Date.parse(ev.start.dateTime) : null;
+      if (evStart !== landsAt) { // carryoverWriteHour moved since this was written
+        await cal.events.patch({ calendarId: calId, eventId: ev.id, requestBody: body(k, w) });
+        retimed++;
+      }
+    }
+  }
+  for (const [k, ev] of have) {
+    if (!want.has(k)) { // checked off, rescheduled, or shelved to Waiting
+      await cal.events.delete({ calendarId: calId, eventId: ev.id });
+      removed++;
+    }
+  }
+
+  return {
+    calendar: calId,
+    tiers: [...carryTiers.values()],
+    landsAt: new Date(landsAt).toISOString(),
+    missed: want.size, created, retimed, removed,
+    alreadyThere: want.size - created - retimed
+  };
 }
