@@ -1,5 +1,5 @@
-# SETUP-PHASE3.md — The Calendar Poll (Cloud Functions, step 1 of 3)
-**Version 0.2.1** | D75/D79/D80/D81/D84 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
+# SETUP-PHASE3.md — Cloud Functions (poll · mirror · carryover — all three)
+**Version 0.3.0** | D75/D79/D80/D81/D84/D87 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
 
 **What you get:** every hour, `pollCalendars` reads the Google Calendars attached to your anchor tiers (Home, Business) and mirrors events into `eventsCache`. The web app has been subscribed to that collection since v0.1.0 — events appear in the Today queue (with 30-min pin behavior) the moment the first poll runs. **No client deploy needed.**
 
@@ -95,7 +95,30 @@ curl -H "x-poll-secret: YOUR_SECRET" "https://YOUR-FUNCTION-URL?force=1"
 
 **Mirror smoke tests:** VV1 create a dated task → next sync (or forced curl) puts it on the calendar; VV2 complete it → event disappears; VV3 reschedule it → event moves; VV4 a "Waiting on…" task never appears; VV5 set the mirror ID to a tier's calendar → the report returns the loop-guard error and writes nothing.
 
+
+## Part 8 — The carryover (Phase 3 step 3, D14/D87): nothing silently disappears
+
+**What you get:** a task in a **❗ carryover** tier that was due before today started and *still isn't checked* shows up on today's calendar at your carryover hour (default **9 AM**) as **❗ <task>**, in tomato red. One per task per day, for as long as you keep not doing it. This is the promise the whole app is built on — a missed thing never just evaporates.
+
+**Setup: there is almost none.** It writes to the same dedicated calendar as the mirror (Part 7) and rides the same hourly Scheduler ping. If Part 7 is done, you need two things:
+
+1. **Check which tiers carry.** ⚙️ Settings → **Tiers** → the **❗ carryover** checkbox. Seeded ON for **Work** and **Family**, OFF for Home/Business/Personal/Taiko. (Taiko practice slipping to tomorrow's calendar in red is probably not the vibe.)
+2. **Set the hour** (optional). ⚙️ Settings → **Timing** → "❗ carryover events land at __:00". Default 9.
+3. **Re-paste the function:** service → Edit source → replace index.js with **functions 0.3.0** → Save and redeploy. (package.json unchanged.)
+4. **Scheduler:** nothing to change — `?job=all` already covers it. (`?job=carryover` alone works for testing.)
+
+**When does it actually run?** Any tick. It asks "due before today began and still open?" — true at 00:07 and equally true at 13:07 — so it isn't pinned to an hour and a missed tick can't skip a morning. In practice the 22–6 sleep gate means the first run of the day is **~06:07**, writing the 9 AM landing with three hours to spare. If the function is down all morning, the 2 PM tick still writes it; the event just lands at 9 AM in the past, which is honest.
+
+**Test:** `curl -H "x-poll-secret: …" "URL?job=carryover&force=1"` →
+```json
+{"jobs":{"carryover":{"tiers":["Work","Family"],"landsAt":"2026-07-15T09:00:00.000-05:00",
+ "missed":2,"created":2,"retimed":0,"removed":0,"alreadyThere":0}}}
+```
+Run it twice: the second should say `created:0, alreadyThere:2` — that's idempotency, not a no-op.
+
+**Carryover smoke tests:** WW1 leave a dated **Work** task unchecked overnight → next morning it's on the calendar at 9 with a ❗ in tomato; WW2 curl it twice → second run creates nothing; WW3 check the task off → the ❗ disappears on the next tick (the app's Done-today list is the record; a red flag for a finished job is just noise); WW4 a **Personal** task (carryover off) never appears; WW5 change the carryover hour to 21 and force a run → today's ❗ moves to 9 PM (`retimed:1`); WW6 the mirror's own events (same calendar, honest due times) are untouched by all of this — different tag namespace, they can't see each other.
+
 ## What's next (in Jake's confirmed order, D75)
 1. ✅ **Poll** (Parts 1–6)
 2. ✅ **Mirror** (Part 7) — note: the schema's `mirroredGcalEventId` field ended up UNUSED; the calendar's own `tcTaskId` tags are the ledger (cleaner: no task writes)
-3. **Carryover** — the 9 AM writes (`carryoverWriteHour`); likely a third `?job=` on the same service
+3. ✅ **Carryover** (Part 8) — **PHASE 3 COMPLETE**
