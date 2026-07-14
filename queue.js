@@ -1,6 +1,16 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.10.0
+// Version 0.12.0
+// 0.12.0 (D86): the clear-deck tiebreaker is now GROUPED, not blended.
+// D85 multiplied workload by pct-or-1-pct, which made a U: urgency rose
+// at both ends and SAGGED in the middle, so a 30%-done project outranked
+// a 65%-done one (Jake: "too confusing"). Now two piles split at
+// CLEAR_DECK_THRESHOLD, pile first: past-threshold (MOST done first),
+// then catch-up (LEAST done first), then tasks/events. Workload only
+// breaks an exact-pct tie — heavier first. Four equal projects at T=60%
+// sort 95 → 65 → 30 → 40. Still tiebreaker ONLY (Jake's option A).
+// 0.11.0 (D85): CLEAR-THE-DECK priority — first cut, the blended weight
+// superseded by D86 above. setClearDeckThreshold/the config rail land here.
 // 0.10.0 (D82): timed events whose window has PASSED (end — or start
 // +1h grace when endless — is behind now) leave the live list for a
 // passedEvents array, TODAY only; viewing other days shows everything
@@ -28,7 +38,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.10.0";
+export const QUEUE_VERSION = "0.12.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -40,6 +50,16 @@ export function setDeadlineHour(h) {
   DEADLINE_HOUR = (!isNaN(n) && n >= 0 && n <= 23) ? n : 16;
 }
 export function getDeadlineHour() { return DEADLINE_HOUR; }
+
+// D85: completion point (0–1) where a project flips from "keep abreast"
+// to "clear the deck" in the level-3 queue tiebreaker. Settings-driven,
+// default 60%; fed from the config subscription via setClearDeckThreshold.
+let CLEAR_DECK_THRESHOLD = 0.6;
+export function setClearDeckThreshold(frac) {
+  const n = Number(frac);
+  CLEAR_DECK_THRESHOLD = (isFinite(n) && n >= 0 && n <= 1) ? n : 0.6;
+}
+export function getClearDeckThreshold() { return CLEAR_DECK_THRESHOLD; }
 
 const UNIT_MS = {
   minutes: 60 * 1000,
@@ -188,11 +208,50 @@ export function projectProgress(project) {
   return { done, total: stages.length, pct: done / stages.length };
 }
 
-/** D43 level 3: remaining pipeline fraction × workload (1 light / 2 std / 3 heavy). */
+/** D43 level 3 (pre-D85): remaining pipeline fraction × workload. No longer
+ *  in the sort — D86's deckRank/compareDeck below own that. Kept as a utility. */
 export function remainingWork(project) {
   const { done, total } = projectProgress(project);
   if (!total) return 0;
   return ((total - done) / total) * (project.workload || 2);
+}
+
+/**
+ * D86 level-3 grouping — supersedes D85's single blended weight.
+ * Two PILES, split at CLEAR_DECK_THRESHOLD, and the pile always wins:
+ *   0 = CLEAR THE DECK (pct >= T) — every one of these outranks every
+ *       catch-up project, no matter how heavy the catch-up one is.
+ *   1 = CATCH UP (pct < T) — still behind; keep everything abreast.
+ *   2 = not a project (tasks/events carry no pipeline) — sorts last at
+ *       this level, exactly as remainingWork:0 always did.
+ * Ordering INSIDE a pile lives in compareDeck below.
+ */
+export function deckRank(project, threshold = CLEAR_DECK_THRESHOLD) {
+  const { total, pct } = projectProgress(project);
+  if (!total) return 2;
+  return pct >= threshold ? 0 : 1;
+}
+
+/**
+ * D86 level-3 comparator (Jake's grouped two-tier model). Given a 60%
+ * threshold, four otherwise-identical projects sort 95 → 65 → 30 → 40:
+ *   · pile first — past the threshold beats not-past, always;
+ *   · inside CLEAR THE DECK: MOST done first (95 before 65 — finish it);
+ *   · inside CATCH UP: LEAST done first (30 before 40 — rescue laggards);
+ *   · workload ONLY breaks a genuine tie (two projects at the same pct):
+ *     heavier first — the peer review takes longer, so it needs to be out
+ *     the door sooner (Jake).
+ * Deliberately NOT a blended score: workload can never carry a catch-up
+ * project over a clear-deck one, and there's no U-shaped sag in the
+ * middle where a barely-started project outranks a nearly-finished one.
+ */
+export function compareDeck(a, b) {
+  const ra = a.deckRank ?? 2, rb = b.deckRank ?? 2;
+  if (ra !== rb) return ra - rb;                    // pile dominates
+  if (ra === 2) return 0;                           // tasks/events: neutral here
+  const pa = a.progressPct || 0, pb = b.progressPct || 0;
+  if (pa !== pb) return ra === 0 ? pb - pa : pa - pb; // clear: most done; catch-up: least done
+  return (b.workload || 0) - (a.workload || 0);     // tie → heavier first
 }
 
 // ---------- Task escalation (unchanged from v0.1.0, D3) ----------
@@ -232,7 +291,9 @@ function endOfDay(ts) { return startOfDay(ts) + DAY_MS; }
  * D43 sort:
  *   1. expired first (missed things at the very top, oldest deadline first)
  *   2. chronological by deadline/due — TIER DOES NOT MATTER HERE
- *   3. remaining pipeline × workload, higher first (tasks/events score 0)
+ *   3. clear-deck piles (D86): past-threshold projects (most-done first),
+ *      then catch-up projects (least-done first), then tasks/events;
+ *      workload only breaks an exact-pct tie (heavier first)
  *   4. tier rank
  *   5. alphabetical
  * hiddenTierIds (D47 filter) removes those tiers from EVERYTHING here.
@@ -282,7 +343,7 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
       kind: "event", id: e.id, title: e.title,
       tier: tierById[e.tierId] || null,
       time: e.start, end: e.end || null,
-      sortTime: e.start, expired: false, remainingWork: 0,
+      sortTime: e.start, expired: false, deckRank: 2,
       pinned: viewingToday && isPinned(e, now)
     }));
   const pinned = dayEvents.filter(e => e.pinned).sort((a, b) => a.time - b.time);
@@ -310,7 +371,7 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
       time: viewingToday ? effectiveDue(t, now) : t.dueAt, // escalation theater slot
       sortTime: t.dueAt,      // D43 level 2 uses the HONEST due, not the theater
       expired, overdue: expired,
-      remainingWork: 0,
+      deckRank: 2,
       escalation: t.escalation || { every: 1, unit: "hours" },
       raw: t
     });
@@ -346,7 +407,7 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
       tier: tierById[p.tierId] || null,
       progressPct: prog.pct,
       workload: p.workload || 2,
-      remainingWork: remainingWork(p),
+      deckRank: deckRank(p),
       deadlineStageName: nd ? nd.stage.name : "project end",
       deadlineStageIndex: nd ? nd.index : activeIdx,
       deadlineManual: nd ? nd.stage.dueAt != null : false,
@@ -363,7 +424,8 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
   const items = [...unpinnedEvents, ...active].sort((a, b) => {
     if (a.expired !== b.expired) return a.expired ? -1 : 1;                 // 1 expired
     if ((a.sortTime ?? 0) !== (b.sortTime ?? 0)) return (a.sortTime ?? 0) - (b.sortTime ?? 0); // 2 chrono
-    if ((b.remainingWork || 0) !== (a.remainingWork || 0)) return (b.remainingWork || 0) - (a.remainingWork || 0); // 3 work
+    const deck = compareDeck(a, b);
+    if (deck !== 0) return deck;                                            // 3 clear-deck piles (D86)
     const ra = rankOf(a.tier?.id), rb = rankOf(b.tier?.id);
     if (ra !== rb) return ra - rb;                                          // 4 tier
     return String(a.title).localeCompare(String(b.title));                  // 5 alphabet
