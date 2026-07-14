@@ -1,6 +1,7 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.21.0
+   Version 0.21.1
+   0.21.1 (D84): #cfg-mirror-cal sizes to its row (flex:1, min 12rem).
    0.21.0 (D82): .past-event rows (dimmed, struck time) in the
    #earlier box; #earlier heading matches waiting/done.
    0.20.0 (D80): #allday-strip + .banner pills — tier-tinted, ambient,
@@ -87,7 +88,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.21.0";
+  --tc-version: "0.21.1";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -310,6 +311,7 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 .modal-head h2 { margin: 0; }
 .modal-card label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: var(--ink-dim); margin: .3rem 0; flex-wrap: wrap; }
 .modal-card input[type="number"] { width: 4.5rem; }
+#cfg-mirror-cal { flex: 1; min-width: 12rem; }
 .modal-foot {
   margin-top: 1.2rem;
   display: flex; align-items: center; justify-content: space-between; gap: .8rem;
