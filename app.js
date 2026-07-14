@@ -1,5 +1,12 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.24.0 — "kick it down the road" (D84)
+// 0.24.0: Jake's revised decision — the decision modal now offers BOTH
+// reschedules: 🕐 stays the one-tap next-working-day-9AM, and a new 📅
+// opens the due dialog for "way down the road" (any date + time). The
+// due dialog is generalized: S.dueTarget is now {kind:"stage"|"task",…}
+// and dueSave/dueClear branch — clearing a task's due shelves it to
+// Waiting (a legit third option: 'not now, maybe ever').
 // Version 0.23.1 — "the clock says where" (D83)
 // 0.23.1: decision-modal rows now SAY the 🕐 plan in the sub line
 // ("🕐 → Mon, Jul 13 9 AM") instead of hiding it in a hover tooltip —
@@ -236,7 +243,7 @@ import {
 } from "./queue.js?v=0.10.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.23.1";
+export const APP_VERSION = "0.24.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -727,7 +734,7 @@ function renderQueue(items, now) {
       iconBtn("✕", "Delete", () => { if (confirm(`Delete "${it.title}"?`)) deleteTask(it.id); })
     ] : it.kind === "stage" ? [
       iconBtn("⏰", "Set/change this stage's hard due date", () =>
-        openDueDialog(it.projectId, it.stageIndex, it.title, it.dueAt))
+        openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex }, `Hard due date — ${it.title}`, it.dueAt))
     ] : [];
     rowScaffold(row, {
       lead, tier: it.tier,
@@ -914,10 +921,10 @@ function projectCard(p) {
     if (st.dueAt) {
       const due = badge(`⏰ ${fmtDay(st.dueAt)}`, "Hard due date — click to change/clear");
       due.classList.add("clickable");
-      due.addEventListener("click", () => openDueDialog(p.id, i, st.name, st.dueAt));
+      due.addEventListener("click", () => openDueDialog({ kind: "stage", projectId: p.id, stageIndex: i }, `Hard due date — ${st.name}`, st.dueAt));
       row.append(due);
     } else if (!st.completedAt) {
-      const setDue = iconBtn("⏰", "Set a hard due date", () => openDueDialog(p.id, i, st.name, null));
+      const setDue = iconBtn("⏰", "Set a hard due date", () => openDueDialog({ kind: "stage", projectId: p.id, stageIndex: i }, `Hard due date — ${st.name}`, null));
       setDue.classList.add("stage-due-btn");
       row.append(setDue);
     }
@@ -1091,9 +1098,10 @@ function clickPoint(ev) {
 
 // ---------- Due-date dialog ----------
 
-function openDueDialog(projectId, stageIndex, stageName, existingDueAt) {
-  S.dueTarget = { projectId, stageIndex };
-  $("#due-title").textContent = `Hard due date — ${stageName}`;
+function openDueDialog(target, label, existingDueAt) {
+  // D84: target = {kind:"stage", projectId, stageIndex} | {kind:"task", taskId}
+  S.dueTarget = target;
+  $("#due-title").textContent = label;
   if (existingDueAt) {
     const d = new Date(existingDueAt);
     $("#due-date").value = toDateInput(d);
@@ -1110,12 +1118,15 @@ function dueSave() {
   const date = $("#due-date").value;
   if (!date || !S.dueTarget) { $("#due-modal").hidden = true; return; }
   const time = $("#due-time").value || "17:00";
-  setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, new Date(`${date}T${time}`).getTime());
+  const ts = new Date(`${date}T${time}`).getTime();
+  if (S.dueTarget.kind === "task") updateTask(S.dueTarget.taskId, { dueAt: ts });
+  else setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, ts);
   $("#due-modal").hidden = true;
 }
 
 function dueClear() {
-  if (S.dueTarget) setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, null);
+  if (S.dueTarget?.kind === "task") updateTask(S.dueTarget.taskId, { dueAt: null }); // → Waiting
+  else if (S.dueTarget) setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, null);
   $("#due-modal").hidden = true;
 }
 
@@ -1297,6 +1308,14 @@ function renderDecision() {
       iconBtn("🕐", `Reschedule to ${fmtDay(target)} 9:00 AM`, () => {
         if (it.kind === "stage") setStageDue(it.projectId, it.deadlineStageIndex, target);
         else updateTask(it.id, { dueAt: target });
+      }),
+      iconBtn("📅", "Pick a date — kick it way down the road", () => {  // D84
+        if (it.kind === "stage") {
+          openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.deadlineStageIndex },
+            `Reschedule — ${it.deadlineStageName}`, it.deadline);
+        } else {
+          openDueDialog({ kind: "task", taskId: it.id }, `Reschedule — ${it.title}`, it.originalDue);
+        }
       })
     );
     list.append(row);
