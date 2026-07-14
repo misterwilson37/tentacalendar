@@ -1,7 +1,11 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.17.1 (banner and data-html-version move together, always)
+     Version 0.17.2 (banner and data-html-version move together, always)
+     0.17.2 (D84): the Mirror field escapes cfg-poll's flex .form-row
+     (three children crammed into one row crushed the poll label into
+     a word-stack — Jake's screenshot). Own block now. app ?v= →
+     0.24.0, css → 0.21.1.
      0.17.1 (D83): app ?v= → 0.23.1. Reference bump only.
      0.17.0 (D82): #earlier box (passed events sink here, today only)
      + #followup-modal (title, amount, minutes/hours/days/weeks unit —
@@ -65,9 +69,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.21.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.21.1">
 </head>
-<body data-html-version="0.17.1">
+<body data-html-version="0.17.2">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -321,9 +325,9 @@
         </div>
         <div class="form-row">
           <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
-          <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
-          <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
         </div>
+        <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
+        <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
         <p class="hint" id="poll-cost-hint"></p>
       </div>
 
@@ -448,6 +452,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.23.1"></script>
+  <script type="module" src="app.js?v=0.24.0"></script>
 </body>
 </html>
