@@ -1,5 +1,5 @@
 # SETUP-PHASE3.md — The Calendar Poll (Cloud Functions, step 1 of 3)
-**Version 0.2.0** | D75/D79/D80/D81 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
+**Version 0.2.1** | D75/D79/D80/D81/D84 | Everything here is browser-only — no CLI, no admin rights, works on the school Mac. Budget: realistically **$0/month** at this scale, but a card is required (Blaze).
 
 **What you get:** every hour, `pollCalendars` reads the Google Calendars attached to your anchor tiers (Home, Business) and mirrors events into `eventsCache`. The web app has been subscribed to that collection since v0.1.0 — events appear in the Today queue (with 30-min pin behavior) the moment the first poll runs. **No client deploy needed.**
 
@@ -88,7 +88,7 @@ curl -H "x-poll-secret: YOUR_SECRET" "https://YOUR-FUNCTION-URL?force=1"
    ⚠️ **Never attach this calendar to a tier.** Mirroring into a polled calendar boomerangs every task back into the queue as its own event. The function refuses if you try, but don't try.
 2. **Share it with the robot, WRITE this time:** calendar Settings and sharing → Share with specific people → the service-account email → permission **"Make changes to events."** (Katie sees it by normal sharing or it just being on the family account.)
 3. Copy its **Calendar ID** (Settings → Integrate calendar — looks like `abc123…@group.calendar.google.com`).
-4. In **Tentacalendar → ⚙️ Settings → Calendar**, paste it into **"Mirror tasks to calendar ID"** → Save. (Requires app v0.22.0.)
+4. In **Tentacalendar → ⚙️ Settings → Timing tab** (there is no Calendar tab — earlier drafts misnamed it), paste it into **"Mirror tasks to calendar ID"** → Save. (Requires app v0.24.0+ — earlier builds crammed this field into the poll row's flexbox and it rendered as word-salad.)
 5. **Re-paste the function:** open the service → Edit source → replace index.js with functions 0.2.0 → Save and redeploy. (package.json unchanged.)
 6. **Update the Scheduler job:** Cloud Scheduler → edit `poll-calendars-hourly` → URL gets `?job=all` appended → save. One hourly ping now polls AND mirrors.
 7. **Test:** `curl -H "x-poll-secret: …" "URL?job=all&force=1"` → the report now nests under `jobs`: `{"jobs":{"poll":{"tiers":…},"mirror":{"active":N,"created":N,…}}}`. Then look at the Tentacalendar calendar in GCal — your dated tasks, as 30-minute blocks.
