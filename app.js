@@ -1,5 +1,16 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.26.0 — "clear the deck, grouped" (D86)
+// 0.26.0: queue ?v= → 0.12.0. D85's blended weight made a U (a 30%-done
+// project outranked a 65%-done one); D86 replaces it with two piles —
+// past-threshold beats catch-up, always. No UI change: same ⚙️ Pipeline
+// setting, same fraction, better sort.
+// Version 0.25.0 — "clear the deck" (D85)
+// 0.25.0: new ⚙️ Pipeline setting — "Clear-the-deck at N% complete"
+// (#cfg-cleardeck, stored as clearDeckThreshold fraction). Below it the
+// queue favors your least-finished projects; at/above it a project flips
+// to "just finish it." Wired to queue.js via setClearDeckThreshold on the
+// config subscription (same pattern as deadlineHour). Tiebreaker only.
 // Version 0.24.0 — "kick it down the road" (D84)
 // 0.24.0: Jake's revised decision — the decision modal now offers BOTH
 // reschedules: 🕐 stays the one-tap next-working-day-9AM, and a new 📅
@@ -235,15 +246,15 @@ import {
   addProject, addProjectWithStages, deleteProject, updateProject,
   setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js?v=0.8.0";
+} from "./store.js?v=0.9.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
-  fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.10.0";
+  setClearDeckThreshold, fmtTime, fmtDay, QUEUE_VERSION
+} from "./queue.js?v=0.12.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.24.0";
+export const APP_VERSION = "0.26.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -452,6 +463,7 @@ function onSignedIn(user) {
   S.unsubs.push(subscribeConfig(c => {
     S.config = c;
     setDeadlineHour(c?.deadlineHour ?? 16); // D51 — queue math follows settings
+    setClearDeckThreshold(c?.clearDeckThreshold ?? 0.6); // D85
     render();
   }));
 }
@@ -2276,6 +2288,7 @@ function openSettings() {
   $("#cfg-mirror-cal").value = c.mirrorCalendarId ?? "";  // D81
   $("#cfg-deadline-hour").value = c.deadlineHour ?? 16;   // D51
   $("#cfg-decision-days").value = c.decisionThresholdDays ?? 2; // D52
+  $("#cfg-cleardeck").value = Math.round((c.clearDeckThreshold ?? 0.6) * 100); // D85
   updatePollCostHint();
   const box = $("#tier-editor");
   box.innerHTML = "";
@@ -2405,7 +2418,8 @@ function onSaveSettings() {
     sleepStart: clampInt($("#cfg-sleep-start").value, 0, 23, 22),
     sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6),
     deadlineHour: clampInt($("#cfg-deadline-hour").value, 0, 23, 16),      // D51
-    decisionThresholdDays: clampInt($("#cfg-decision-days").value, 1, 30, 2) // D52
+    decisionThresholdDays: clampInt($("#cfg-decision-days").value, 1, 30, 2), // D52
+    clearDeckThreshold: clampInt($("#cfg-cleardeck").value, 0, 100, 60) / 100 // D85
   });
   for (const row of document.querySelectorAll(".tier-row")) {
     const kind = row.querySelector(".t-kind").value;
