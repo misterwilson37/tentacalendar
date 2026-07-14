@@ -1,6 +1,9 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.8.0
+// Version 0.9.0
+// 0.9.0 (D85): seed config gains clearDeckThreshold (0.6) — the point
+// where the queue flips a project from "keep abreast" to "clear the
+// deck." Additive; live DBs never reseed, so readers fall back to 0.6.
 // 0.8.0 (D63): tasks carry an optional `notes` string (title stays
 // short, details expand under the row). Additive — missing = none.
 // 0.7.0: rewindFollowUps (D53 un-complete rewind), addProjectWithStages
@@ -25,7 +28,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.8.0";
+export const STORE_VERSION = "0.9.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -111,7 +114,8 @@ async function ensureSeed(user) {
     sleepStart: 22,             // 10 PM
     sleepEnd: 6,                // 6 AM
     deadlineHour: 16,           // D51: computed deadlines are "by 4 PM" (Jake)
-    decisionThresholdDays: 2    // D52: decision modal fires at ≥2 days overdue
+    decisionThresholdDays: 2,   // D52: decision modal fires at ≥2 days overdue
+    clearDeckThreshold: 0.6     // D85: project flips least-done→most-done at 60%
   });
   batch.set(doc(db, "workspaces", WORKSPACE_ID, "settings", "stageTemplate"), {
     stages: SEED_STAGES
