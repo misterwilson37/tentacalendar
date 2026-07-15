@@ -1,6 +1,28 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.33.0 — "on the wall" (D96) — a Y: Today had no ⛶ at all.
+// Version 0.35.0 — GANTESQUE IS DONE (D98). The 5a-bis victories/put-offs
+// cards now render in GANTESQUE, which is where they were always owed —
+// D97 built them and scoped them to Tidal, leaving the 12-turn-old Gantesque
+// debt still open AND making the two layouts un-comparable, which is the one
+// thing Tidal exists for. The cards are layout-agnostic: reflectionCards()
+// is shared, the engine is dayReflection() in queue.js, and each layout only
+// decides WHERE to hang them. Gantesque keeps its day list and gains the
+// cards beneath it; Tidal REPLACES the list with a Wake. That difference is
+// now the actual thing being compared.
+// 0.34.0 — the Tidal Grid + Reflection (D97) — a Y: two things
+// exist that didn't before. (1) THE CARDS 5a-bis promised and D95 built the
+// data for, which nobody had actually rendered: what a day got DONE and what
+// it put off. (2) TIDAL, layout #2 under Week (D90: Gantesque is the LAYOUT,
+// the view stays "Week") — anchor shelf (events: fixed time, not ours) over
+// the flow (tasks + stages: ours to arrange), and past days become a Wake.
+// The two are one engine: the Wake IS the put-offs card.
+// Gantesque is untouched — renderWeekColumns() is the 0.33.0 code verbatim,
+// and it hands the grid tracks back to the stylesheet so Tidal's computed
+// column widths can't leak into it.
+// COST ON THE RECORD: the anchor/flow split breaks D43's chronological
+// interleave (a 9 AM task sits below a noon meeting). That's the thesis —
+// events own time, tasks own a deadline (D93) — and why it's a sibling.
+// 0.33.0 — "on the wall" (D96) — a Y: Today had no ⛶ at all.
 // 0.33.0: one shared toggleFullscreen() for all three views (week and
 // year each had their own copy — which is how Today got forgotten), with
 // webkit* fallbacks because the target is an OLD Android tablet: year's
@@ -319,10 +341,10 @@ import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.14.1";
+} from "./queue.js?v=0.15.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.33.0";
+export const APP_VERSION = "0.35.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -349,6 +371,8 @@ const S = {
   weekMode: ["rolling", "sunday", "monday"].includes(localStorage.getItem("tc-wmode")) ? localStorage.getItem("tc-wmode") : "rolling", // D89
   weekOffset: 0,      // D89: whole weeks from the anchor; 0 = the live week
   weekSize: ["auto", "full", "half", "quarter", "hair"].includes(localStorage.getItem("tc-wsize")) ? localStorage.getItem("tc-wsize") : "auto", // D90
+  weekLayout: ["columns", "tidal"].includes(localStorage.getItem("tc-week-layout")) ? localStorage.getItem("tc-week-layout") : "tidal", // D97 — sibling layouts under Week (D90: Gantesque is the LAYOUT, the view stays "Week")
+  weekCards: localStorage.getItem("tc-wcards") !== "0", // D97 — reflection cards on past days
   weekExpanded: new Set(),   // D91: bars clicked open for a read at compact sizes
   weekStripPct: Math.min(75, Math.max(10, parseFloat(localStorage.getItem("tc-wstrip")) || 34)), // D94
   yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
@@ -395,6 +419,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (b) setWeekMode(b.dataset.wmode);
   });
   window.addEventListener("resize", () => { if (S.view === "week") renderWeek(); }); // D91
+  $("#wv-layouts").addEventListener("click", e => {
+    const b = e.target.closest("button[data-wlayout]");
+    if (b) setWeekLayout(b.dataset.wlayout);
+  });
+  $("#wv-cards-toggle").addEventListener("click", () => {
+    S.weekCards = !S.weekCards;
+    localStorage.setItem("tc-wcards", S.weekCards ? "1" : "0");
+    renderWeek();
+  });
   $("#wv-sizes").addEventListener("click", e => {
     const b = e.target.closest("button[data-size]");
     if (b) setWeekSize(b.dataset.size);
@@ -1698,12 +1731,47 @@ function renderWeek() {
   renderWeekBanners(w);
   renderWeekProjects(w);
 
+  for (const b of document.querySelectorAll("#wv-layouts button")) {
+    b.classList.toggle("active", b.dataset.wlayout === S.weekLayout);
+  }
+  const cardBtn = $("#wv-cards-toggle");
+  cardBtn.classList.toggle("active", S.weekCards);
+  // D98 — reflection is not a Tidal feature. It's the week's feature (5a-bis,
+  // decided round 7, owed since). Both layouts get the toggle.
+
+  // D97 — the two layouts are siblings, not a rewrite. Both consume the same
+  // buildWeek(); each owns only its own DOM. Everything above this line (the
+  // heads, the strips, the splitter, the nav) is shared and untouched.
   const grid = $("#wv-grid");
-  grid.innerHTML = "";
+  grid.innerHTML = "";                       // full teardown every render, as
+  grid.className = "wv-grid l-" + S.weekLayout;  // it always has — no listeners
+                                             // survive it, so there is nothing
+                                             // to leak and nothing to unmount.
+  const anything = S.weekLayout === "tidal"
+    ? renderWeekTidal(w, now, grid)
+    : renderWeekColumns(w, now, grid);
+
+  renderTidalHorizon(w);
+  $("#wv-empty").hidden = anything > 0 || w.projectSpans.length > 0 || w.bannerSpans.length > 0;
+}
+
+/**
+ * D88 — the original: one honest queue per column. The rows, the ordering and
+ * the interleave are the 0.33.0 code, unchanged.
+ *
+ * D98 — and now the cards it was owed. Gantesque ADDS them under its day list
+ * rather than replacing it (that's Tidal's thesis, not this one): the list is
+ * still the day, the cards are what the day came to. That contrast IS the
+ * comparison — same data, same engine, two honest answers to "what is a past
+ * column for."
+ */
+function renderWeekColumns(w, now, grid) {
+  grid.style.gridTemplateColumns = "";   // hand the tracks back to the stylesheet
   let anything = 0;
   for (const col of w.days) {
     const c = document.createElement("div");
-    c.className = "wv-col" + (col.isToday ? " is-today" : "") + (col.isPast ? " is-past" : "");
+    c.className = "wv-col" + (col.isToday ? " is-today" : "") +
+      (col.isPast ? " is-past" : "") + (S.weekCards ? " cards-open" : "");
 
     const list = document.createElement("div");
     list.className = "wv-list";
@@ -1715,9 +1783,270 @@ function renderWeek() {
     }
     for (const it of col.items) { list.append(weekRow(it, now)); anything++; }
     c.append(list);
+
+    if (S.weekCards && (col.isPast || col.isToday) && (col.victories.length || col.putOffs.length)) {
+      const box = reflectionCards(col, now, col.isToday);
+      box.classList.add("in-columns");
+      c.append(box);
+      anything += col.victories.length + col.putOffs.length;
+    }
     grid.append(c);
   }
-  $("#wv-empty").hidden = anything > 0 || w.projectSpans.length > 0 || w.bannerSpans.length > 0;
+  return anything;
+}
+
+/**
+ * D97 — THE TIDAL GRID (layout #2 under Week).
+ *
+ * The idea worth keeping from the blueprint: a day is not one list, it's
+ * three different KINDS of time, and they should not share a container.
+ *   ANCHOR SHELF — events. Fixed time. Not yours to move (they come from
+ *                  Google Calendar). This is D93/§5a's "events own time"
+ *                  rendered as layout rather than as a clock.
+ *   FLOW         — tasks + stages. Flexible time. Yours to arrange.
+ *   WAKE         — what a past day actually did to you.
+ *
+ * NOTE the deliberate cost: separating anchors from the flow BREAKS D43's
+ * chronological interleave (a 9 AM task no longer sits visibly above a noon
+ * meeting). That is the whole point of this layout and the reason it's a
+ * sibling rather than a replacement — Columns keeps the interleave.
+ */
+function renderWeekTidal(w, now, grid) {
+  // The blueprint asked for a smaller flex-basis on past columns. #wv-grid is
+  // CSS GRID, not flex — flex-basis on a grid item is inert, so that rule
+  // would have been a silent no-op. Compression has to come from the track
+  // list, and the track list depends on WHICH days are past, so it's computed
+  // here rather than declared in the stylesheet.
+  //
+  // And it composes with Reflection rather than fighting it: the cards live in
+  // past columns, so squeezing those columns while she's reading them is
+  // backwards (D89 — Jake: "a part of it is also reflecting on the week to
+  // work on next week"). Cards OFF → past days shrink to a summary and hand
+  // their glass to the live days. Cards ON → they get it back. Two controls
+  // that compose, the D94.1 split/Auto pattern.
+  grid.style.gridTemplateColumns = w.days
+    .map(col => (col.isPast && !S.weekCards) ? "0.55fr" : "1fr")
+    .join(" ");
+  let anything = 0;
+  for (const col of w.days) {
+    const c = document.createElement("div");
+    c.className = "wv-col tidal-col" + (col.isToday ? " is-today" : "") +
+      (col.isPast ? " is-past" : "") + (S.weekCards ? " cards-open" : "");
+
+    // --- The Wake: a past day gets reflection, not a to-do list ---
+    if (col.isPast) {
+      c.append(tidalWake(col, now));
+      grid.append(c);
+      anything += col.victories.length + col.putOffs.length;
+      continue;
+    }
+
+    // --- Anchor shelf: fixed time, tinted apart from the flow ---
+    const anchors = col.items.filter(it => it.kind === "event");
+    const shelf = document.createElement("div");
+    shelf.className = "tidal-anchor-shelf" + (anchors.length ? "" : " empty");
+    if (anchors.length) {
+      for (const it of anchors) { shelf.append(weekRow(it, now)); anything++; }
+    } else {
+      shelf.innerHTML = `<span class="tidal-shelf-none">no fixed time</span>`;
+    }
+    shelf.title = "Fixed time — events from Google Calendar. Edit them there.";
+    c.append(shelf);
+
+    // --- Flow: the work that's yours to arrange ---
+    const flow = document.createElement("div");
+    flow.className = "tidal-flow";
+    const work = col.items.filter(it => it.kind === "task" || it.kind === "stage");
+    if (work.length) {
+      for (const it of work) { flow.append(weekRow(it, now)); anything++; }
+    } else {
+      const e = document.createElement("div");
+      e.className = "wv-clear";
+      e.textContent = "clear";
+      flow.append(e);
+    }
+    c.append(flow);
+
+    // Today gets its reflection too (5a-bis: "available for today too") —
+    // a day you're standing in has already put things off by lunchtime.
+    if (col.isToday && S.weekCards && (col.victories.length || col.putOffs.length)) {
+      c.append(reflectionCards(col, now, true));
+    }
+    grid.append(c);
+  }
+  return anything;
+}
+
+/**
+ * The Wake. Gemini's summary counted "planned" and "dropped" — half a week.
+ * Jake asked for BOTH halves: "what she got done, what she didn't, and how
+ * she can better schedule next week to be successful." A card that only
+ * counts failures isn't reflection, it's a scolding.
+ *
+ * D89's rule applies hard here: NO BAR. A number that means what it says.
+ */
+function tidalWake(col, now) {
+  const wrap = document.createElement("div");
+  wrap.className = "tidal-wake";
+
+  const won = col.victories.length, lost = col.putOffs.length;
+  const sum = document.createElement("div");
+  sum.className = "tidal-wake-summary" + (won && !lost ? " all-clear" : "");
+  sum.innerHTML =
+    `<span class="twk-won">${won ? "✓ " + won : "—"}</span>` +
+    `<span class="twk-sep">·</span>` +
+    `<span class="twk-lost${lost ? "" : " none"}">${lost ? "↻ " + lost : "0 left"}</span>`;
+  sum.title = won || lost
+    ? `${won} finished · ${lost} didn't happen`
+    : "Nothing was on this day.";
+  wrap.append(sum);
+
+  if (!S.weekCards) return wrap;
+  if (!won && !lost) {
+    const e = document.createElement("div");
+    e.className = "wv-clear";
+    e.textContent = "";
+    wrap.append(e);
+    return wrap;
+  }
+  wrap.append(reflectionCards(col, now, false));
+  return wrap;
+}
+
+/**
+ * The victories + put-offs cards (5a-bis) — LAYOUT-AGNOSTIC. Gantesque hangs
+ * them under its list, Tidal's Wake is built out of them. Named for what they
+ * are, not for the layout that happened to ship first (D98).
+ */
+function reflectionCards(col, now, isToday) {
+  const box = document.createElement("div");
+  box.className = "refl-cards";
+
+  if (col.victories.length) {
+    const card = document.createElement("div");
+    card.className = "refl-card victories";
+    card.innerHTML = `<div class="refl-head">🏆 ${col.victories.length} done</div>`;
+    for (const v of col.victories) card.append(victoryRow(v));
+    box.append(card);
+  }
+  if (col.putOffs.length) {
+    const card = document.createElement("div");
+    card.className = "refl-card putoffs";
+    card.innerHTML = `<div class="refl-head">↻ ${col.putOffs.length} ${isToday ? "slipping" : "didn't happen"}</div>`;
+    for (const p of col.putOffs) card.append(putOffRow(p));
+    box.append(card);
+  }
+  return box;
+}
+
+function victoryRow(v) {
+  const r = document.createElement("div");
+  r.className = "refl-vrow";
+  r.style.borderLeftColor = v.color;
+  const title = v.kind === "stage" ? `${v.projectName}: ${v.title}` : v.title;
+  r.innerHTML =
+    `<span class="tv-time">${esc(fmtTime(v.at))}</span>` +
+    `<span class="tv-title">${esc(title)}</span>` +
+    (v.moved >= 3 ? `<span class="tv-flag" title="It took ${v.moved} reschedules to land this one.">↻${v.moved}</span>` : "");
+  // 5a-bis: the previous stage's completion IS this one's start — so the
+  // card can say how long it actually took, with no new schema at all.
+  const took = v.startedAt ? `\nStarted ${fmtDay(v.startedAt)} ${fmtTime(v.startedAt)} — ${humanSpan(v.at - v.startedAt)}` : "";
+  r.title = `${title}\nDone ${fmtDay(v.at)} ${fmtTime(v.at)}${took}` +
+    (v.moved ? `\n↻ moved ${v.moved}× before it landed` : "");
+  return r;
+}
+
+function putOffRow(p) {
+  const r = document.createElement("div");
+  r.className = "refl-prow flavor-" + p.flavor + (p.moved >= 3 ? " well-travelled" : "");
+  r.style.borderLeftColor = p.color;
+  const title = p.kind === "stage" ? `${p.projectName}: ${p.title}` : p.title;
+  // Three flavours, three different words. "Didn't happen" is not one thing:
+  // deciding to move it and never looking at it are opposite behaviours and
+  // the card that conflates them can't teach her anything.
+  const tag = p.flavor === "moved" ? `→ ${fmtDay(p.nowDue)}`
+    : p.flavor === "shelved" ? "→ shelved"
+      : "still open";
+  r.innerHTML =
+    `<span class="tp-title">${esc(title)}</span>` +
+    `<span class="tp-tag">${esc(tag)}</span>` +
+    (p.moved ? `<span class="tp-moved">↻${p.moved}</span>` : "");
+  r.title = `${title}\n` +
+    (p.flavor === "moved" ? `Was due ${fmtDay(p.firstDue)} — now due ${fmtDay(p.nowDue)}`
+      : p.flavor === "shelved" ? `Was due ${fmtDay(p.firstDue)} — shelved to "Waiting on…"`
+        : `Was due ${fmtDay(p.firstDue)} ${fmtTime(p.firstDue)} and still is. Nobody moved it.`) +
+    (p.moved ? `\n↻ moved ${p.moved}× since ${fmtDay(p.firstDue)}` : "") +
+    (p.kind === "task" ? "\n\nClick to reschedule." : "");
+  if (p.kind === "task") {
+    r.classList.add("clickable");
+    r.addEventListener("click", () =>
+      openDueDialog({ kind: "task", taskId: p.id }, `Reschedule — ${p.title}`, p.nowDue ?? p.firstDue));
+  }
+  return r;
+}
+
+function humanSpan(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m} min`;
+  const h = m / 60;
+  if (h < 24) return `${h % 1 ? h.toFixed(1) : h} h`;
+  const d = Math.round(h / 24);
+  return `${d} day${d === 1 ? "" : "s"}`;
+}
+
+/**
+ * D97 — THE HORIZON: pending inventory, spanning the whole week.
+ *
+ * Gemini specced "items from the waiting array … visible as pending inventory
+ * for the week." Two very different animals live in that array and the
+ * distinction is load-bearing: a FOLLOW-UP (D4) has no date because it
+ * physically cannot be scheduled — it materialises when its parent is checked
+ * off — while a SHELVED task (D84) has no date because she said "not now."
+ * Only the second is inventory. Presenting a blocked follow-up as available
+ * work invites her to plan around something that isn't hers to plan.
+ */
+function renderTidalHorizon(w) {
+  const box = $("#tidal-horizon");
+  box.innerHTML = "";
+  const show = S.weekLayout === "tidal" && w.waiting.length;
+  box.hidden = !show;
+  if (!show) return;
+
+  const free = w.waiting.filter(t => !t.blocked);
+  const blocked = w.waiting.filter(t => t.blocked);
+
+  const label = document.createElement("span");
+  label.className = "th-label";
+  label.textContent = "Horizon";
+  label.title = "Undated work. Nothing here is on the week yet.";
+  box.append(label);
+
+  for (const t of free) {
+    const chip = document.createElement("span");
+    chip.className = "th-chip clickable";
+    chip.style.borderColor = t.tier?.color || "#4dd0c4";
+    chip.textContent = t.title;
+    chip.title = `${t.title}\nShelved — no date.` +
+      (t.moved ? `\n↻ moved ${t.moved}× · first due ${fmtDay(t.firstDue)}` : "") +
+      "\n\nClick to give it a date.";
+    if (t.moved >= 3) chip.classList.add("well-travelled");
+    chip.addEventListener("click", () =>
+      openDueDialog({ kind: "task", taskId: t.id }, `Schedule — ${t.title}`, null));
+    box.append(chip);
+  }
+  for (const t of blocked) {
+    const chip = document.createElement("span");
+    chip.className = "th-chip blocked";
+    chip.textContent = t.title;
+    chip.title = `${t.title}\nWaiting on its parent task — it gets a date automatically when the parent is checked off${t.offsetDays != null ? ` (+${t.offsetDays}d)` : ""}.\n\nNot yours to schedule.`;
+    box.append(chip);
+  }
+}
+
+function setWeekLayout(v) {
+  S.weekLayout = v;
+  localStorage.setItem("tc-week-layout", v);
+  renderWeek();
 }
 
 /** D89 — the dates, at the top, where a calendar puts them. They were
@@ -1733,6 +2062,24 @@ function renderWeekDayHeads(w) {
     // the busiest day" in the visual language of "40% done" (Jake: "we're
     // unclear as to what that means"). Two numbers that mean what they say.
     const left = col.load.total, missed = col.load.expired;
+    // D98 — a past day's honest headline is not "N left", it's what happened:
+    // what you finished and what you didn't. "N left" is a FUTURE word, and on
+    // a day that's gone it was quietly lying (and `missed` is always 0 back
+    // there — expired is viewingToday-gated, D97). Live days keep D89's words.
+    if (col.isPast) {
+      const won = col.load.done, lost = col.load.putOff;
+      h.innerHTML =
+        `<span class="wv-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>` +
+        `<span class="wv-date">${d.getDate()}</span>` +
+        (won ? `<span class="wv-done">✓${won}</span>` : "") +
+        (lost ? `<span class="wv-putoff">↻${lost}</span>` : "") +
+        (!won && !lost ? `<span class="wv-left none">—</span>` : "");
+      h.title = won || lost
+        ? `${won} finished · ${lost} didn't happen`
+        : "Nothing was on this day.";
+      bar.append(h);
+      continue;
+    }
     h.innerHTML =
       `<span class="wv-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>` +
       `<span class="wv-date">${d.getDate()}</span>` +
