@@ -1,5 +1,16 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.29.0 — "the board makes room" (D90)
+// 0.29.0: HEIGHT. Eleven project bars pushed the day columns off the
+// screen — #wv-sizes (Auto/▮/▪/▁/🧵) thins them, Auto stepping down as
+// the list grows so the columns always get room. Banners pack DENSE (a
+// 2-event Friday was taking a 3rd row because CSS grid's sparse cursor
+// never walks backward — Jake and Katie both spotted the wasted row).
+// Rows are clickable → reschedule; the deadline block finally hovers
+// (I had written its tooltip and then killed it with pointer-events:
+// none). NAV-SLOTS in all three views: "back to now" sits on the side
+// matching its direction of travel and the arrows NEVER move — three
+// clicks forward is three clicks forward (Jake, app-wide design flag).
 // Version 0.28.0 — "Gantesque" (D89) — Jake's five, from real data
 // 0.28.0: (1) project bars sort by PRIORITY, not the alphabet. (2) dates
 // get a header row ABOVE the strips, where a date is expected. (3) the
@@ -273,10 +284,10 @@ import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.14.0";
+} from "./queue.js?v=0.14.1";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.28.0";
+export const APP_VERSION = "0.29.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -302,6 +313,7 @@ const S = {
   view: ["year", "week", "day"].includes(localStorage.getItem("tc-view")) ? localStorage.getItem("tc-view") : "day", // D65/D88 (persists per device)
   weekMode: ["rolling", "sunday", "monday"].includes(localStorage.getItem("tc-wmode")) ? localStorage.getItem("tc-wmode") : "rolling", // D89
   weekOffset: 0,      // D89: whole weeks from the anchor; 0 = the live week
+  weekSize: ["auto", "full", "half", "quarter", "hair"].includes(localStorage.getItem("tc-wsize")) ? localStorage.getItem("tc-wsize") : "auto", // D90
   yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
   yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
   yearZoom: null,          // D18 month zoom: month-start ts, or null for the 12-month grid
@@ -344,6 +356,10 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#wv-modes").addEventListener("click", e => {
     const b = e.target.closest("button[data-wmode]");
     if (b) setWeekMode(b.dataset.wmode);
+  });
+  $("#wv-sizes").addEventListener("click", e => {
+    const b = e.target.closest("button[data-size]");
+    if (b) setWeekSize(b.dataset.size);
   });
   $("#wv-fullscreen").addEventListener("click", () => {
     if (document.fullscreenElement) document.exitFullscreen();
@@ -630,7 +646,7 @@ function render() {
 
   const sameDay = new Date(S.viewDay).toDateString() === new Date(now).toDateString();
   $("#day-label").textContent = sameDay ? `Today — ${fmtDay(S.viewDay)}` : fmtDay(S.viewDay);
-  $("#day-today").hidden = sameDay;
+  placeNowButton("day", sameDay ? 0 : (startOfDayTs(S.viewDay) > startOfDayTs(now) ? 1 : -1)); // D90
 
   renderPinned(q.pinned, now);
   renderQueue(q.items, now);
@@ -1574,6 +1590,25 @@ function setView(v) {
 // Spans live up top (projects + all-day), dated things live in columns.
 // Sized for a 55" 4K wall: ~137px columns, big type, nothing hover-only.
 
+/**
+ * D90 — "back to now" belongs on the side it TAKES you. You're in the
+ * future, so going back is a move LEFT: the button sits by ◀. You're in
+ * the past, so going back is a move FORWARD: it sits by ▶. And because
+ * both slots are fixed-width in CSS, the arrows do not budge whether the
+ * button is showing or not — Jake: "if I know I want to move forward
+ * three weeks, I expect to be able to just click three times," not
+ * forward / back-to-now / forward. Same flaw, all three views.
+ * dir: 1 = we're in the future, -1 = in the past, 0 = we're at now.
+ */
+function placeNowButton(prefix, dir) {
+  const btn = $("#" + prefix + "-today");
+  if (!btn) return;
+  btn.hidden = dir === 0;
+  if (dir === 0) return;
+  const slot = $("#" + prefix + (dir > 0 ? "-slot-back" : "-slot-fwd"));
+  if (slot && btn.parentElement !== slot) slot.append(btn);
+}
+
 function weekAnchor() {
   return weekAnchorFor(S.weekMode, Date.now(), S.weekOffset); // D89
 }
@@ -1588,9 +1623,12 @@ function renderWeek() {
   const live = S.weekOffset === 0;
   const lead = S.weekMode === "rolling" && live ? "Next 7 days — " : "";
   $("#wv-label").textContent = `${lead}${fmtDay(w.days[0].dayStart)} → ${fmtDay(w.days[6].dayStart)}`;
-  $("#wv-today").hidden = live;
+  placeNowButton("wv", live ? 0 : (S.weekOffset > 0 ? 1 : -1)); // D90
   for (const b of document.querySelectorAll("#wv-modes button")) {
     b.classList.toggle("active", b.dataset.wmode === S.weekMode);
+  }
+  for (const b of document.querySelectorAll("#wv-sizes button")) {
+    b.classList.toggle("active", b.dataset.size === S.weekSize);
   }
   renderWeekDayHeads(w);
 
@@ -1662,9 +1700,29 @@ function weekRow(it, now) {
     `<span class="wv-when">${it.expired ? "❗" : ""}${esc(when)}</span>` +
     `<span class="wv-title">${esc(title)}</span>` +
     (sub ? `<span class="wv-sub">${esc(sub)}</span>` : "");
-  row.title = it.kind === "stage"
-    ? `${it.projectName} — ${it.title}${it.expired ? " (MISSED)" : ""}\nDue ${fmtDay(it.originalDue ?? it.time)} ${fmtTime(it.originalDue ?? it.time)}`
-    : `${title}${it.expired ? " (MISSED)" : ""}\n${fmtDay(it.time)} ${when}`;
+  // D90 — the full name lives in the hover, because 137px columns will
+  // always truncate ("Chec…" is not a thing anyone can act on), and the
+  // click reschedules, because "not gonna do it today" is the single most
+  // common thing you want to say to a board (Jake).
+  if (it.kind === "stage") {
+    row.title = `${it.projectName} — ${it.title}${it.expired ? "  ❗MISSED" : ""}` +
+      `\nDue ${fmtDay(it.originalDue ?? it.time)} ${fmtTime(it.originalDue ?? it.time)}` +
+      `\n\nClick to change this stage's due date.`;
+    row.classList.add("clickable");
+    row.addEventListener("click", () =>
+      openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex },
+        `Hard due date — ${it.title}`, it.dueAt ?? null));
+  } else if (it.kind === "task") {
+    row.title = `${title}${it.expired ? "  ❗MISSED" : ""}\n${fmtDay(it.time)} ${when}` +
+      (it.notes ? `\n\n${it.notes}` : "") +
+      `\n\nClick to reschedule.`;
+    row.classList.add("clickable");
+    row.addEventListener("click", () =>
+      openDueDialog({ kind: "task", taskId: it.id }, `Reschedule — ${it.title}`, it.originalDue ?? it.time));
+  } else {
+    // Events come FROM Google Calendar — this app doesn't own them.
+    row.title = `${title}\n${fmtDay(it.time)} ${when}\n\n(from Google Calendar — edit it there)`;
+  }
   return row;
 }
 
@@ -1729,8 +1787,15 @@ function renderWeekProjects(w) {
       dot.title = `${pip.name} — ${pip.done ? "done" : "due"} ${fmtDay(w.days[pip.dayIdx].dayStart)}`;
       el.append(dot);
     }
-    el.title = `${p.name} — ${p.done}/${p.total} stages (${pct}%)\nNow: ${p.activeStageName}` +
-      (p.deckRank === 0 ? "\n🏁 past the clear-the-deck line — finish it" : "");
+    el.title = `${p.name} — ${p.done}/${p.total} stages (${pct}%)` +
+      `\nNow: ${p.activeStageName}` +
+      `\n${p.expired ? "❗MISSED — was due" : "Next deadline:"} ${p.deadlineStageName}, ${fmtDay(p.deadlineAt)} ${fmtTime(p.deadlineAt)}` +
+      (p.deckRank === 0 ? "\n🏁 past the clear-the-deck line — finish it" : "") +
+      "\n\nClick to set this stage's due date.";
+    el.classList.add("clickable"); // D90
+    el.addEventListener("click", () =>
+      openDueDialog({ kind: "stage", projectId: p.id, stageIndex: p.activeStageIndex },
+        `Hard due date — ${p.activeStageName}`, null));
     strip.append(el);
   }
 }
@@ -2164,7 +2229,7 @@ function renderYear() {
       ? String(a1.getFullYear())
       : `${a1.toLocaleDateString([], { month: "short", year: "numeric" })} – ${a2.toLocaleDateString([], { month: "short", year: "numeric" })}`;
   }
-  $("#yv-today").hidden = S.yearOffset === 0 && S.yearZoom == null;
+  placeNowButton("yv", (S.yearOffset === 0 && S.yearZoom == null) ? 0 : (S.yearOffset > 0 ? 1 : -1)); // D90
   $("#yv-unzoom").hidden = S.yearZoom == null;
   $("#yv-modes").querySelectorAll("button").forEach(b =>
     b.classList.toggle("active", b.dataset.mode === S.yearMode));
