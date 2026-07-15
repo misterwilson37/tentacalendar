@@ -1,7 +1,11 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.24.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.25.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.25.0 (D91): #week-view height is pinned from JS (100% against a
+   parent with no height resolved to auto — that's why the day columns
+   walked off the bottom); .forced-full for a bar clicked open at compact
+   sizes; #wv-projects[data-size="full"] is now explicit.
    0.24.0 (D90): .nav-slot (fixed-width, so ◀ ▶ never move when "back to
    now" appears — all three views); #wv-projects[data-size] bar heights;
    .wv-strip packs DENSE (grid's sparse cursor never backtracks, so a
@@ -102,7 +106,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.24.0";
+  --tc-version: "0.25.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -752,6 +756,7 @@ body.celebration-wave::after {
 
 /* D90 — bar heights. Auto thins as the list grows; the DAYS are the
    board's job and the bars are context. */
+#wv-projects[data-size="full"] .wv-proj { padding: .3rem .5rem .55rem; }
 #wv-projects[data-size="half"] .wv-proj { padding: .12rem .4rem .34rem; }
 #wv-projects[data-size="half"] .wv-proj-next { display: none; }
 #wv-projects[data-size="quarter"] .wv-proj { padding: .02rem .35rem .26rem; }
@@ -767,6 +772,18 @@ body.celebration-wave::after {
 #wv-projects[data-size="hair"] .wv-proj-pct { display: none; }
 #wv-projects[data-size="hair"] .wv-dl { border-width: 1px; }
 
+/* D91 — clicked open for a read. Beats every [data-size] rule above on
+   specificity (id + 2 classes), and is allowed to grow past its slot:
+   being readable matters more than being tidy (Jake). */
+#wv-projects .wv-proj.forced-full {
+  padding: .3rem .5rem .55rem; min-height: 0; overflow: visible;
+  box-shadow: inset 0 0 0 1px var(--accent); z-index: 2;
+}
+#wv-projects .wv-proj.forced-full .wv-proj-name,
+#wv-projects .wv-proj.forced-full .wv-proj-next,
+#wv-projects .wv-proj.forced-full .wv-proj-pct { display: inline; }
+#wv-projects .wv-proj.forced-full .wv-proj-name { font-size: clamp(.72rem, .58vw, 1.5rem); }
+
 .wv-sizes { display: flex; align-items: center; gap: .2rem; margin-left: .8rem; }
 .wv-sizes button { padding: .2rem .45rem; font-size: .72rem; opacity: .55; }
 .wv-sizes button.active {
@@ -774,8 +791,14 @@ body.celebration-wave::after {
 }
 
 /* Safety net: the strips may never eat the whole board. */
-#wv-strips { max-height: 46vh; overflow-y: auto; }
-#wv-grid { min-height: 12rem; }
+/* D91 — the ladder does its best, but 🧵 is the floor: enough bars will
+   still overflow it (50 hairs need 700px). So CSS is the BACKSTOP — the
+   strips may never take more than 38% of the board, and scroll instead.
+   The day columns are the board's job; the bars are context. This is a
+   % of a DEFINITE height, which only works because fitWeekHeight() pins
+   #week-view — before that, this rule would have silently done nothing. */
+#wv-strips { flex: 0 1 auto; max-height: 38%; min-height: 0; overflow-y: auto; }
+#wv-grid { flex: 1 1 auto; min-height: 8rem; }
 
 .view-switch { display: flex; gap: .2rem; }
 .view-switch button {
@@ -797,10 +820,14 @@ body.celebration-wave::after {
   opacity: 1; box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent);
 }
 
+/* D91 — height comes from fitWeekHeight() in JS, not from height:100%.
+   #app-screen has no height of its own, so 100% resolved to auto: the
+   section grew to fit its content, #wv-grid's flex:1 had nothing to
+   divide, and the columns ran off the bottom of the window. */
 #week-view {
   display: flex; flex-direction: column;
   gap: .6rem; padding: .8rem 1rem 1.2rem;
-  height: 100%; min-height: 0;
+  min-height: 0; overflow: hidden;
 }
 
 .wv-nav { display: flex; align-items: center; gap: .5rem; }
