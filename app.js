@@ -1,5 +1,23 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.33.0 — "on the wall" (D96) — a Y: Today had no ⛶ at all.
+// 0.33.0: one shared toggleFullscreen() for all three views (week and
+// year each had their own copy — which is how Today got forgotten), with
+// webkit* fallbacks because the target is an OLD Android tablet: year's
+// copy would have THROWN there, week's would have failed silently.
+// Pairs with manifest.json (html 0.25.0): Add to Home Screen kills the
+// address bar, ⛶ kills the rest, and Android screen-pinning locks it
+// down needing nothing from us.
+// Version 0.32.0 — "it remembers being moved" (D95) — a Y: this is new.
+// 0.32.0: tasks carry firstDueAt + rescheduleCount (store 0.10.0). The
+// hover shows "↻ moved 4× · first due Jul 10"; anything moved 3+ times
+// wears a quiet mark, because a task that keeps sliding is the question
+// worth asking. No migration — firstDueAt ?? dueAt IS the backfill.
+// Version 0.31.1 — "spend the glass" (D94) — a Z, not a Y (D94 rule):
+// old ideas finally behaving, not new ones. Draggable projects/days
+// split (double-click resets); Auto now refits the bars into whatever
+// share you chose instead of assuming a third. Row time+title finally
+// share a centre line.
 // Version 0.31.0 — "click to read, click to fold" (D92)
 // 0.31.0: D91 expanded a bar on click and left no way back (Jake). Now
 // one rule, no timing: at compact sizes a click TOGGLES expand/collapse
@@ -292,11 +310,11 @@ import {
   watchAuth, signIn, signOutUser, STORE_VERSION,
   subscribeTiers, subscribeTasks, subscribeEvents, subscribeConfig,
   subscribeProjects, subscribeStageTemplate,
-  addTask, addFollowUp, setTaskDone, deleteTask, updateTask, rewindFollowUps,
+  addTask, addFollowUp, setTaskDone, deleteTask, updateTask, rewindFollowUps, taskFirstDue,
   addProject, addProjectWithStages, deleteProject, updateProject,
   setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js?v=0.9.0";
+} from "./store.js?v=0.10.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -304,7 +322,7 @@ import {
 } from "./queue.js?v=0.14.1";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.31.0";
+export const APP_VERSION = "0.33.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -332,6 +350,7 @@ const S = {
   weekOffset: 0,      // D89: whole weeks from the anchor; 0 = the live week
   weekSize: ["auto", "full", "half", "quarter", "hair"].includes(localStorage.getItem("tc-wsize")) ? localStorage.getItem("tc-wsize") : "auto", // D90
   weekExpanded: new Set(),   // D91: bars clicked open for a read at compact sizes
+  weekStripPct: Math.min(75, Math.max(10, parseFloat(localStorage.getItem("tc-wstrip")) || 34)), // D94
   yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
   yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
   yearZoom: null,          // D18 month zoom: month-start ts, or null for the 12-month grid
@@ -380,10 +399,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const b = e.target.closest("button[data-size]");
     if (b) setWeekSize(b.dataset.size);
   });
-  $("#wv-fullscreen").addEventListener("click", () => {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else document.documentElement.requestFullscreen?.();
-  });
+  $("#wv-fullscreen").addEventListener("click", toggleFullscreen);   // D96
+  $("#day-fullscreen").addEventListener("click", toggleFullscreen);  // D96 — Today had none
 
   $("#yv-today").addEventListener("click", () => { S.yearOffset = 0; S.yearZoom = null; renderYear(); });
   $("#yv-unzoom").addEventListener("click", () => { S.yearZoom = null; renderYear(); });
@@ -406,10 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("tc-year-barsize", S.yearBarSize);
       renderYear();
     }));
-  $("#yv-fullscreen").addEventListener("click", () => {  // D71: reclaim the browser chrome
-    if (document.fullscreenElement) document.exitFullscreen();
-    else document.documentElement.requestFullscreen().catch(() => {});
-  });
+  $("#yv-fullscreen").addEventListener("click", toggleFullscreen);  // D71/D96
   document.addEventListener("fullscreenchange", () => { if (S.view === "year") renderYear(); });
   $("#yv-add-project").addEventListener("click", openYvProjectModal);
   $("#yv-project-close").addEventListener("click", closeYvProjectModal);
@@ -1587,6 +1601,33 @@ function hexToRgb(hex) {
 let yvTapSquelch = false; // a completed drag must not fire the tap popover
 let yvDragging = false;
 
+/**
+ * D96 — ONE fullscreen toggle for all three views. Today had no ⛶ at all;
+ * week and year each carried their own copy, which is exactly how the
+ * third one never got written.
+ *
+ * The webkit* fallbacks aren't decoration — the target is an OLD Android
+ * tablet. The year view's copy called `requestFullscreen()` unguarded,
+ * which THROWS a TypeError where the unprefixed API doesn't exist; the
+ * week's used `?.()`, which fails SILENTLY — the worst outcome for a
+ * button whose whole job is to visibly do something. Try prefixed, and
+ * say so in the console if the browser refuses.
+ */
+function toggleFullscreen() {
+  const el = document.documentElement;
+  const on = document.fullscreenElement || document.webkitFullscreenElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  try {
+    if (on) { if (exit) exit.call(document); return; }
+    if (!req) { console.warn("No Fullscreen API here — try Add to Home Screen, or Android screen pinning."); return; }
+    const r = req.call(el);
+    if (r && r.catch) r.catch(e => console.warn("fullscreen refused:", e));
+  } catch (e) {
+    console.warn("fullscreen refused:", e);
+  }
+}
+
 function startOfDayTs(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
 function setView(v) {
@@ -1634,6 +1675,8 @@ function weekAnchor() {
 
 function renderWeek() {
   fitWeekHeight();          // D91 — measure BEFORE weekBarSize() asks how tall we are
+  applyStripShare();        // D94 — ...and before it asks how much of it is ours
+  wireWeekSplitter();
   const now = Date.now();
   const w = buildWeek({
     tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
@@ -1733,9 +1776,15 @@ function weekRow(it, now) {
       openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex },
         `Hard due date — ${it.title}`, it.dueAt ?? null));
   } else if (it.kind === "task") {
+    // D95 — the history, where she'll actually look at it. A thing that's
+    // moved five times is the question, not the answer.
+    const moved = it.raw?.rescheduleCount || 0;
+    const first = taskFirstDue(it.raw);
     row.title = `${title}${it.expired ? "  ❗MISSED" : ""}\n${fmtDay(it.time)} ${when}` +
+      (moved ? `\n↻ moved ${moved}×${first && first !== it.originalDue ? ` · first due ${fmtDay(first)}` : ""}` : "") +
       (it.notes ? `\n\n${it.notes}` : "") +
       `\n\nClick to reschedule.`;
+    if (moved >= 3) row.classList.add("well-travelled");
     row.classList.add("clickable");
     row.addEventListener("click", () =>
       openDueDialog({ kind: "task", taskId: it.id }, `Reschedule — ${it.title}`, it.originalDue ?? it.time));
@@ -1777,7 +1826,7 @@ function weekBarSize(n) {
   if (S.weekSize !== "auto") return S.weekSize;
   if (!n) return "full";
   const board = $("#week-view").clientHeight || window.innerHeight || 800;
-  const budget = board * 0.34;                 // strips may have a third
+  const budget = board * (S.weekStripPct / 100);   // D94: Jake owns the split; Auto refits into it
   for (const k of ["full", "half", "quarter"]) {
     if (n * (BAR_PX[k] + 5) <= budget) return k;
   }
@@ -1799,6 +1848,44 @@ function setWeekSize(v) {
  * left under the header and pin it. offsetTop is stable because it depends
  * on the header, not on us — no layout feedback loop.
  */
+/** D94 — the split is Jake's to set. A quarter of a 4K screen is a whole
+ *  1080p screen, so "Auto" was never about making bars small — it's about
+ *  spending the glass, and only the human knows how they want it spent.
+ *  Auto then refits the bars into whatever share is left. */
+function applyStripShare() {
+  const strips = $("#wv-strips");
+  if (strips) strips.style.setProperty("--wv-strip", S.weekStripPct + "%");
+}
+
+function wireWeekSplitter() {
+  const bar = $("#wv-split");
+  if (!bar || bar.dataset.wired) return;
+  bar.dataset.wired = "1";
+  let dragging = false;
+  bar.addEventListener("pointerdown", e => {
+    dragging = true; bar.setPointerCapture(e.pointerId); bar.classList.add("dragging");
+    e.preventDefault();
+  });
+  bar.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    const board = $("#week-view");
+    const top = $("#wv-strips").getBoundingClientRect().top;
+    const h = board.clientHeight || 1;
+    const pct = Math.max(10, Math.min(75, ((e.clientY - top) / h) * 100));
+    S.weekStripPct = pct;
+    applyStripShare();
+  });
+  const stop = () => {
+    if (!dragging) return;
+    dragging = false; bar.classList.remove("dragging");
+    localStorage.setItem("tc-wstrip", String(Math.round(S.weekStripPct)));
+    renderWeek();   // Auto re-picks a bar size for the new share
+  };
+  bar.addEventListener("pointerup", stop);
+  bar.addEventListener("pointercancel", stop);
+  bar.addEventListener("dblclick", () => { S.weekStripPct = 34; applyStripShare(); localStorage.setItem("tc-wstrip", "34"); renderWeek(); });
+}
+
 function fitWeekHeight() {
   const sec = $("#week-view");
   if (!sec || sec.hidden) return;
