@@ -1,6 +1,15 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.12.0
+// Version 0.13.0
+// 0.13.0 (D88): buildWeek() — N honest days (one buildQueue per column,
+// so expiry/off-days/the D86 piles all come free) + the two spanning
+// strips: projectSpans (bars with stage pips) and bannerSpans (one bar
+// per all-day event). Projects DON'T repeat down the columns: D48 rides
+// them through their whole window, which would render a 3-month project
+// seven times — a stage row lands only on its deadline day (plus today
+// if expired), and the SPAN goes up top where a span belongs. Also
+// addDaysLocal(): calendar day-stepping, because ts+DAY_MS repeats a
+// date across DST fall-back and would drop a day from the week.
 // 0.12.0 (D86): the clear-deck tiebreaker is now GROUPED, not blended.
 // D85 multiplied workload by pct-or-1-pct, which made a U: urgency rose
 // at both ends and SAGGED in the middle, so a 30%-done project outranked
@@ -38,7 +47,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.12.0";
+export const QUEUE_VERSION = "0.13.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -283,6 +292,26 @@ export function isPinned(event, now) {
 }
 
 function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+
+/**
+ * Calendar-safe day step, always landing on a LOCAL midnight.
+ * Do not replace with `ts + n*DAY_MS`: across a fall-back boundary that
+ * day is 25 hours, so Nov 1 00:00 + DAY_MS = Nov 1 23:00 — startOfDay
+ * would hand back Nov 1 AGAIN and the week would show a duplicate day
+ * and silently drop one. setDate() walks the calendar, which is what a
+ * week actually is. (Nashville observes DST; TZ is America/Chicago.)
+ */
+export function addDaysLocal(ts, n) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + n);
+  return d.getTime();
+}
+
+/** Whole days from local midnight `from` to the day containing `ts`. */
+function dayOffset(from, ts) {
+  return Math.round((startOfDay(ts) - startOfDay(from)) / DAY_MS); // rounding absorbs DST's ±1h
+}
 function endOfDay(ts) { return startOfDay(ts) + DAY_MS; }
 
 // ---------- The queue ----------
@@ -435,6 +464,135 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
   waiting.sort((a, b) => rankOf(a.tierId) - rankOf(b.tierId));
 
   return { pinned, items, waiting, doneToday, banners, passedEvents };
+}
+
+/**
+ * D88 — THE WEEK. Seven (or N) honest days plus the two spanning strips.
+ *
+ * buildQueue owns the truth for a single day, so this calls it once per
+ * column: expiry, D61 off-day tiers, escalation slots, the D86 piles and
+ * the whole sort come along for free. What this adds is everything that
+ * only exists ACROSS days.
+ *
+ * PROJECTS DO NOT REPEAT DOWN THE COLUMNS. D48 rides a project through
+ * every day of its pipeline window, which is right for "what could I
+ * touch today?" and wrong for a week — a 3-month project would render in
+ * all seven columns. So a stage row appears ONLY on the day its deadline
+ * actually lands (plus today, if it's expired — a missed thing must not
+ * vanish just because we changed views). The project's SPAN lives in the
+ * top strip instead, where a span belongs.
+ *
+ * Returns:
+ *   days[]        — { dayStart, isToday, isPast, items, load, passedEvents }
+ *   projectSpans  — bars for the top strip, with stage pips per day index
+ *   bannerSpans   — all-day events as one bar each, not one pill per day
+ * Both span lists carry fromIdx/toIdx CLIPPED to the window, plus
+ * clippedLeft/clippedRight so the UI can show "this continues offscreen"
+ * rather than lying about a start date.
+ */
+export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay, days = 7, hiddenTierIds = new Set() }) {
+  const start = startOfDay(anchorDay);
+  const today = startOfDay(now);
+  const weekEndEx = addDaysLocal(start, days); // exclusive
+  const hidden = id => hiddenTierIds.has(id);
+  const tierById = {};
+  tiers.forEach(t => { tierById[t.id] = t; });
+
+  const cols = [];
+  for (let i = 0; i < days; i++) {
+    const dayStart = addDaysLocal(start, i);
+    const dayEnd = addDaysLocal(start, i + 1);
+    const isToday = dayStart === today;
+    const q = buildQueue({ tasks, events, tiers, projects, now, viewDay: dayStart, hiddenTierIds });
+
+    const items = q.items.filter(it => {
+      if (it.kind !== "stage") return true;
+      if (isToday && it.expired) return true;                   // missed: still shouts
+      return it.deadline >= dayStart && it.deadline < dayEnd;   // otherwise: only on its day
+    });
+
+    cols.push({
+      dayStart,
+      isToday,
+      isPast: dayStart < today,
+      items,
+      passedEvents: isToday ? q.passedEvents : [],
+      load: {
+        total: items.length,
+        expired: items.filter(it => it.expired).length,
+        events: items.filter(it => it.kind === "event").length,
+        tasks: items.filter(it => it.kind === "task").length,
+        stages: items.filter(it => it.kind === "stage").length
+      }
+    });
+  }
+
+  // --- Project bars (top strip) ---
+  const projectSpans = [];
+  for (const p of projects) {
+    if (hidden(p.tierId)) continue;
+    const stages = p.stages || [];
+    if (!stages.length) continue;
+    const activeIdx = stages.findIndex(s => !s.completedAt);
+    if (activeIdx === -1) continue; // finished projects don't need a bar
+    const allowedDays = tierById[p.tierId]?.allowedDays; // D60
+    const [first, last] = projectPipelineWindow(p, allowedDays);
+    const s0 = startOfDay(first), s1 = startOfDay(last);
+    if (s1 < start || s0 >= weekEndEx) continue; // not this week
+    const rawFrom = dayOffset(start, s0), rawTo = dayOffset(start, s1);
+
+    const pips = [];
+    stages.forEach((st, idx) => {
+      if (!stageIsDated(st)) return;
+      const when = stageEffectiveDate(p, st, allowedDays);
+      if (when == null) return;
+      const off = dayOffset(start, when);
+      if (off < 0 || off >= days) return;
+      pips.push({ dayIdx: off, name: st.name, index: idx, done: !!st.completedAt, isActive: idx === activeIdx });
+    });
+
+    const prog = projectProgress(p);
+    projectSpans.push({
+      id: p.id, name: p.name, color: p.color,
+      tier: tierById[p.tierId] || null,
+      fromIdx: Math.max(0, rawFrom),
+      toIdx: Math.min(days - 1, rawTo),
+      clippedLeft: rawFrom < 0,
+      clippedRight: rawTo > days - 1,
+      pct: prog.pct, done: prog.done, total: prog.total,
+      deckRank: deckRank(p),
+      activeStageName: stages[activeIdx].name,
+      pips
+    });
+  }
+  projectSpans.sort((a, b) => (a.fromIdx - b.fromIdx) || String(a.name).localeCompare(String(b.name)));
+
+  // --- All-day banners (top strip): ONE bar per event, not a pill per day ---
+  const bannerSpans = [];
+  for (const e of events) {
+    if (!e.allDay || hidden(e.tierId)) continue;
+    const s0 = startOfDay(e.start);
+    const endEx = e.end || addDaysLocal(s0, 1);
+    const s1 = startOfDay(endEx - 1); // inclusive last day
+    if (s1 < start || s0 >= weekEndEx) continue;
+    const rawFrom = dayOffset(start, s0), rawTo = dayOffset(start, s1);
+    bannerSpans.push({
+      id: e.id, title: e.title,
+      tier: tierById[e.tierId] || null,
+      start: e.start, end: e.end || null,
+      fromIdx: Math.max(0, rawFrom),
+      toIdx: Math.min(days - 1, rawTo),
+      clippedLeft: rawFrom < 0,
+      clippedRight: rawTo > days - 1,
+      dayTotal: Math.max(1, dayOffset(s0, s1) + 1)
+    });
+  }
+  bannerSpans.sort((a, b) => (a.fromIdx - b.fromIdx) || (b.toIdx - a.toIdx) || String(a.title).localeCompare(String(b.title)));
+
+  const peak = Math.max(1, ...cols.map(c => c.load.total));
+  cols.forEach(c => { c.loadShare = c.load.total / peak; }); // 0–1, for the header bar
+
+  return { anchor: start, days: cols, dayCount: days, projectSpans, bannerSpans, peakLoad: peak };
 }
 
 export function fmtTime(ts) {
