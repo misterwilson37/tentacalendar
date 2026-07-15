@@ -1,6 +1,17 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.14.1
+// Version 0.15.0
+// 0.15.0 (D97): REFLECTION — dayReflection() answers the two questions a
+// past day is actually for: what got DONE (victories) and what got PUT OFF.
+// Both were promised by 5a-bis and neither was derivable from buildWeek's
+// columns, because (a) `expired` is gated on viewingToday by design, so a
+// past column's items are ALL expired:false — a Wake filtering on it renders
+// nothing, forever; (b) a task moved off Tuesday is not IN Tuesday's items
+// at all (buildQueue filters on the CURRENT dueAt), so the evidence of the
+// put-off lives only in firstDueAt; and (c) doneToday was computed per-day
+// by buildQueue all along and then thrown away. Reflection scans the raw
+// task/project arrays against the day instead. Cols gain victories/putOffs;
+// buildWeek returns `waiting` so a layout can show pending inventory.
 // 0.14.1 (D90): spans carry activeStageIndex — the clickable bar needs
 // it to open the due dialog on the right stage.
 // 0.14.0 (D89): projectSpans now sort by PRIORITY, not the alphabet —
@@ -56,7 +67,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.14.1";
+export const QUEUE_VERSION = "0.15.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -499,6 +510,126 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
  * clippedLeft/clippedRight so the UI can show "this continues offscreen"
  * rather than lying about a start date.
  */
+/**
+ * D95's read-side fallback, twinned from store.taskFirstDue(). NOT imported:
+ * queue.js is pure logic (D26) and store.js drags Firebase in with it, which
+ * would break every unit test that loads the real module. Deliberately NOT
+ * exported either — app.js already imports taskFirstDue from store.js, and a
+ * second binding of the same name in that file is exactly the duplicate
+ * identifier that bit D82. Keep the two in sync; they are one line each.
+ *
+ * The `??` IS the backfill (D95), and it is load-bearing HERE more than
+ * anywhere: firstDueAt is only written on a task's first reschedule AFTER
+ * D95 deploys, so every task in the live database has firstDueAt === undefined
+ * right now. Reading t.firstDueAt directly would make every reflection card
+ * empty until Katie happens to move something.
+ */
+function firstDueOf(t) { return t?.firstDueAt ?? t?.dueAt ?? null; }
+
+/**
+ * D97 — what a day did to you, once it's over (or once it's today).
+ *
+ * VICTORIES are free and always were (5a-bis): tasks.completedAt and
+ * stage.completedAt both exist, and the PREVIOUS stage's completedAt IS this
+ * one's start — so "started when Excel setup finished, done Thu 3:14 PM" is
+ * derivable with no schema change at all.
+ *
+ * PUT-OFFS are the half that needed D95. Three honest flavours, because
+ * "didn't happen" has three different meanings and they deserve different
+ * words:
+ *   moved   — she decided, and picked a new date. dueAt is now later.
+ *   shelved — she decided, and picked NO date (D84's "not now, maybe ever").
+ *   ignored — nobody decided anything. It's still sitting on that day, past.
+ * The first two are choices and only D95's firstDueAt can see them; the third
+ * is derivable and is the one that stings. A count of 5 means something.
+ */
+export function dayReflection({ tasks = [], projects = [], tiers = [], dayStart, now, hiddenTierIds = new Set() }) {
+  const dayEnd = addDaysLocal(dayStart, 1);
+  const hidden = id => hiddenTierIds.has(id);
+  const tierById = {};
+  tiers.forEach(t => { tierById[t.id] = t; });
+  const inDay = ts => ts != null && ts >= dayStart && ts < dayEnd;
+  const dayHasBegun = now >= dayStart;
+
+  const victories = [];
+  const putOffs = [];
+
+  for (const t of tasks) {
+    if (hidden(t.tierId)) continue;
+    const tier = tierById[t.tierId] || null;
+    const moved = t.rescheduleCount || 0;
+
+    if (t.completedAt) {
+      if (inDay(t.completedAt)) {
+        victories.push({
+          kind: "task", id: t.id, title: t.title, tier,
+          color: tier?.color || "#4dd0c4",
+          at: t.completedAt,
+          moved,
+          firstDue: firstDueOf(t)
+        });
+      }
+      continue;                               // a done task is never a put-off
+    }
+
+    if (!dayHasBegun) continue;               // the future can't disappoint you yet
+    const first = firstDueOf(t);
+    const startedHere = inDay(first);
+
+    if (startedHere && t.dueAt == null) {
+      putOffs.push({ kind: "task", id: t.id, title: t.title, tier, color: tier?.color || "#4dd0c4",
+        flavor: "shelved", firstDue: first, nowDue: null, moved });
+    } else if (startedHere && t.dueAt >= dayEnd) {
+      putOffs.push({ kind: "task", id: t.id, title: t.title, tier, color: tier?.color || "#4dd0c4",
+        flavor: "moved", firstDue: first, nowDue: t.dueAt, moved });
+    } else if (inDay(t.dueAt) && now > t.dueAt) {
+      putOffs.push({ kind: "task", id: t.id, title: t.title, tier, color: tier?.color || "#4dd0c4",
+        flavor: "ignored", firstDue: first, nowDue: t.dueAt, moved });
+    }
+  }
+
+  // Stages: completions are victories; a dated stage still open on a day
+  // that's gone is the derived put-off (5a-ter option a). Stages carry no
+  // firstDueAt — D95 landed in store.updateTask, and setStageDue writes the
+  // stage array directly — so "moved" is not knowable for them. Don't fake it.
+  for (const p of projects) {
+    if (hidden(p.tierId)) continue;
+    const tier = tierById[p.tierId] || null;
+    const allowedDays = tier?.allowedDays;
+    const stages = p.stages || [];
+    stages.forEach((st, idx) => {
+      if (st.completedAt) {
+        if (inDay(st.completedAt)) {
+          // 5a-bis: the previous stage's completion IS this one's start.
+          let startedAt = null;
+          for (let j = idx - 1; j >= 0; j--) {
+            if (stages[j].completedAt) { startedAt = stages[j].completedAt; break; }
+          }
+          victories.push({
+            kind: "stage", id: `${p.id}#${idx}`, projectId: p.id, stageIndex: idx,
+            title: st.name, projectName: p.name, tier,
+            color: p.color || "#888",
+            at: st.completedAt, startedAt, moved: 0, firstDue: null
+          });
+        }
+        return;
+      }
+      if (!dayHasBegun || !stageIsDated(st)) return;
+      const when = stageEffectiveDate(p, st, allowedDays);
+      if (!inDay(when) || now <= when) return;
+      putOffs.push({
+        kind: "stage", id: `${p.id}#${idx}`, projectId: p.id, stageIndex: idx,
+        title: st.name, projectName: p.name, tier, color: p.color || "#888",
+        flavor: "ignored", firstDue: when, nowDue: when, moved: 0
+      });
+    });
+  }
+
+  victories.sort((a, b) => b.at - a.at);
+  putOffs.sort((a, b) => (b.moved - a.moved) || String(a.title).localeCompare(String(b.title)));
+  return { victories, putOffs };
+}
+
 export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay, days = 7, hiddenTierIds = new Set() }) {
   const start = startOfDay(anchorDay);
   const today = startOfDay(now);
@@ -520,15 +651,26 @@ export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay,
       return it.deadline >= dayStart && it.deadline < dayEnd;   // otherwise: only on its day
     });
 
+    const refl = dayReflection({ tasks, projects, tiers, dayStart, now, hiddenTierIds });
+
     cols.push({
       dayStart,
       isToday,
       isPast: dayStart < today,
       items,
       passedEvents: isToday ? q.passedEvents : [],
+      victories: refl.victories,     // D97
+      putOffs: refl.putOffs,         // D97
       load: {
         total: items.length,
+        // NB: expired is gated on viewingToday inside buildQueue (by design —
+        // a past column shouldn't re-sort itself around a deadline that's
+        // already gone), so this is 0 on every past day. The Wake reads
+        // putOffs, NOT this. Anything filtering past items on .expired
+        // renders an empty box and looks like it worked.
         expired: items.filter(it => it.expired).length,
+        done: refl.victories.length,
+        putOff: refl.putOffs.length,
         events: items.filter(it => it.kind === "event").length,
         tasks: items.filter(it => it.kind === "task").length,
         stages: items.filter(it => it.kind === "stage").length
@@ -628,7 +770,23 @@ export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay,
   const peak = Math.max(1, ...cols.map(c => c.load.total));
   cols.forEach(c => { c.loadShare = c.load.total / peak; }); // 0–1, for the header bar
 
-  return { anchor: start, days: cols, dayCount: days, projectSpans, bannerSpans, peakLoad: peak };
+  // D97 — pending inventory: dated-nothing tasks. Two very different animals
+  // share this list and a layout that shows them must say which is which:
+  // a follow-up (parentTaskId) CANNOT be scheduled — it materialises when its
+  // parent is checked off (D4) — while a shelved task (D84) is genuinely
+  // available work. Calling both "inventory for the week" would invite Katie
+  // to plan around things that aren't hers to plan.
+  const waiting = buildQueue({ tasks, events, tiers, projects, now, viewDay: today, hiddenTierIds })
+    .waiting.map(t => ({
+      id: t.id, title: t.title, tierId: t.tierId,
+      tier: tierById[t.tierId] || null,
+      blocked: t.parentTaskId != null,
+      offsetDays: t.offsetDays ?? null,
+      moved: t.rescheduleCount || 0,
+      firstDue: firstDueOf(t)
+    }));
+
+  return { anchor: start, days: cols, dayCount: days, projectSpans, bannerSpans, peakLoad: peak, waiting };
 }
 
 /**
