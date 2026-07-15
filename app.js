@@ -1,5 +1,16 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.28.0 — "Gantesque" (D89) — Jake's five, from real data
+// 0.28.0: (1) project bars sort by PRIORITY, not the alphabet. (2) dates
+// get a header row ABOVE the strips, where a date is expected. (3) the
+// load bar is GONE: it showed "this day has 40% as many items as the
+// busiest day" while looking exactly like a progress bar — two items,
+// none done, 40% red, and Jake rightly asked what it meant. Words now.
+// (4) the view toggle is a labeled 3-way switch (a glyph that needs a
+// hover to explain itself is a failed control). (5) week-start modes:
+// Today+6 / Sun–Sat / Mon–Sun, remembered per device — the past columns
+// are for reflection, not waste (Jake corrected me). Also: an EXPIRED
+// project whose window has passed no longer vanishes from the board.
 // Version 0.27.0 — "the week" (D88)
 // 0.27.0: THIRD VIEW. day → week → year cycles on one button. The week is
 // seven QUEUE columns, not a clock: a task due at 4 PM is a deadline, not
@@ -261,11 +272,11 @@ import {
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
-  setClearDeckThreshold, buildWeek, addDaysLocal, fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.13.0";
+  setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION
+} from "./queue.js?v=0.14.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.27.0";
+export const APP_VERSION = "0.28.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -289,7 +300,8 @@ const S = {
   showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
   hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
   view: ["year", "week", "day"].includes(localStorage.getItem("tc-view")) ? localStorage.getItem("tc-view") : "day", // D65/D88 (persists per device)
-  weekAnchor: null,   // D88: null = rolling (today + 6); a ts = a paged week
+  weekMode: ["rolling", "sunday", "monday"].includes(localStorage.getItem("tc-wmode")) ? localStorage.getItem("tc-wmode") : "rolling", // D89
+  weekOffset: 0,      // D89: whole weeks from the anchor; 0 = the live week
   yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
   yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
   yearZoom: null,          // D18 month zoom: month-start ts, or null for the 12-month grid
@@ -319,13 +331,20 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#day-today").addEventListener("click", () => { S.viewDay = Date.now(); render(); });
 
   // D65 year view
-  $("#view-toggle").addEventListener("click", () => setView({ day: "week", week: "year", year: "day" }[S.view] || "day")); // D88
+  $("#view-switch").addEventListener("click", e => {   // D89: labeled, no guessing
+    const b = e.target.closest("button[data-view]");
+    if (b) setView(b.dataset.view);
+  });
   $("#yv-prev").addEventListener("click", () => shiftYear(-1));
   $("#yv-next").addEventListener("click", () => shiftYear(1));
   // D88 week nav
   $("#wv-prev").addEventListener("click", () => weekPage(-1));
   $("#wv-next").addEventListener("click", () => weekPage(1));
-  $("#wv-today").addEventListener("click", () => { S.weekAnchor = null; renderWeek(); });
+  $("#wv-today").addEventListener("click", () => { S.weekOffset = 0; renderWeek(); });
+  $("#wv-modes").addEventListener("click", e => {
+    const b = e.target.closest("button[data-wmode]");
+    if (b) setWeekMode(b.dataset.wmode);
+  });
   $("#wv-fullscreen").addEventListener("click", () => {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen?.();
@@ -1541,11 +1560,9 @@ function setView(v) {
   $("main").hidden = v !== "day";            // D35's [hidden]!important beats main's display:grid
   $("#week-view").hidden = v !== "week";     // D88
   $("#year-view").hidden = v !== "year";
-  const b = $("#view-toggle");
-  // D88: day → week → year → day. The glyph shows WHERE YOU'RE GOING.
-  const next = { day: "week", week: "year", year: "day" }[v];
-  b.textContent = { week: "🗓️", year: "📅", day: "📋" }[next];
-  b.title = { week: "Week view", year: "Year view", day: "Today view" }[next];
+  for (const b of document.querySelectorAll("#view-switch button")) {
+    b.classList.toggle("active", b.dataset.view === v);   // D89
+  }
   if (v === "year") renderYear();
   if (v === "week") renderWeek();
 }
@@ -1558,7 +1575,7 @@ function setView(v) {
 // Sized for a 55" 4K wall: ~137px columns, big type, nothing hover-only.
 
 function weekAnchor() {
-  return S.weekAnchor ?? startOfDayTs(Date.now()); // null = rolling: today + 6
+  return weekAnchorFor(S.weekMode, Date.now(), S.weekOffset); // D89
 }
 
 function renderWeek() {
@@ -1568,11 +1585,14 @@ function renderWeek() {
     now, anchorDay: weekAnchor(), days: 7, hiddenTierIds: S.hiddenTierIds
   });
 
-  const rolling = S.weekAnchor === null;
-  $("#wv-label").textContent = rolling
-    ? `Next 7 days — ${fmtDay(w.days[0].dayStart)} → ${fmtDay(w.days[6].dayStart)}`
-    : `${fmtDay(w.days[0].dayStart)} → ${fmtDay(w.days[6].dayStart)}`;
-  $("#wv-today").hidden = rolling;
+  const live = S.weekOffset === 0;
+  const lead = S.weekMode === "rolling" && live ? "Next 7 days — " : "";
+  $("#wv-label").textContent = `${lead}${fmtDay(w.days[0].dayStart)} → ${fmtDay(w.days[6].dayStart)}`;
+  $("#wv-today").hidden = live;
+  for (const b of document.querySelectorAll("#wv-modes button")) {
+    b.classList.toggle("active", b.dataset.wmode === S.weekMode);
+  }
+  renderWeekDayHeads(w);
 
   renderWeekBanners(w);
   renderWeekProjects(w);
@@ -1583,29 +1603,6 @@ function renderWeek() {
   for (const col of w.days) {
     const c = document.createElement("div");
     c.className = "wv-col" + (col.isToday ? " is-today" : "") + (col.isPast ? " is-past" : "");
-
-    const head = document.createElement("div");
-    head.className = "wv-head";
-    const d = new Date(col.dayStart);
-    head.innerHTML = `<span class="wv-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>` +
-      `<span class="wv-date">${d.getDate()}</span>`;
-    // The load signal — the one thing a week can say that a day cannot:
-    // "Thursday is going to hurt, and it's Monday."
-    const load = document.createElement("div");
-    load.className = "wv-load";
-    load.title = col.load.total
-      ? `${col.load.total} due — ${col.load.stages} project stage(s), ${col.load.tasks} task(s), ${col.load.events} event(s)` +
-        (col.load.expired ? ` · ${col.load.expired} MISSED` : "")
-      : "Nothing due";
-    const fill = document.createElement("i");
-    fill.style.width = `${Math.round(col.loadShare * 100)}%`;
-    if (col.load.expired) fill.classList.add("has-expired");
-    load.append(fill);
-    const n = document.createElement("span");
-    n.className = "wv-count";
-    n.textContent = col.load.total || "";
-    head.append(load, n);
-    c.append(head);
 
     const list = document.createElement("div");
     list.className = "wv-list";
@@ -1620,6 +1617,31 @@ function renderWeek() {
     grid.append(c);
   }
   $("#wv-empty").hidden = anything > 0 || w.projectSpans.length > 0 || w.bannerSpans.length > 0;
+}
+
+/** D89 — the dates, at the top, where a calendar puts them. They were
+ *  stranded halfway down the screen under the strips. */
+function renderWeekDayHeads(w) {
+  const bar = $("#wv-days");
+  bar.innerHTML = "";
+  for (const col of w.days) {
+    const d = new Date(col.dayStart);
+    const h = document.createElement("div");
+    h.className = "wv-dayhead" + (col.isToday ? " is-today" : "") + (col.isPast ? " is-past" : "");
+    // Honest words, not a bar. The old meter showed "40% as many items as
+    // the busiest day" in the visual language of "40% done" (Jake: "we're
+    // unclear as to what that means"). Two numbers that mean what they say.
+    const left = col.load.total, missed = col.load.expired;
+    h.innerHTML =
+      `<span class="wv-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>` +
+      `<span class="wv-date">${d.getDate()}</span>` +
+      (left ? `<span class="wv-left">${left} left</span>` : `<span class="wv-left none">clear</span>`) +
+      (missed ? `<span class="wv-missed">❗${missed}</span>` : "");
+    h.title = left
+      ? `${left} still to do${missed ? ` · ${missed} already missed` : ""}`
+      : "Nothing left on this day";
+    bar.append(h);
+  }
 }
 
 /** One compact row. Big enough to read across a room; tap = open the day. */
@@ -1675,9 +1697,23 @@ function renderWeekProjects(w) {
     el.style.background = hexToRgba(p.color, 0.14);
 
     const pct = Math.round(p.pct * 100);
+    if (p.expired) el.classList.add("expired");
     el.innerHTML =
-      `<span class="wv-proj-name">${p.clippedLeft ? "… " : ""}${esc(p.name)}${p.clippedRight ? " …" : ""}</span>` +
+      `<span class="wv-proj-name">${p.expired ? "❗" : ""}${p.clippedLeft ? "… " : ""}${esc(p.name)}${p.clippedRight ? " …" : ""}</span>` +
+      `<span class="wv-proj-next">${esc(p.activeStageName)}</span>` +
       `<span class="wv-proj-pct">${pct}%</span>`;
+    // D89: the deadline DAY gets a highlighted block, not a 7px dot.
+    if (p.deadlineIdx != null) {
+      const rel = p.deadlineIdx - p.fromIdx, span = (p.toIdx - p.fromIdx) + 1;
+      if (rel >= 0 && rel < span) {
+        const blk = document.createElement("u");
+        blk.className = "wv-dl" + (p.expired ? " expired" : "");
+        blk.style.left = `${(rel / span) * 100}%`;
+        blk.style.width = `${(1 / span) * 100}%`;
+        blk.title = `${p.deadlineStageName} due ${fmtDay(p.deadlineAt)}`;
+        el.append(blk);
+      }
+    }
     const meter = document.createElement("i");
     meter.className = "wv-proj-meter";
     meter.style.width = `${pct}%`;
@@ -1699,9 +1735,12 @@ function renderWeekProjects(w) {
   }
 }
 
-function weekPage(n) {
-  S.weekAnchor = addDaysLocal(weekAnchor(), n * 7);
-  if (S.weekAnchor === startOfDayTs(Date.now())) S.weekAnchor = null; // back to rolling
+function weekPage(n) { S.weekOffset += n; renderWeek(); }
+
+function setWeekMode(m) {
+  S.weekMode = m;
+  localStorage.setItem("tc-wmode", m);
+  S.weekOffset = 0;   // switching frames always lands you on the live week
   renderWeek();
 }
 
