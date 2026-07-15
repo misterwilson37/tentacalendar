@@ -1,486 +1,656 @@
-<!DOCTYPE html>
-<!-- ============================================================
-     Tentacalendar — index.html
-     Version 0.20.0 (banner and data-html-version move together, always)
-     0.20.0 (D88): #week-view — the third view. Two spanning strips
-     (all-day banners, project bars w/ stage pips) over seven queue
-     columns. app ?v= → 0.27.0, css ?v= → 0.22.0 (queue 0.13.0 inside).
-     0.19.0 (D86): clear-deck hint rewritten for the GROUPED model.
-     app ?v= → 0.26.0 (queue 0.12.0 rides inside app). css unchanged.
-     0.18.0 (D85): ⚙️ Pipeline tab gains "Clear-the-deck at N% complete"
-     (#cfg-cleardeck) — the point where the queue flips a project from
-     keep-abreast to just-finish-it. app ?v= → 0.25.0 (queue 0.11.0 +
-     store 0.9.0 ride inside app). css unchanged.
-     0.17.2 (D84): the Mirror field escapes cfg-poll's flex .form-row
-     (three children crammed into one row crushed the poll label into
-     a word-stack — Jake's screenshot). Own block now. app ?v= →
-     0.24.0, css → 0.21.1.
-     0.17.1 (D83): app ?v= → 0.23.1. Reference bump only.
-     0.17.0 (D82): #earlier box (passed events sink here, today only)
-     + #followup-modal (title, amount, minutes/hours/days/weeks unit —
-     retires two prompt()s). css ?v= → 0.21.0, app → 0.23.0, queue →
-     0.10.0.
-     0.16.0 (D81): ⚙️ Settings gains the Mirror calendar ID field
-     (cfg-mirror-cal). app ?v= → 0.22.0; css unchanged.
-     0.15.0 (D80): #allday-strip above the queue — all-day events land
-     here as ambient banners, not 12:00 AM queue rows. css ?v= →
-     0.20.0, app → 0.21.0.
-     0.14.1 (D79): lang="en" → "en-US". Native time pickers take their
-     12/24-hour cycle from the DEVICE setting in Chromium, but engines
-     that consult page language (Firefox family, some webviews) treat
-     bare "en" as ambiguous — en-US pins them to AM/PM. The primary
-     fix for Katie's military-time picker is her phone's "Use 24-hour
-     format" setting (see SETUP.md quick hits).
-     0.14.0 (D78): phone chrome — #jump-add ＋ in the header (scrolls
-     to the task form; swaps to Today view first if needed) and
-     #signout-bottom ("Log out", in words, at the very bottom). Both
-     phone-only via the 1000px stacked-layout query; the ⏻ square
-     hides there. css ?v= → 0.19.0, app → 0.20.0.
-     0.13.5 (D77): css ?v= → 0.18.1, app → 0.19.2. Reference bump only.
-     0.13.4 (D76): app ?v= → 0.19.1. Reference bump only.
-     0.13.3 (D74): css ?v= → 0.18.0, app → 0.19.0. Reference bump only.
-     0.13.2 (D73): hint mentions cross-row drags. app ?v= → 0.18.0.
-     0.13.1 (D72): css ?v= → 0.17.0, app → 0.17.0. Reference bump only.
-     0.13.0 (D71): ⛶ fullscreen button, 🧵 hairline bar pin. css ?v= →
-     0.16.0, app → 0.16.0.
-     0.12.1 (D70): "Year wall" → "Annual" (Jake's rename). css ?v= →
-     0.15.0, app → 0.15.0.
-     0.12.0 (D69): ▦▦ Year wall layout button (new default) + Bars
-     size control (Auto/▮/▪/▁). css ?v= → 0.14.0, app → 0.14.0.
-     0.11.0 (D68): year-view layout toggle (Month grid ⇄ Timeline),
-     ＋ New project FAB, #yv-project-modal shell (the REAL form gets
-     reparented in, listeners intact). css ?v= → 0.13.0, app → 0.13.0.
-     0.10.1: css ?v= → 0.12.0, app ?v= → 0.12.0 (D66 day texture +
-     density; form-overflow fix). Reference bump only.
-     0.10.0 (D65, PHASE 2): year view — header 📅 toggle, #year-view
-     section (nav, mode buttons, grid, legend, empty state, drag hint).
-     css ?v= → 0.11.0, app ?v= → 0.11.0.
-     0.9.1 (D64): css ?v= → 0.10.0 (responsive one-line rows). No markup
-     change — reference bump only.
-     0.9.0 (D63): #task-notes textarea. css ?v= → 0.9.0, app ?v= → 0.10.0.
-     0.8.0 (D62 rev): dup modal gains pipeline-review button + 1d/7d/30d
-     snooze row; project-form labels get task-form column treatment
-     (the staggered Starts/Ends); un-dater covers both remnant flavors.
-     css ?v= → 0.8.0, app.js ?v= → 0.9.0.
-     0.7.0 (D62): duplicate modal is a review FORM (name/dates/color/
-     tier/workload + snooze button). css ?v= → 0.7.0, app.js ?v= → 0.8.0.
-     0.6.0: settings modal split into tabs (Tiers / Pipeline / Timing)
-     with deadline-hour (D51) + decision-threshold (D52) fields and
-     #tier-color-hint (D55); new #uncheck-modal (D53) and #dup-modal
-     (D59); decision-modal hint rewritten for ✓/🕐 (D57); Workload ⓘ
-     gains a hover title (D58). css ?v= → 0.6.0, app.js ?v= → 0.7.0.
-     0.5.x: filter chips, workload, due/stages/weekend/decision modals
-     + shared popover (all OUTSIDE #drift-wrap, D37), D49 ?v= ritual.
-     ============================================================ -->
-<html lang="en-US">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tentacalendar</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.22.0">
-</head>
-<body data-html-version="0.20.0">
+// ============================================================
+// Tentacalendar — queue.js
+// Version 0.14.0
+// 0.14.0 (D89): projectSpans now sort by PRIORITY, not the alphabet —
+// expired first, then next deadline, then the D86 piles (Jake: "projects
+// should be in priority order"; ten bars sorted A–Z said nothing about
+// what matters). Spans carry deadlineAt/expired/nextStageName. Also
+// weekAnchorFor(): Sun–Sat / Mon–Sun / rolling today+6, because
+// reflecting on the week just gone IS how you plan the next one — the
+// past columns aren't dead space (Jake corrected me on this).
+// 0.13.0 (D88): buildWeek() — N honest days (one buildQueue per column,
+// so expiry/off-days/the D86 piles all come free) + the two spanning
+// strips: projectSpans (bars with stage pips) and bannerSpans (one bar
+// per all-day event). Projects DON'T repeat down the columns: D48 rides
+// them through their whole window, which would render a 3-month project
+// seven times — a stage row lands only on its deadline day (plus today
+// if expired), and the SPAN goes up top where a span belongs. Also
+// addDaysLocal(): calendar day-stepping, because ts+DAY_MS repeats a
+// date across DST fall-back and would drop a day from the week.
+// 0.12.0 (D86): the clear-deck tiebreaker is now GROUPED, not blended.
+// D85 multiplied workload by pct-or-1-pct, which made a U: urgency rose
+// at both ends and SAGGED in the middle, so a 30%-done project outranked
+// a 65%-done one (Jake: "too confusing"). Now two piles split at
+// CLEAR_DECK_THRESHOLD, pile first: past-threshold (MOST done first),
+// then catch-up (LEAST done first), then tasks/events. Workload only
+// breaks an exact-pct tie — heavier first. Four equal projects at T=60%
+// sort 95 → 65 → 30 → 40. Still tiebreaker ONLY (Jake's option A).
+// 0.11.0 (D85): CLEAR-THE-DECK priority — first cut, the blended weight
+// superseded by D86 above. setClearDeckThreshold/the config rail land here.
+// 0.10.0 (D82): timed events whose window has PASSED (end — or start
+// +1h grace when endless — is behind now) leave the live list for a
+// passedEvents array, TODAY only; viewing other days shows everything
+// in place (a past day is all "passed"; a future day, none).
+// 0.9.0 (D80): ALL-DAY events split out of the chronological queue
+// into a BANNERS list — "things that are happening" (Zoo Camp week,
+// parents in town) vs "things to go to at a time." Banners carry
+// day-N-of-M span math (all-day ends are EXCLUSIVE, per Google), sort
+// tier-rank-then-start, respect hidden tiers, never pin, never expire,
+// and never demand a checkbox. Timed events are unchanged: queue rows
+// at their slot, pinned in their lead window, aging off at midnight.
+// 0.8.0 (D61): the queue respects tier working days — when the VIEWED
+// day isn't in a tier's allowedDays, that tier's tasks and project
+// stages don't appear (Katie's Saturday is clear of Work items; the
+// project cards still show everything, and Monday brings it all back,
+// including the decision modal). Events/anchors are unaffected, as
+// are Done-today and Waiting.
+// 0.7.0 (D51/D60): configurable deadline hour (default 16 = 4 PM,
+// set from settings via setDeadlineHour) + per-tier ALLOWED DAYS.
+// "Weekday math" is now "working-day math": every tier declares
+// which days of the week count (default Mon–Fri). Stage offsets,
+// pipeline windows, date interception, and reschedule targets all
+// count only the owning tier's allowed days. isWeekend/addWeekdays/
+// weekendNeighbors remain as Mon–Fri wrappers for compatibility.
+// 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
+// ============================================================
 
-  <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
-       ancestor becomes the containing block for position:fixed descendants,
-       which broke the settings modal's viewport centering. The modal and the
-       confetti canvas must stay OUTSIDE this div. -->
-  <div id="drift-wrap">
+export const QUEUE_VERSION = "0.14.0";
 
-  <!-- ============ AUTH SCREEN ============ -->
-  <div id="auth-screen">
-    <div class="auth-card">
-      <div class="logo">🐙</div>
-      <h1>Tentacalendar</h1>
-      <p class="tagline">The to-do list that refuses to let go.</p>
-      <button id="signin-btn" class="primary">Sign in with Google</button>
-    </div>
-  </div>
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-  <!-- ============ APP ============ -->
-  <div id="app-screen" hidden>
-    <header>
-      <div class="brand">🐙 Tentacalendar <span id="version" class="version"></span></div>
-      <div class="header-right">
-        <span id="user-label" class="user"></span>
-        <button id="view-toggle" class="icon-btn" title="Year view">📅</button>
-        <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
-        <button id="jump-add" class="icon-btn" title="Jump to Add a task">＋</button>
-        <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
-      </div>
-    </header>
+// D51: computed (date-only) deadlines are "due by this hour" (24-hr).
+// Default 4 PM; settings/config.deadlineHour overrides via the setter.
+let DEADLINE_HOUR = 16;
+export function setDeadlineHour(h) {
+  const n = parseInt(h, 10);
+  DEADLINE_HOUR = (!isNaN(n) && n >= 0 && n <= 23) ? n : 16;
+}
+export function getDeadlineHour() { return DEADLINE_HOUR; }
 
-    <main>
-      <!-- ===== Queue column ===== -->
-      <section id="queue-panel">
-        <div class="day-nav">
-          <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
-          <h2 id="day-label">Today</h2>
-          <button id="day-next" class="icon-btn" title="Next day">▶</button>
-          <button id="day-today" class="mini" hidden>back to today</button>
-        </div>
+// D85: completion point (0–1) where a project flips from "keep abreast"
+// to "clear the deck" in the level-3 queue tiebreaker. Settings-driven,
+// default 60%; fed from the config subscription via setClearDeckThreshold.
+let CLEAR_DECK_THRESHOLD = 0.6;
+export function setClearDeckThreshold(frac) {
+  const n = Number(frac);
+  CLEAR_DECK_THRESHOLD = (isFinite(n) && n >= 0 && n <= 1) ? n : 0.6;
+}
+export function getClearDeckThreshold() { return CLEAR_DECK_THRESHOLD; }
 
-        <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
+const UNIT_MS = {
+  minutes: 60 * 1000,
+  hours: 60 * 60 * 1000,
+  days: DAY_MS,
+  weeks: 7 * DAY_MS
+};
 
-        <div id="pinned" hidden></div>
-        <div id="allday-strip" hidden></div>
-        <div id="queue"></div>
+function addMonths(ts, n) {
+  const d = new Date(ts);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, maxDay));
+  return d.getTime();
+}
 
-        <div id="waiting" hidden>
-          <h3>Waiting on…</h3>
-          <div id="waiting-list"></div>
-        </div>
+// ---------- Working-day math (D45 weekdays → D60 per-tier days) ----------
 
-        <div id="earlier" hidden>
-          <h3>Earlier today</h3>
-          <div id="earlier-list"></div>
-        </div>
+/** Default working days: Mon–Fri (JS getDay: 0=Sun … 6=Sat). */
+export const WEEKDAYS = [1, 2, 3, 4, 5];
 
-        <div id="done" hidden>
-          <h3>Done today <span id="done-count" class="badge-done"></span></h3>
-          <div id="done-list"></div>
-        </div>
-      </section>
+/** Normalize a tier's allowedDays into a usable Set. Missing/empty →
+ *  Mon–Fri, which keeps every pre-D60 tier behaving exactly as before. */
+function allowedSet(allowedDays) {
+  return (Array.isArray(allowedDays) && allowedDays.length)
+    ? new Set(allowedDays) : new Set(WEEKDAYS);
+}
 
-      <!-- ===== Projects column (Katie's pipeline) ===== -->
-      <section id="projects-panel">
-        <h3>Projects</h3>
-        <p id="projects-empty" class="hint">No projects yet. Create one on the right — its whole pipeline comes with it.</p>
-        <div id="projects-list"></div>
-      </section>
+export function isDayAllowed(ts, allowedDays) {
+  return allowedSet(allowedDays).has(new Date(ts).getDay());
+}
 
-      <!-- ===== Forms column ===== -->
-      <section id="form-panel">
-        <h3 id="task-form-title">New task</h3>
-        <form id="task-form">
-          <input id="task-title" type="text" placeholder="What needs doing?" required>
-          <textarea id="task-notes" rows="2" placeholder="Details (optional — tucked behind a ▸ under the task)"></textarea>
-          <label>Tier
-            <select id="task-tier"></select>
-          </label>
-          <div class="form-row">
-            <label>Due date <input id="task-date" type="date" required></label>
-            <label>Time <input id="task-time" type="time" value="09:00"></label>
-          </div>
-          <label class="esc-label">If ignored, nag again every
-            <span class="esc-inputs">
-              <input id="task-esc-n" type="number" min="1" value="1">
-              <select id="task-esc-unit">
-                <option value="minutes">minutes</option>
-                <option value="hours" selected>hours</option>
-                <option value="days">days</option>
-                <option value="weeks">weeks</option>
-                <option value="months">months</option>
-              </select>
-            </span>
-          </label>
-          <div class="form-actions">
-            <button type="submit" id="task-submit" class="primary">Add to the tentacles</button>
-            <button type="button" id="task-cancel" class="mini" hidden>Cancel edit</button>
-          </div>
-        </form>
-        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish.</p>
+/** Move n ALLOWED days from ts (n<0 = backward). Disallowed days don't
+ *  count. Guard prevents infinite loops on a pathological empty set. */
+export function addAllowedDays(ts, n, allowedDays) {
+  if (!n) return ts;
+  const ok = allowedSet(allowedDays);
+  let t = ts;
+  const step = n > 0 ? DAY_MS : -DAY_MS;
+  let left = Math.abs(n), guard = 0;
+  while (left > 0 && guard++ < 4000) {
+    t += step;
+    if (ok.has(new Date(t).getDay())) left--;
+  }
+  return t;
+}
 
-        <h3 id="project-form-title">New project</h3>
-        <form id="project-form">
-          <input id="project-name" type="text" placeholder="Project name (e.g. Alabama Farmers)" required>
-          <div class="form-row">
-            <label>Color <input id="project-color" type="color" value="#4dabf7"></label>
-            <label>Stage tier <select id="project-tier"></select></label>
-          </div>
-          <div class="form-row">
-            <label>Starts <input id="project-start" type="date" required></label>
-            <label>Ends <input id="project-end" type="date" required></label>
-          </div>
-          <label><span class="label-line">Workload <span class="info-dot" title="How heavy is this project overall? Ties in the queue break toward heavier projects with more pipeline remaining. (Tap for details.)" data-info="How heavy is this project overall? A 10-million project and a 30k project can share a pipeline but not a calendar. Ties in the queue break toward heavier projects with more pipeline remaining.">i</span></span>
-            <select id="project-workload">
-              <option value="1">Light (1)</option>
-              <option value="2" selected>Standard (2)</option>
-              <option value="3">Heavy (3)</option>
-            </select>
-          </label>
-          <p class="hint warn" id="project-color-hint"></p>
-          <div class="form-actions">
-            <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
-            <button type="button" id="project-cancel" class="mini" hidden>Cancel edit</button>
-          </div>
-        </form>
-        <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
-      </section>
-    </main>
+/** Nearest allowed day at-or-before / at-or-after ts (for the date
+ *  interception modal and duplicate-project snapping). */
+export function allowedNeighbors(ts, allowedDays) {
+  const ok = allowedSet(allowedDays);
+  let prev = ts, next = ts, guard = 0;
+  while (!ok.has(new Date(prev).getDay()) && guard++ < 14) prev -= DAY_MS;
+  guard = 0;
+  while (!ok.has(new Date(next).getDay()) && guard++ < 14) next += DAY_MS;
+  return { prev, next };
+}
 
-    <!-- ============ YEAR VIEW (Phase 2, D65) ============
-         Toggled with the header 📅; quarter-aligned 4 rows × 3 months
-         (D31 modes), progress ghost-fill bars (D30a), drag to move /
-         edge-drag to stretch (D32), month-tap zoom (D18), legend +
-         tap-for-details (D27). -->
-    <section id="week-view" hidden>
-      <div class="wv-nav">
-        <button id="wv-prev" class="icon-btn" title="Back one week">◀</button>
-        <h2 id="wv-label">Week</h2>
-        <button id="wv-next" class="icon-btn" title="Forward one week">▶</button>
-        <button id="wv-today" class="mini" hidden>back to now</button>
-        <button id="wv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
-      </div>
-      <div id="wv-strips">
-        <div class="wv-strip" id="wv-banners" hidden></div>
-        <div class="wv-strip" id="wv-projects" hidden></div>
-      </div>
-      <div id="wv-grid"></div>
-      <p class="hint" id="wv-empty" hidden>Nothing scheduled this week. Suspicious.</p>
-    </section>
+// Mon–Fri wrappers (pre-D60 API, still used for defaults).
 
-    <section id="year-view" hidden>
-      <div class="yv-nav">
-        <button id="yv-prev" class="icon-btn" title="Back one year (one month while zoomed)">◀</button>
-        <h2 id="yv-label">Year</h2>
-        <button id="yv-next" class="icon-btn" title="Forward one year (one month while zoomed)">▶</button>
-        <button id="yv-today" class="mini" hidden>back to now</button>
-        <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
-        <button id="yv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
-        <div class="yv-layouts" id="yv-layouts" title="Month grid: weeks as rows, Sun–Sat — the wall-calendar look. Timeline: days in one long row per quarter (a Gantt chart).">
-          <button data-layout="wall" class="mini">▦▦ Annual</button>
-          <button data-layout="grid" class="mini">▦ Months</button>
-          <button data-layout="timeline" class="mini">▬ Timeline</button>
-        </div>
-        <div class="yv-sizes" id="yv-sizes" title="Bar thickness: Auto fits the layout (and your window); ▮ pins thick 20px, ▪ medium 10px, ▁ thin 5px.">
-          <span class="yv-sizes-label">Bars</span>
-          <button data-size="auto" class="mini">Auto</button>
-          <button data-size="full" class="mini">▮</button>
-          <button data-size="half" class="mini">▪</button>
-          <button data-size="quarter" class="mini">▁</button>
-          <button data-size="hair" class="mini" title="Hairline: 2px color threads — see the year, tap for details, edit elsewhere">🧵</button>
-        </div>
-        <div class="yv-modes" id="yv-modes" title="What sits top-left: January, the current quarter, or the current month (rolling 12 months either way)">
-          <button data-mode="calendar" class="mini">Jan–Dec</button>
-          <button data-mode="quarter" class="mini">Quarter first</button>
-          <button data-mode="month" class="mini">Month first</button>
-        </div>
-      </div>
-      <div id="yv-grid"></div>
-      <p id="yv-empty" class="hint" hidden>No projects land in this window. Create one in Today view — its bar shows up here.</p>
-      <div id="yv-legend"></div>
-      <p class="hint">Drag a bar to move a project — across weeks, months, and rows · drag either end to stretch or shrink it · tap a bar for details · tap a month name to zoom in. Dates keep to the project tier's working days.</p>
-      <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
-    </section>
+export function isWeekend(ts) {
+  const dow = new Date(ts).getDay();
+  return dow === 0 || dow === 6;
+}
 
-    <!-- D82: follow-up create/edit — retires the prompt() pair -->
-    <div id="followup-modal" class="modal-shell" hidden>
-      <div class="modal-card">
-        <h3 id="fu-heading">Follow-up</h3>
-        <label>Title <input id="fu-title" type="text"></label>
-        <label>Materializes
-          <input id="fu-n" type="number" min="1" step="1" value="3" style="width:4.5rem">
-          <select id="fu-unit">
-            <option value="minutes">minutes</option>
-            <option value="hours">hours</option>
-            <option value="days" selected>days</option>
-            <option value="weeks">weeks</option>
-          </select>
-          after completion</label>
-        <div class="modal-actions">
-          <button id="fu-save" class="primary">Save</button>
-          <button id="fu-cancel">Cancel</button>
-        </div>
-      </div>
-    </div>
+/** Move n WEEKDAYS from ts (n<0 = backward). Weekends don't count. */
+export function addWeekdays(ts, n) {
+  return addAllowedDays(ts, n, WEEKDAYS);
+}
 
-    <!-- D78: phone-only, in words, at the very bottom — where a
-         logout belongs on a device you rarely log out of. -->
-    <button id="signout-bottom">Log out</button>
+/** Nearest Friday before / Monday after a weekend date. */
+export function weekendNeighbors(ts) {
+  const { prev, next } = allowedNeighbors(ts, WEEKDAYS);
+  return { fri: prev, mon: next };
+}
 
-    <!-- D68: the REAL project form is reparented in here from the form
-         panel while this is open — listeners, color assistant, and the
-         working-day interception all come along for free. -->
-    <div id="yv-project-modal" class="modal-shell" hidden>
-      <div class="modal-card yv-project-card">
-        <button id="yv-project-close" class="icon-btn yv-modal-close" title="Close">✕</button>
-        <div id="yv-project-slot"></div>
-      </div>
-    </div>
-  </div>
+// ---------- Stage timing (D44) ----------
 
-  </div><!-- /drift-wrap -->
+/** Legacy migration: pre-0.5.0 stages used phase before/during/after.
+ *  D50: "during" meant "sometime during the project" — UNDATED. */
+export function normalizeStage(s) {
+  if (s.direction) return s;
+  const phase = s.phase || "during";
+  const map = {
+    before: { anchor: "start", direction: "before" },
+    during: { anchor: "start", direction: "none" },
+    after:  { anchor: "end",   direction: "after" }
+  };
+  return { ...s, ...(map[phase] || map.during) };
+}
 
-  <!-- ============ SETTINGS MODAL (tabbed, D52) ============ -->
-  <div id="settings-modal" hidden>
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>⚙️ Settings</h2>
-        <button id="settings-close" class="icon-btn">✕</button>
-      </div>
+export function stageIsDated(s) {
+  const n = normalizeStage(s);
+  return n.dueAt != null || n.direction !== "none";
+}
 
-      <div class="tab-bar">
-        <button class="tab-btn active" data-tab="tiers">Tiers</button>
-        <button class="tab-btn" data-tab="pipeline">Pipeline</button>
-        <button class="tab-btn" data-tab="timing">Timing</button>
-      </div>
+/** Computed target date: anchor(start|end) ± offsetDays counted in the
+ *  owning tier's ALLOWED days (D60; default Mon–Fri), at the deadline
+ *  hour (D51). Returns null for undated stages (D50). */
+export function stageScheduledAt(project, stage, allowedDays) {
+  const s = normalizeStage(stage);
+  if (s.direction === "none") return null;
+  const base = s.anchor === "end" ? (project.endDate || 0) : (project.startDate || 0);
+  const dated = addAllowedDays(base, s.direction === "before" ? -(s.offsetDays || 0) : (s.offsetDays || 0), allowedDays);
+  const d = new Date(dated);
+  d.setHours(DEADLINE_HOUR, 0, 0, 0);
+  return d.getTime();
+}
 
-      <div class="tab-pane" data-pane="tiers">
-        <h3>Tiers (priority queue)</h3>
-        <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. The day toggles are the tier's working days: reschedules land on them, project dates outside them get flagged, and pipeline offsets only count them (weekend jobs → check Sa/Su). Hover anything in a row for an explanation.</p>
-        <div id="tier-editor"></div>
-        <p class="hint" id="tier-color-hint"></p>
-        <button id="tier-add" class="mini">+ Add tier</button>
-      </div>
+/** A stage's real deadline: manual hard due wins; else the computed target;
+ *  null when the stage is undated (it's weight, not a deadline). */
+export function stageEffectiveDate(project, stage, allowedDays) {
+  return stage.dueAt ?? stageScheduledAt(project, stage, allowedDays);
+}
 
-      <div class="tab-pane" data-pane="pipeline" hidden>
-        <h3>Project stage template</h3>
-        <p class="hint">The universal pipeline copied into every NEW project (existing projects keep their own copy). <em>No date</em> = the stage is pipeline weight — it just has to happen before the next dated thing. <em>Before/After</em> = a real target date, offset in working days from project start or end. A stage never surfaces before its predecessors are checked, whatever its date.</p>
-        <div id="stage-template-editor"></div>
-        <button id="stage-add" class="mini">+ Add stage</button>
-        <div class="form-row">
-          <label>Clear the deck at <input id="cfg-cleardeck" type="number" min="0" max="100"> % complete</label>
-        </div>
-        <p class="hint">Two piles. Projects at or past this mark are in the <em>finish it</em> pile and sort <em>most</em>-done first — they sit above everything still catching up, however heavy. Below the mark, the <em>least</em>-done leads, so nothing gets abandoned. Workload only breaks a tie between two projects at the same %, heavier first. Tiebreaker only — anything due sooner still comes first.</p>
-      </div>
+function atDeadlineHour(ts) { const d = new Date(ts); d.setHours(DEADLINE_HOUR, 0, 0, 0); return d.getTime(); }
 
-      <div class="tab-pane" data-pane="timing" hidden>
-        <h3>Timing</h3>
-        <div class="form-row">
-          <label>Computed stage deadlines count as due by <input id="cfg-deadline-hour" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
-        </div>
-        <p class="hint">Stages dated by pipeline math (not hard ⏰ dues) are "due by this hour" on their day — so a 9 AM task outranks them, and midnight doesn't flip them red.</p>
-        <div class="form-row">
-          <label>🐙 Decision time opens after <input id="cfg-decision-days" type="number" min="1" max="30"> day(s) overdue</label>
-        </div>
-        <div class="form-row">
-          <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr clock: 9 = 9 AM, 21 = 9 PM)</span></label>
-        </div>
-        <div class="form-row">
-          <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
-          <label>until <input id="cfg-sleep-end" type="number" min="0" max="23"> :00</label>
-        </div>
-        <div class="form-row">
-          <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
-        </div>
-        <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
-        <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
-        <p class="hint" id="poll-cost-hint"></p>
-      </div>
+/** [first, last] effective dates across ALL stages — the pipeline window (D48). */
+export function projectPipelineWindow(project, allowedDays) {
+  const start = project.startDate || 0, end = project.endDate || 0;
+  const dated = (project.stages || [])
+    .map(s => stageEffectiveDate(project, s, allowedDays))
+    .filter(d => d != null);
+  return [Math.min(start, ...dated), Math.max(end, ...dated)];
+}
 
-      <div class="modal-foot">
-        <span id="versions-line" class="hint-inline"></span>
-        <button id="settings-save" class="primary">Save settings</button>
-      </div>
-    </div>
-  </div>
+/** The NEXT dated commitment: earliest effective date among incomplete stages. */
+export function nextDeadline(project, allowedDays) {
+  const st = project.stages || [];
+  let best = null;
+  st.forEach((s, i) => {
+    if (s.completedAt) return;
+    const date = stageEffectiveDate(project, s, allowedDays);
+    if (date == null) return; // undated = weight, not deadline (D50)
+    if (!best || date < best.date) best = { date, stage: s, index: i };
+  });
+  return best; // null = no dated incomplete stages (caller falls back to project end)
+}
 
-  <!-- ============ DUE-DATE DIALOG ============ -->
-  <div id="due-modal" class="modal-shell" hidden>
-    <div class="modal-card modal-sm">
-      <h3 id="due-title">Hard due date</h3>
-      <div class="form-row">
-        <label>Date <input id="due-date" type="date"></label>
-        <label>Time <input id="due-time" type="time" value="17:00"></label>
-      </div>
-      <div class="modal-foot">
-        <button id="due-clear" class="mini">Clear due date</button>
-        <span class="flex-spring"></span>
-        <button id="due-cancel" class="mini">Cancel</button>
-        <button id="due-save" class="primary">Save</button>
-      </div>
-    </div>
-  </div>
+export function projectProgress(project) {
+  const stages = project.stages || [];
+  if (!stages.length) return { done: 0, total: 0, pct: 0 };
+  const done = stages.filter(s => s.completedAt).length;
+  return { done, total: stages.length, pct: done / stages.length };
+}
 
-  <!-- ============ PER-PROJECT STAGE EDITOR ============ -->
-  <div id="stages-modal" class="modal-shell" hidden>
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2 id="stages-title">✎ Stages</h2>
-        <button id="stages-cancel" class="icon-btn">✕</button>
-      </div>
-      <p class="hint">This edits THIS project only — the template in ⚙️ Settings is untouched. ✓ = already completed, ⏰ = has a hard due date; both survive renames and reordering. Offsets count this tier's working days.</p>
-      <div id="stage-proj-editor"></div>
-      <button id="stage-proj-add" class="mini">+ Add stage</button>
-      <button id="stage-proj-undate" class="mini" title="Early experiments and the old editors saved stages as 'After + 0wd' (from start OR end), silently dating them. This flips every such row to No date — review, then Save.">Un-date all "+0wd" stages</button>
-      <div class="modal-foot">
-        <span></span>
-        <button id="stages-save" class="primary">Save stages</button>
-      </div>
-    </div>
-  </div>
+/** D43 level 3 (pre-D85): remaining pipeline fraction × workload. No longer
+ *  in the sort — D86's deckRank/compareDeck below own that. Kept as a utility. */
+export function remainingWork(project) {
+  const { done, total } = projectProgress(project);
+  if (!total) return 0;
+  return ((total - done) / total) * (project.workload || 2);
+}
 
-  <!-- ============ WORKING-DAY DATE CHECK (D45→D60) ============ -->
-  <div id="weekend-modal" class="modal-shell" hidden>
-    <div class="modal-card modal-sm">
-      <h3>🗓️ Working-day check</h3>
-      <p id="weekend-text"></p>
-      <div class="weekend-choices">
-        <button id="weekend-yes" class="mini">Yes, keep it</button>
-        <button id="weekend-fri" class="primary"></button>
-        <button id="weekend-mon" class="primary"></button>
-        <button id="weekend-back" class="mini">Go back</button>
-      </div>
-    </div>
-  </div>
+/**
+ * D86 level-3 grouping — supersedes D85's single blended weight.
+ * Two PILES, split at CLEAR_DECK_THRESHOLD, and the pile always wins:
+ *   0 = CLEAR THE DECK (pct >= T) — every one of these outranks every
+ *       catch-up project, no matter how heavy the catch-up one is.
+ *   1 = CATCH UP (pct < T) — still behind; keep everything abreast.
+ *   2 = not a project (tasks/events carry no pipeline) — sorts last at
+ *       this level, exactly as remainingWork:0 always did.
+ * Ordering INSIDE a pile lives in compareDeck below.
+ */
+export function deckRank(project, threshold = CLEAR_DECK_THRESHOLD) {
+  const { total, pct } = projectProgress(project);
+  if (!total) return 2;
+  return pct >= threshold ? 0 : 1;
+}
 
-  <!-- ============ OVERDUE DECISION TIME (D46/D57) ============ -->
-  <div id="decision-modal" class="modal-shell" hidden>
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>🐙 Decision time</h2>
-        <button id="decision-close" class="icon-btn">✕</button>
-      </div>
-      <p class="hint">These have been overdue past your check-in threshold (⚙️ Timing). ✓ completes the next step, 🕐 pushes the deadline to the next working day at 9 AM — or close this and live dangerously; it won't ask again until tomorrow.</p>
-      <div id="decision-list"></div>
-    </div>
-  </div>
+/**
+ * D86 level-3 comparator (Jake's grouped two-tier model). Given a 60%
+ * threshold, four otherwise-identical projects sort 95 → 65 → 30 → 40:
+ *   · pile first — past the threshold beats not-past, always;
+ *   · inside CLEAR THE DECK: MOST done first (95 before 65 — finish it);
+ *   · inside CATCH UP: LEAST done first (30 before 40 — rescue laggards);
+ *   · workload ONLY breaks a genuine tie (two projects at the same pct):
+ *     heavier first — the peer review takes longer, so it needs to be out
+ *     the door sooner (Jake).
+ * Deliberately NOT a blended score: workload can never carry a catch-up
+ * project over a clear-deck one, and there's no U-shaped sag in the
+ * middle where a barely-started project outranks a nearly-finished one.
+ */
+export function compareDeck(a, b) {
+  const ra = a.deckRank ?? 2, rb = b.deckRank ?? 2;
+  if (ra !== rb) return ra - rb;                    // pile dominates
+  if (ra === 2) return 0;                           // tasks/events: neutral here
+  const pa = a.progressPct || 0, pb = b.progressPct || 0;
+  if (pa !== pb) return ra === 0 ? pb - pa : pa - pb; // clear: most done; catch-up: least done
+  return (b.workload || 0) - (a.workload || 0);     // tie → heavier first
+}
 
-  <!-- ============ UN-COMPLETE REWIND (D53) ============ -->
-  <div id="uncheck-modal" class="modal-shell" hidden>
-    <div class="modal-card modal-sm">
-      <h3 id="uncheck-title">↩️ Un-complete?</h3>
-      <p id="uncheck-text" class="hint"></p>
-      <div class="weekend-choices">
-        <button id="uncheck-oops" class="primary">Oops — keep it done</button>
-        <button id="uncheck-rewind" class="primary">Un-complete & pull follow-ups back to "Waiting on…"</button>
-        <button id="uncheck-keep" class="mini">Un-complete, but follow-ups keep their dates</button>
-      </div>
-    </div>
-  </div>
+// ---------- Task escalation (unchanged from v0.1.0, D3) ----------
 
-  <!-- ============ DUPLICATE FOR NEXT YEAR (D59/D62) ============ -->
-  <div id="dup-modal" class="modal-shell" hidden>
-    <div class="modal-card modal-sm">
-      <h3>🔁 Same time next year?</h3>
-      <p id="dup-text" class="hint"></p>
-      <div class="form-row">
-        <label class="dup-wide">Name <input id="dup-name" type="text"></label>
-      </div>
-      <div class="form-row">
-        <label>Start <input id="dup-start" type="date"></label>
-        <label>End <input id="dup-end" type="date"></label>
-      </div>
-      <div class="form-row">
-        <label>Color <input id="dup-color" type="color"></label>
-        <label>Tier <select id="dup-tier"></select></label>
-        <label>Workload
-          <select id="dup-workload">
-            <option value="1">1 — light</option>
-            <option value="2">2 — standard</option>
-            <option value="3">3 — heavy</option>
-          </select>
-        </label>
-      </div>
-      <p class="hint">✎⋮ below edits next year's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
-      <div class="weekend-choices">
-        <button id="dup-stages" class="mini">✎⋮ Review the pipeline first…</button>
-        <button id="dup-yes" class="primary">Create next year's run</button>
-        <div class="snooze-row"><span class="hint-inline">🕐 Remind me in</span>
-          <button id="dup-snooze-1" class="mini">a day</button>
-          <button id="dup-snooze-7" class="mini">a week</button>
-          <button id="dup-snooze-30" class="mini">a month</button>
-        </div>
-        <button id="dup-no" class="mini">No thanks</button>
-      </div>
-    </div>
-  </div>
+export function effectiveDue(task, now) {
+  if (task.completedAt) return null;
+  if (task.dueAt == null) return null;
+  const base = task.dueAt;
+  if (now <= base) return base;
+  const esc = task.escalation || { every: 1, unit: "hours" };
+  const every = Math.max(1, esc.every || 1);
+  if (esc.unit === "months") {
+    let t = base, guard = 0;
+    while (t < now && guard < 1200) { t = addMonths(t, every); guard++; }
+    return t;
+  }
+  const stepMs = (UNIT_MS[esc.unit] || UNIT_MS.hours) * every;
+  const k = Math.ceil((now - base) / stepMs);
+  return base + k * stepMs;
+}
 
-  <!-- Shared tap-popover for ⓘ dots -->
-  <div id="popover" hidden></div>
+export function isOverdue(task, now) {
+  return !task.completedAt && task.dueAt != null && now > task.dueAt;
+}
 
-  <script type="module" src="app.js?v=0.27.0"></script>
-</body>
-</html>
+export function isPinned(event, now) {
+  const lead = (event.leadWindowMinutes ?? 30) * 60 * 1000;
+  return now >= event.start - lead && now < (event.end || event.start + 30 * 60 * 1000);
+}
+
+function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+
+/**
+ * Calendar-safe day step, always landing on a LOCAL midnight.
+ * Do not replace with `ts + n*DAY_MS`: across a fall-back boundary that
+ * day is 25 hours, so Nov 1 00:00 + DAY_MS = Nov 1 23:00 — startOfDay
+ * would hand back Nov 1 AGAIN and the week would show a duplicate day
+ * and silently drop one. setDate() walks the calendar, which is what a
+ * week actually is. (Nashville observes DST; TZ is America/Chicago.)
+ */
+export function addDaysLocal(ts, n) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + n);
+  return d.getTime();
+}
+
+/** Whole days from local midnight `from` to the day containing `ts`. */
+function dayOffset(from, ts) {
+  return Math.round((startOfDay(ts) - startOfDay(from)) / DAY_MS); // rounding absorbs DST's ±1h
+}
+function endOfDay(ts) { return startOfDay(ts) + DAY_MS; }
+
+// ---------- The queue ----------
+
+/**
+ * D43 sort:
+ *   1. expired first (missed things at the very top, oldest deadline first)
+ *   2. chronological by deadline/due — TIER DOES NOT MATTER HERE
+ *   3. clear-deck piles (D86): past-threshold projects (most-done first),
+ *      then catch-up projects (least-done first), then tasks/events;
+ *      workload only breaks an exact-pct tie (heavier first)
+ *   4. tier rank
+ *   5. alphabetical
+ * hiddenTierIds (D47 filter) removes those tiers from EVERYTHING here.
+ */
+export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, hiddenTierIds = new Set() }) {
+  const dayStart = startOfDay(viewDay);
+  const dayEnd = endOfDay(viewDay);
+  const viewingToday = now >= dayStart && now < dayEnd;
+  const tierById = Object.fromEntries(tiers.map(t => [t.id, t]));
+  const rankOf = id => tierById[id]?.rank ?? 999;
+  // D61: is the VIEWED day outside this tier's working days? Off-day
+  // tiers vanish from the queue (not from cards, Done, or Waiting).
+  const viewDow = new Date(viewDay).getDay();
+  const offDay = tierId => {
+    const t = tierById[tierId];
+    return !!t && t.kind !== "anchor" && !allowedSet(t.allowedDays).has(viewDow);
+  };
+  const hidden = id => hiddenTierIds.has(id);
+
+  // --- All-day banners (D80): ambient truth, not appointments ---
+  const banners = events
+    .filter(e => e.allDay && !hidden(e.tierId))
+    .filter(e => e.start < dayEnd && (e.end || e.start + DAY_MS) > dayStart)
+    .map(e => {
+      const s0 = startOfDay(e.start);
+      const endEx = e.end || e.start + DAY_MS;         // all-day end is EXCLUSIVE
+      const dayTotal = Math.max(1, Math.round((endEx - s0) / DAY_MS));
+      const dayN = Math.min(dayTotal, Math.max(1, Math.round((dayStart - s0) / DAY_MS) + 1));
+      return { id: e.id, title: e.title, tier: tierById[e.tierId] || null, start: e.start, end: e.end || null, dayN, dayTotal };
+    })
+    .sort((a, b) => (rankOf(a.tier?.id) - rankOf(b.tier?.id)) || (a.start - b.start));
+
+  // --- Events (anchors); D82: past windows sink out of the live list,
+  // but only when the view IS today ---
+  // (viewingToday already computed above for pin/escalation logic)
+  const isPast = e => viewingToday && (e.end ?? e.start + 3600000) <= now;
+  const passedEvents = events
+    .filter(e => !e.allDay && !hidden(e.tierId) && isPast(e))
+    .filter(e => e.start < dayEnd && (e.end || e.start) >= dayStart)
+    .map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end || null, tier: tierById[e.tierId] || null }))
+    .sort((a, b) => a.start - b.start);
+
+  const dayEvents = events
+    .filter(e => !e.allDay && !hidden(e.tierId) && !isPast(e))
+    .filter(e => e.start < dayEnd && (e.end || e.start) >= dayStart)
+    .map(e => ({
+      kind: "event", id: e.id, title: e.title,
+      tier: tierById[e.tierId] || null,
+      time: e.start, end: e.end || null,
+      sortTime: e.start, expired: false, deckRank: 2,
+      pinned: viewingToday && isPinned(e, now)
+    }));
+  const pinned = dayEvents.filter(e => e.pinned).sort((a, b) => a.time - b.time);
+
+  // --- Tasks ---
+  const active = [];
+  const waiting = [];
+  const doneToday = [];
+  for (const t of tasks) {
+    if (hidden(t.tierId)) continue;
+    if (t.completedAt) {
+      if (t.completedAt >= dayStart && t.completedAt < dayEnd) doneToday.push(t);
+      continue;
+    }
+    if (t.dueAt == null) { waiting.push(t); continue; }
+    if (offDay(t.tierId)) continue; // D61
+    const dueThisDay = t.dueAt >= dayStart && t.dueAt < dayEnd;
+    const overdueIntoToday = viewingToday && t.dueAt < dayStart;
+    if (!(dueThisDay || overdueIntoToday)) continue;
+    const expired = viewingToday && isOverdue(t, now);
+    active.push({
+      kind: "task", id: t.id, title: t.title,
+      tier: tierById[t.tierId] || null,
+      originalDue: t.dueAt,
+      time: viewingToday ? effectiveDue(t, now) : t.dueAt, // escalation theater slot
+      sortTime: t.dueAt,      // D43 level 2 uses the HONEST due, not the theater
+      expired, overdue: expired,
+      deckRank: 2,
+      escalation: t.escalation || { every: 1, unit: "hours" },
+      raw: t
+    });
+  }
+
+  // --- Projects (one item each: active stage shown, next deadline sorted) ---
+  for (const p of projects) {
+    if (hidden(p.tierId)) continue;
+    if (offDay(p.tierId)) continue; // D61
+    const stages = p.stages || [];
+    const activeIdx = stages.findIndex(s => !s.completedAt);
+    if (activeIdx === -1) continue; // complete
+    const allowedDays = tierById[p.tierId]?.allowedDays; // D60
+    const [first, last] = projectPipelineWindow(p, allowedDays);
+    // D48: invisible until its earliest pipeline date; rides the queue through
+    // its last date; past that it lives on "today" as expired until dealt with.
+    const inWindow = viewingToday
+      ? now >= startOfDay(first)
+      : (dayEnd > startOfDay(first) && dayStart <= last);
+    if (!inWindow) continue;
+    const nd = nextDeadline(p, allowedDays);
+    const deadline = nd ? nd.date : atDeadlineHour(p.endDate || last);
+    const expired = viewingToday && now > deadline;
+    const prog = projectProgress(p);
+    active.push({
+      kind: "stage",
+      id: `${p.id}#${activeIdx}`,
+      projectId: p.id,
+      stageIndex: activeIdx,
+      title: stages[activeIdx].name,
+      projectName: p.name,
+      projectColor: p.color,
+      tier: tierById[p.tierId] || null,
+      progressPct: prog.pct,
+      workload: p.workload || 2,
+      deckRank: deckRank(p),
+      deadlineStageName: nd ? nd.stage.name : "project end",
+      deadlineStageIndex: nd ? nd.index : activeIdx,
+      deadlineManual: nd ? nd.stage.dueAt != null : false,
+      deadline,
+      sortTime: deadline,
+      time: deadline,
+      originalDue: deadline,
+      expired, overdue: expired,
+      dueAt: stages[activeIdx].dueAt ?? null
+    });
+  }
+
+  const unpinnedEvents = dayEvents.filter(e => !e.pinned);
+  const items = [...unpinnedEvents, ...active].sort((a, b) => {
+    if (a.expired !== b.expired) return a.expired ? -1 : 1;                 // 1 expired
+    if ((a.sortTime ?? 0) !== (b.sortTime ?? 0)) return (a.sortTime ?? 0) - (b.sortTime ?? 0); // 2 chrono
+    const deck = compareDeck(a, b);
+    if (deck !== 0) return deck;                                            // 3 clear-deck piles (D86)
+    const ra = rankOf(a.tier?.id), rb = rankOf(b.tier?.id);
+    if (ra !== rb) return ra - rb;                                          // 4 tier
+    return String(a.title).localeCompare(String(b.title));                  // 5 alphabet
+  });
+
+  doneToday.sort((a, b) => b.completedAt - a.completedAt);
+  waiting.sort((a, b) => rankOf(a.tierId) - rankOf(b.tierId));
+
+  return { pinned, items, waiting, doneToday, banners, passedEvents };
+}
+
+/**
+ * D88 — THE WEEK. Seven (or N) honest days plus the two spanning strips.
+ *
+ * buildQueue owns the truth for a single day, so this calls it once per
+ * column: expiry, D61 off-day tiers, escalation slots, the D86 piles and
+ * the whole sort come along for free. What this adds is everything that
+ * only exists ACROSS days.
+ *
+ * PROJECTS DO NOT REPEAT DOWN THE COLUMNS. D48 rides a project through
+ * every day of its pipeline window, which is right for "what could I
+ * touch today?" and wrong for a week — a 3-month project would render in
+ * all seven columns. So a stage row appears ONLY on the day its deadline
+ * actually lands (plus today, if it's expired — a missed thing must not
+ * vanish just because we changed views). The project's SPAN lives in the
+ * top strip instead, where a span belongs.
+ *
+ * Returns:
+ *   days[]        — { dayStart, isToday, isPast, items, load, passedEvents }
+ *   projectSpans  — bars for the top strip, with stage pips per day index
+ *   bannerSpans   — all-day events as one bar each, not one pill per day
+ * Both span lists carry fromIdx/toIdx CLIPPED to the window, plus
+ * clippedLeft/clippedRight so the UI can show "this continues offscreen"
+ * rather than lying about a start date.
+ */
+export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay, days = 7, hiddenTierIds = new Set() }) {
+  const start = startOfDay(anchorDay);
+  const today = startOfDay(now);
+  const weekEndEx = addDaysLocal(start, days); // exclusive
+  const hidden = id => hiddenTierIds.has(id);
+  const tierById = {};
+  tiers.forEach(t => { tierById[t.id] = t; });
+
+  const cols = [];
+  for (let i = 0; i < days; i++) {
+    const dayStart = addDaysLocal(start, i);
+    const dayEnd = addDaysLocal(start, i + 1);
+    const isToday = dayStart === today;
+    const q = buildQueue({ tasks, events, tiers, projects, now, viewDay: dayStart, hiddenTierIds });
+
+    const items = q.items.filter(it => {
+      if (it.kind !== "stage") return true;
+      if (isToday && it.expired) return true;                   // missed: still shouts
+      return it.deadline >= dayStart && it.deadline < dayEnd;   // otherwise: only on its day
+    });
+
+    cols.push({
+      dayStart,
+      isToday,
+      isPast: dayStart < today,
+      items,
+      passedEvents: isToday ? q.passedEvents : [],
+      load: {
+        total: items.length,
+        expired: items.filter(it => it.expired).length,
+        events: items.filter(it => it.kind === "event").length,
+        tasks: items.filter(it => it.kind === "task").length,
+        stages: items.filter(it => it.kind === "stage").length
+      }
+    });
+  }
+
+  // --- Project bars (top strip) ---
+  const projectSpans = [];
+  for (const p of projects) {
+    if (hidden(p.tierId)) continue;
+    const stages = p.stages || [];
+    if (!stages.length) continue;
+    const activeIdx = stages.findIndex(s => !s.completedAt);
+    if (activeIdx === -1) continue; // finished projects don't need a bar
+    const allowedDays = tierById[p.tierId]?.allowedDays; // D60
+    const [first, last] = projectPipelineWindow(p, allowedDays);
+    const s0 = startOfDay(first), s1 = startOfDay(last);
+    const nd = nextDeadline(p, allowedDays);
+    const deadlineAt = nd ? nd.date : atDeadlineHour(p.endDate || last);
+    const expired = now > deadlineAt;
+    let rawFrom = dayOffset(start, s0), rawTo = dayOffset(start, s1);
+
+    // D89 — NOTHING SILENTLY DISAPPEARS. A project whose whole pipeline
+    // window is already in the past would fail the "is it this week?"
+    // test and vanish — but D48 keeps an expired project alive on TODAY
+    // until it's dealt with, and an overdue project is the FIRST thing a
+    // planning board must show. So a late bar stretches to today.
+    const todayIdx = dayOffset(start, now);
+    const todayInWeek = todayIdx >= 0 && todayIdx < days;
+    if (expired && todayInWeek && rawTo < todayIdx) rawTo = todayIdx;
+    if (rawTo < 0 || rawFrom >= days) continue; // genuinely not this week
+
+    const pips = [];
+    stages.forEach((st, idx) => {
+      if (!stageIsDated(st)) return;
+      const when = stageEffectiveDate(p, st, allowedDays);
+      if (when == null) return;
+      const off = dayOffset(start, when);
+      if (off < 0 || off >= days) return;
+      pips.push({ dayIdx: off, name: st.name, index: idx, done: !!st.completedAt, isActive: idx === activeIdx });
+    });
+
+    const prog = projectProgress(p);
+    projectSpans.push({
+      id: p.id, name: p.name, color: p.color,
+      tier: tierById[p.tierId] || null,
+      deadlineAt,
+      expired,
+      deadlineStageName: nd ? nd.stage.name : "project end",
+      deadlineIdx: (dayOffset(start, deadlineAt) >= 0 && dayOffset(start, deadlineAt) < days) ? dayOffset(start, deadlineAt) : null,
+      progressPct: prog.pct,
+      workload: p.workload || 2,
+      fromIdx: Math.max(0, rawFrom),
+      toIdx: Math.min(days - 1, rawTo),
+      clippedLeft: rawFrom < 0,
+      clippedRight: rawTo > days - 1,
+      pct: prog.pct, done: prog.done, total: prog.total,
+      deckRank: deckRank(p),
+      activeStageName: stages[activeIdx].name,
+      pips
+    });
+  }
+  // D89: the SAME priority language as the queue (D43/D86) — expired
+  // shouts, then soonest deadline, then the clear-deck piles. Alphabetical
+  // ordering told Katie nothing about which bar to look at first.
+  projectSpans.sort((a, b) =>
+    (a.expired !== b.expired ? (a.expired ? -1 : 1) : 0) ||
+    (a.deadlineAt - b.deadlineAt) ||
+    compareDeck(a, b) ||
+    String(a.name).localeCompare(String(b.name))
+  );
+
+  // --- All-day banners (top strip): ONE bar per event, not a pill per day ---
+  const bannerSpans = [];
+  for (const e of events) {
+    if (!e.allDay || hidden(e.tierId)) continue;
+    const s0 = startOfDay(e.start);
+    const endEx = e.end || addDaysLocal(s0, 1);
+    const s1 = startOfDay(endEx - 1); // inclusive last day
+    if (s1 < start || s0 >= weekEndEx) continue;
+    const rawFrom = dayOffset(start, s0), rawTo = dayOffset(start, s1);
+    bannerSpans.push({
+      id: e.id, title: e.title,
+      tier: tierById[e.tierId] || null,
+      start: e.start, end: e.end || null,
+      fromIdx: Math.max(0, rawFrom),
+      toIdx: Math.min(days - 1, rawTo),
+      clippedLeft: rawFrom < 0,
+      clippedRight: rawTo > days - 1,
+      dayTotal: Math.max(1, dayOffset(s0, s1) + 1)
+    });
+  }
+  bannerSpans.sort((a, b) => (a.fromIdx - b.fromIdx) || (b.toIdx - a.toIdx) || String(a.title).localeCompare(String(b.title)));
+
+  const peak = Math.max(1, ...cols.map(c => c.load.total));
+  cols.forEach(c => { c.loadShare = c.load.total / peak; }); // 0–1, for the header bar
+
+  return { anchor: start, days: cols, dayCount: days, projectSpans, bannerSpans, peakLoad: peak };
+}
+
+/**
+ * D89 — where does the week start? Three answers, all legitimate:
+ *   "rolling" — today + 6. No wasted columns; best for a live kiosk.
+ *   "sunday"  — Sun–Sat, the wall-calendar week.
+ *   "monday"  — Mon–Sun, the working week (ISO).
+ * Jake: the past columns are NOT dead space — "a part of it is also
+ * reflecting on the week to work on next week." Planning needs the
+ * week you just had. weekOffset pages by whole weeks either way.
+ */
+export function weekAnchorFor(mode, ref = Date.now(), weekOffset = 0) {
+  const base = startOfDay(ref);
+  if (mode === "sunday" || mode === "monday") {
+    const startDow = mode === "monday" ? 1 : 0;
+    const back = (new Date(base).getDay() - startDow + 7) % 7;
+    return addDaysLocal(base, -back + weekOffset * 7);
+  }
+  return addDaysLocal(base, weekOffset * 7); // rolling
+}
+
+export function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+export function fmtDay(ts) {
+  return new Date(ts).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
