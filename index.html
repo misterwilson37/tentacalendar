@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.23.0 (banner and data-html-version move together, always)
+     Version 0.24.0 (banner and data-html-version move together, always)
+     0.24.0 (D92): app ?v= → 0.31.0, css ?v= → 0.26.0. No markup change.
      0.23.0 (D91): app ?v= → 0.30.0, css ?v= → 0.25.0. No markup change —
      the Bars buttons were always here; their handler never existed.
      0.22.0 (D90): nav-slots in ALL THREE views — "back to now" no longer
@@ -90,9 +91,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.25.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.26.0">
 </head>
-<body data-html-version="0.23.0">
+<body data-html-version="0.24.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -515,6 +516,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.30.0"></script>
+  <script type="module" src="app.js?v=0.31.0"></script>
 </body>
 </html>
