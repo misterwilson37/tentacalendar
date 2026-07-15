@@ -1,6 +1,6 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.27.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.29.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
    0.27.0 (D95): .well-travelled — a quiet mark on a task that's been
    moved 3+ times. Not a scolding; a question.
@@ -113,7 +113,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.27.0";
+  --tc-version: "0.29.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -959,6 +959,171 @@ body.celebration-wave::after {
 }
 .wv-col.is-today { border-color: var(--accent); background: var(--panel-2); }
 .wv-col.is-past { opacity: .55; }   /* dimmed, NOT gone — D14's promise */
+/* ...unless it's carrying reflection. A day you're reading is not a day
+   you're ignoring, so the Wake gets its contrast back (D97). */
+.wv-col.is-past.cards-open { opacity: .85; }
+
+/* ============================================================
+   D97 — THE TIDAL GRID (layout #2 under Week)
+   A day is three kinds of time, and they don't share a container:
+   the anchor shelf (fixed, not ours), the flow (ours to arrange),
+   and — once the day is gone — the wake.
+   ============================================================ */
+
+.tidal-col { gap: 0; }
+
+/* THE ANCHOR SHELF — "visually distinct background to separate fixed time
+   from flexible time." Tinted, inset, and sitting ON TOP like a header,
+   because that's what a fixed commitment does to a day. */
+.tidal-anchor-shelf {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: .2rem;
+  padding: .3rem;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 0 -3px 6px -4px rgba(0, 0, 0, .6);
+  max-height: 40%; overflow-y: auto;
+}
+/* No color-mix (old Android tablet — D96's habitat)? Fall back to a flat
+   panel tone. The shelf must still READ as separate; it just won't be teal. */
+@supports not (background: color-mix(in srgb, red 10%, blue)) {
+  .tidal-anchor-shelf { background: var(--panel-2); }
+}
+.tidal-anchor-shelf.empty {
+  padding: .15rem .3rem;
+  background: transparent;
+  border-bottom: 1px dashed var(--line);
+  box-shadow: none;
+}
+.tidal-shelf-none {
+  font-size: .62rem; color: var(--muted); opacity: .5;
+  letter-spacing: .04em; text-align: center;
+}
+
+/* THE FLOW — everything that's yours to move. */
+.tidal-flow {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: .3rem; display: flex; flex-direction: column; gap: .25rem;
+}
+
+/* THE WAKE — what the day actually did to you. */
+.tidal-wake {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: .3rem; display: flex; flex-direction: column; gap: .3rem;
+}
+.tidal-wake-summary {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline; justify-content: center; gap: .3rem;
+  padding: .25rem; border-radius: var(--radius);
+  background: var(--panel-2); border: 1px solid var(--line);
+  font-size: .78rem; font-variant-numeric: tabular-nums;
+  /* D89: NO BAR. A bar that has to be explained is a bar that's wrong.
+     These are two numbers that mean exactly what they say. */
+}
+.tidal-wake-summary.all-clear { border-color: var(--ok, #69db7c); }
+.twk-won { color: var(--ok, #69db7c); font-weight: 700; }
+.twk-sep { color: var(--muted); opacity: .5; }
+.twk-lost { color: var(--warn, #ffa94d); font-weight: 700; }
+.twk-lost.none { color: var(--muted); font-weight: 400; opacity: .6; }
+
+/* THE CARDS (5a-bis) — victories and put-offs. */
+.refl-cards { display: flex; flex-direction: column; gap: .3rem; }
+.refl-card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-2); overflow: hidden;
+}
+.refl-head {
+  padding: .2rem .35rem; font-size: .64rem; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 1px solid var(--line);
+}
+.refl-card.victories .refl-head { color: var(--ok, #69db7c); }
+.refl-card.putoffs .refl-head { color: var(--warn, #ffa94d); }
+
+.refl-vrow, .refl-prow {
+  display: flex; align-items: center; gap: .3rem;
+  padding: .22rem .3rem;
+  border-left: 3px solid transparent;
+  font-size: .7rem; min-width: 0;
+}
+.refl-vrow + .refl-vrow, .refl-prow + .refl-prow { border-top: 1px solid var(--line); }
+.tv-time { color: var(--muted); font-size: .62rem; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.tv-title, .tp-title {
+  flex: 1; min-width: 0;                     /* landmine #5: without this the
+     title's min-content pushes the tag off the column (D65) */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.refl-vrow .tv-title { text-decoration: line-through; text-decoration-color: var(--muted); opacity: .85; }
+.tv-flag, .tp-moved {
+  flex: 0 0 auto; font-size: .58rem; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tp-tag {
+  flex: 0 0 auto; font-size: .6rem; color: var(--muted);
+  white-space: nowrap;
+}
+/* Three flavours, three colours — "she moved it" and "nobody looked at it"
+   are opposite behaviours and must not look identical. */
+.refl-prow.flavor-moved   { border-left-color: var(--warn, #ffa94d); }
+.refl-prow.flavor-shelved { border-left-color: var(--muted); }
+.refl-prow.flavor-ignored { border-left-color: var(--danger); }
+.refl-prow.flavor-ignored .tp-tag { color: var(--danger); }
+.refl-prow.well-travelled { border-left-style: dotted; border-left-width: 4px; }
+.refl-prow.clickable { cursor: pointer; }
+.refl-prow.clickable:hover { background: var(--panel); }
+
+/* D98 — GANTESQUE's placement: the day list keeps the column and the cards
+   sit beneath it, capped so a busy Tuesday can't push the list off-screen.
+   Tidal's Wake REPLACES the list; that difference is the comparison. */
+.refl-cards.in-columns {
+  flex: 0 0 auto;
+  margin: 0 .3rem .3rem;
+  max-height: 45%;
+  overflow-y: auto;
+  border-top: 1px dashed var(--line);
+  padding-top: .3rem;
+}
+
+/* Past day heads speak in past tense (D98). */
+.wv-done {
+  font-size: .62rem; font-weight: 700;
+  color: var(--ok, #69db7c); font-variant-numeric: tabular-nums;
+}
+.wv-putoff {
+  font-size: .62rem; font-weight: 700;
+  color: var(--warn, #ffa94d); font-variant-numeric: tabular-nums;
+}
+
+/* THE HORIZON — undated inventory, spanning the week. */
+#tidal-horizon {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: .3rem;
+  flex-wrap: wrap;
+  padding: .3rem; margin-top: .3rem;
+  border: 1px dashed var(--line); border-radius: var(--radius);
+  background: var(--panel);
+  max-height: 20%; overflow-y: auto;
+}
+.th-label {
+  font-size: .62rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); flex: 0 0 auto;
+}
+.th-chip {
+  font-size: .68rem; padding: .12rem .4rem;
+  border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: 999px; background: var(--panel-2);
+  max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.th-chip.clickable { cursor: pointer; }
+.th-chip.clickable:hover { background: var(--panel); }
+.th-chip.well-travelled { border-left-style: dotted; }
+/* A follow-up cannot be scheduled — it materialises when its parent is
+   checked off (D4). It reads as inert on purpose: it is not an invitation. */
+.th-chip.blocked {
+  opacity: .45; border-style: dashed; border-left-color: var(--muted);
+  cursor: default;
+}
+.th-chip.blocked::before { content: "⛓ "; opacity: .7; }
 
 /* D89 — the date row, at the TOP of the board. */
 .wv-dayhead {
