@@ -1,5 +1,11 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.31.0 — "click to read, click to fold" (D92)
+// 0.31.0: D91 expanded a bar on click and left no way back (Jake). Now
+// one rule, no timing: at compact sizes a click TOGGLES expand/collapse
+// and the expanded bar grows a ✎ to act; at readable sizes a click acts
+// directly. "If you can read it, clicking acts; if you can't, clicking
+// makes it readable." The hover says which one you'll get.
 // Version 0.30.0 — "the board actually makes room" (D91)
 // 0.30.0: D90's density edit NEVER LANDED — my patch script built a list
 // of replacements, applied three by hand and never iterated the list, so
@@ -298,7 +304,7 @@ import {
 } from "./queue.js?v=0.14.1";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.30.0";
+export const APP_VERSION = "0.31.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1849,19 +1855,42 @@ function renderWeekProjects(w) {
       `\nNow: ${p.activeStageName}` +
       `\n${p.expired ? "❗MISSED — was due" : "Next deadline:"} ${p.deadlineStageName}, ${fmtDay(p.deadlineAt)} ${fmtTime(p.deadlineAt)}` +
       (p.deckRank === 0 ? "\n🏁 past the clear-the-deck line — finish it" : "") +
-      "\n\nClick to set this stage's due date.";
-    el.classList.add("clickable"); // D90
-    // D91 — when the size has taken the words away, the FIRST click gives
-    // them back (Jake: "a click ... should expand it to be visible, even if
-    // it expands past the available space"). The second click acts. Read,
-    // then commit — never make someone act on a bar they can't read.
+      "\n\n" + (["quarter", "hair"].includes(strip.dataset.size)
+        ? (S.weekExpanded.has(p.id) ? "Click to collapse · ✎ sets the due date." : "Click to expand.")
+        : "Click to set this stage's due date.");
+    el.classList.add("clickable");
+    // D92 — ONE rule, no timing: "if you can read it, clicking acts; if you
+    // can't, clicking makes it readable." D91 expanded on click but gave no
+    // way back (Jake). Jake's fix was to branch on whether the native
+    // tooltip had appeared — same intent, but that makes a click mean
+    // different things depending on how long you paused over it, which is
+    // exactly the kind of surprise a planning board can't afford. So:
+    // compact size → click TOGGLES expand/collapse, and the expanded bar
+    // grows a ✎ to act. Readable size → click acts directly.
     const compact = ["quarter", "hair"].includes(strip.dataset.size);
-    if (S.weekExpanded.has(p.id)) el.classList.add("forced-full");
-    el.addEventListener("click", () => {
-      if (compact && !S.weekExpanded.has(p.id)) { S.weekExpanded.add(p.id); renderWeek(); return; }
-      openDueDialog({ kind: "stage", projectId: p.id, stageIndex: p.activeStageIndex },
-        `Hard due date — ${p.activeStageName}`, null);
-    });
+    const expanded = S.weekExpanded.has(p.id);
+    const editIt = () => openDueDialog(
+      { kind: "stage", projectId: p.id, stageIndex: p.activeStageIndex },
+      `Hard due date — ${p.activeStageName}`, null);
+
+    if (compact) {
+      if (expanded) el.classList.add("forced-full");
+      el.addEventListener("click", ev => {
+        if (ev.target.closest(".wv-edit")) return;   // the ✎ speaks for itself
+        if (expanded) S.weekExpanded.delete(p.id); else S.weekExpanded.add(p.id);
+        renderWeek();
+      });
+      if (expanded) {
+        const ed = document.createElement("button");
+        ed.className = "wv-edit mini";
+        ed.textContent = "✎";
+        ed.title = `Set the due date for “${p.activeStageName}”`;
+        ed.addEventListener("click", ev => { ev.stopPropagation(); editIt(); });
+        el.append(ed);
+      }
+    } else {
+      el.addEventListener("click", editIt);
+    }
     strip.append(el);
   }
 }
