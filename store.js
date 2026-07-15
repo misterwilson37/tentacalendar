@@ -1,6 +1,12 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.9.0
+// Version 0.10.0
+// 0.10.0 (D95): tasks remember being moved — firstDueAt (the original
+// commitment) + rescheduleCount. Counted inside updateTask so EVERY path
+// that changes a due date is caught, including ones not written yet.
+// No migration: firstDueAt ?? dueAt at read time IS the backfill.
+// Only a date that EXISTED can be moved: null → date is scheduling, not
+// rescheduling, and doesn't count.
 // 0.9.0 (D85): seed config gains clearDeckThreshold (0.6) — the point
 // where the queue flips a project from "keep abreast" to "clear the
 // deck." Additive; live DBs never reseed, so readers fall back to 0.6.
@@ -28,7 +34,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.9.0";
+export const STORE_VERSION = "0.10.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -234,9 +240,49 @@ export function deleteTask(taskId) {
 }
 
 /** Edit any task fields (title, tierId, dueAt, escalation, offsetDays...). */
-export function updateTask(taskId, fields) {
-  return updateDoc(doc(col("tasks"), taskId), fields);
+/**
+ * D95 — a due-date change is a RESCHEDULE, and the app remembers it.
+ *   firstDueAt      — what she originally committed to
+ *   rescheduleCount — how many times it moved since
+ * Jake: "if she reschedules something 5 times, that's worthy of looking
+ * at the _why_." Until now a reschedule overwrote dueAt and erased its
+ * own evidence — the exact thing worth reflecting on.
+ *
+ * CENTRALISED HERE, not at the call sites, so every path that ever moves
+ * a date is counted for free: the due dialog (D84), the decision modal's
+ * 🕐 next-working-day, shelving to Waiting, and the drag-to-reschedule
+ * that isn't built yet. A future caller cannot forget to count.
+ *
+ * NO MIGRATION, NO BACKFILL BUTTON. `firstDueAt ?? dueAt` at read time is
+ * the retroactive answer: for a task predating this field, its current due
+ * IS its first KNOWN due — honest, and costs zero writes to Katie's live
+ * data. Jake asked whether we could backfill; the fallback IS the backfill.
+ *
+ * Escalation does NOT come through here (it only re-times the queue's
+ * display slot, never dueAt), so nagging can't inflate the count. Only a
+ * human moving a date does.
+ */
+export async function updateTask(taskId, fields) {
+  const ref = doc(col("tasks"), taskId);
+  if (!("dueAt" in fields)) return updateDoc(ref, fields);   // nothing to count
+
+  const snap = await getDoc(ref);
+  const cur = snap.exists() ? snap.data() : {};
+  const patch = { ...fields };
+  // You can only MOVE a commitment that existed. cur.dueAt == null means
+  // this is the FIRST date this task ever had (born in Waiting, or picked
+  // back up off the shelf) — that's scheduling, not rescheduling, and
+  // counting it would inflate the number with a non-event. The count's
+  // whole worth is that a 5 means something.
+  if (cur.dueAt != null && cur.dueAt !== fields.dueAt) {   // a no-op save isn't a move either
+    if (cur.firstDueAt == null) patch.firstDueAt = cur.dueAt;
+    patch.rescheduleCount = (cur.rescheduleCount || 0) + 1;
+  }
+  return updateDoc(ref, patch);
 }
+
+/** D95 — read a task's original commitment. The ?? IS the backfill. */
+export function taskFirstDue(t) { return t?.firstDueAt ?? t?.dueAt ?? null; }
 
 // ---------- Projects & pipeline stages ----------
 
