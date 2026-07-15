@@ -1,6 +1,8 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.14.0
+// Version 0.14.1
+// 0.14.1 (D90): spans carry activeStageIndex — the clickable bar needs
+// it to open the due dialog on the right stage.
 // 0.14.0 (D89): projectSpans now sort by PRIORITY, not the alphabet —
 // expired first, then next deadline, then the D86 piles (Jake: "projects
 // should be in priority order"; ten bars sorted A–Z said nothing about
@@ -54,7 +56,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.14.0";
+export const QUEUE_VERSION = "0.14.1";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -587,6 +589,7 @@ export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay,
       pct: prog.pct, done: prog.done, total: prog.total,
       deckRank: deckRank(p),
       activeStageName: stages[activeIdx].name,
+      activeStageIndex: activeIdx,   // D90: the bar is clickable → openDueDialog needs it
       pips
     });
   }
