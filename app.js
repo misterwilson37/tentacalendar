@@ -1,5 +1,16 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.30.0 — "the board actually makes room" (D91)
+// 0.30.0: D90's density edit NEVER LANDED — my patch script built a list
+// of replacements, applied three by hand and never iterated the list, so
+// weekBarSize/setWeekSize were called but never defined and dataset.size
+// was never set. node --check parses; it does not notice a call to a
+// function nobody wrote. Jake found it in one click. Now: the functions
+// exist, Auto is HEIGHT-aware (measure the board, give the columns ~60%),
+// and #week-view is pinned to the space under the header — height:100%
+// against a parent with no height resolved to auto, which is why the
+// columns walked off the bottom. First click on a too-small bar expands
+// it; the second acts.
 // Version 0.29.0 — "the board makes room" (D90)
 // 0.29.0: HEIGHT. Eleven project bars pushed the day columns off the
 // screen — #wv-sizes (Auto/▮/▪/▁/🧵) thins them, Auto stepping down as
@@ -287,7 +298,7 @@ import {
 } from "./queue.js?v=0.14.1";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.29.0";
+export const APP_VERSION = "0.30.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -314,6 +325,7 @@ const S = {
   weekMode: ["rolling", "sunday", "monday"].includes(localStorage.getItem("tc-wmode")) ? localStorage.getItem("tc-wmode") : "rolling", // D89
   weekOffset: 0,      // D89: whole weeks from the anchor; 0 = the live week
   weekSize: ["auto", "full", "half", "quarter", "hair"].includes(localStorage.getItem("tc-wsize")) ? localStorage.getItem("tc-wsize") : "auto", // D90
+  weekExpanded: new Set(),   // D91: bars clicked open for a read at compact sizes
   yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
   yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
   yearZoom: null,          // D18 month zoom: month-start ts, or null for the 12-month grid
@@ -357,6 +369,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const b = e.target.closest("button[data-wmode]");
     if (b) setWeekMode(b.dataset.wmode);
   });
+  window.addEventListener("resize", () => { if (S.view === "week") renderWeek(); }); // D91
   $("#wv-sizes").addEventListener("click", e => {
     const b = e.target.closest("button[data-size]");
     if (b) setWeekSize(b.dataset.size);
@@ -1614,6 +1627,7 @@ function weekAnchor() {
 }
 
 function renderWeek() {
+  fitWeekHeight();          // D91 — measure BEFORE weekBarSize() asks how tall we are
   const now = Date.now();
   const w = buildWeek({
     tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
@@ -1743,10 +1757,54 @@ function renderWeekBanners(w) {
   }
 }
 
+/**
+ * D91 — Auto is HEIGHT-aware, not just count-aware. The first cut laddered
+ * on bar-count alone, which says nothing about whether they FIT: the board
+ * has to give the day columns the majority of the glass, whatever the
+ * window is doing. Measure, then pick the fattest size that still leaves
+ * them ~60%. (Jake: "auto is not reducing the height to the same level as
+ * it does in the annual view.")
+ */
+const BAR_PX = { full: 34, half: 24, quarter: 17, hair: 9 };
+
+function weekBarSize(n) {
+  if (S.weekSize !== "auto") return S.weekSize;
+  if (!n) return "full";
+  const board = $("#week-view").clientHeight || window.innerHeight || 800;
+  const budget = board * 0.34;                 // strips may have a third
+  for (const k of ["full", "half", "quarter"]) {
+    if (n * (BAR_PX[k] + 5) <= budget) return k;
+  }
+  return "hair";
+}
+
+function setWeekSize(v) {
+  S.weekSize = v;
+  localStorage.setItem("tc-wsize", v);
+  S.weekExpanded.clear();   // a size change re-answers the question the expand asked
+  renderWeek();
+}
+
+/**
+ * D91 — the board must FIT the glass. #week-view had height:100% against
+ * #app-screen, which has no height of its own, so 100% resolved to auto:
+ * the section grew, #wv-grid's flex:1 had nothing to divide against, and
+ * the day columns walked off the bottom of the window. Measure the space
+ * left under the header and pin it. offsetTop is stable because it depends
+ * on the header, not on us — no layout feedback loop.
+ */
+function fitWeekHeight() {
+  const sec = $("#week-view");
+  if (!sec || sec.hidden) return;
+  const top = sec.getBoundingClientRect().top + window.scrollY;
+  sec.style.height = Math.max(320, window.innerHeight - top - 8) + "px";
+}
+
 function renderWeekProjects(w) {
   const strip = $("#wv-projects");
   strip.innerHTML = "";
   strip.hidden = !w.projectSpans.length;
+  strip.dataset.size = weekBarSize(w.projectSpans.length);
   for (const p of w.projectSpans) {
     const el = document.createElement("div");
     el.className = "wv-span wv-proj" + (p.deckRank === 0 ? " clear-deck" : "");
@@ -1793,9 +1851,17 @@ function renderWeekProjects(w) {
       (p.deckRank === 0 ? "\n🏁 past the clear-the-deck line — finish it" : "") +
       "\n\nClick to set this stage's due date.";
     el.classList.add("clickable"); // D90
-    el.addEventListener("click", () =>
+    // D91 — when the size has taken the words away, the FIRST click gives
+    // them back (Jake: "a click ... should expand it to be visible, even if
+    // it expands past the available space"). The second click acts. Read,
+    // then commit — never make someone act on a bar they can't read.
+    const compact = ["quarter", "hair"].includes(strip.dataset.size);
+    if (S.weekExpanded.has(p.id)) el.classList.add("forced-full");
+    el.addEventListener("click", () => {
+      if (compact && !S.weekExpanded.has(p.id)) { S.weekExpanded.add(p.id); renderWeek(); return; }
       openDueDialog({ kind: "stage", projectId: p.id, stageIndex: p.activeStageIndex },
-        `Hard due date — ${p.activeStageName}`, null));
+        `Hard due date — ${p.activeStageName}`, null);
+    });
     strip.append(el);
   }
 }
