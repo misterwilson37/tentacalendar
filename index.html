@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.25.0 (banner and data-html-version move together, always)
+     Version 0.27.0 (banner and data-html-version move together, always)
      0.25.0 (D96): INSTALLABLE — manifest.json + real PNG icons + the
      mobile-web-app meta tags, so Add to Home Screen drops the address
      bar on the old tablet. ⛶ fullscreen added to the AGENDA nav (week
@@ -112,9 +112,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.27.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.29.0">
 </head>
-<body data-html-version="0.25.0">
+<body data-html-version="0.27.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -264,6 +264,12 @@
         <button id="wv-next" class="icon-btn" title="Forward one week">▶</button>
         <button id="wv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
       </div>
+      <div class="wv-modes" id="wv-layouts" title="Two ways to read the same week. Gantesque: one honest queue per day, everything interleaved in time order. Tidal: fixed time (events) shelved above the work that's yours to move, and past days become a reflection on what actually happened.">
+        <span class="wv-modes-label">Layout</span>
+        <button data-wlayout="columns" class="mini">Gantesque</button>
+        <button data-wlayout="tidal" class="mini">Tidal</button>
+        <button id="wv-cards-toggle" class="mini" title="Show what each past day actually did: what got finished, and what got put off — and whether it was moved, shelved, or nobody touched it. Works in BOTH layouts: Gantesque hangs the cards under its day list, Tidal turns the whole past column into them. Off = just the headline numbers (and in Tidal, past days shrink to give the live days more room).">🏆 Reflection</button>
+      </div>
       <div class="wv-modes" id="wv-modes" title="Where the week starts. Rolling wastes no columns on a kiosk; Sun–Sat / Mon–Sun keep the days you just had, because reflecting on them is how you plan the next ones.">
         <span class="wv-modes-label">Week</span>
         <button data-wmode="rolling" class="mini">Today +6</button>
@@ -285,6 +291,7 @@
       </div>
       <div class="wv-split" id="wv-split" title="Drag to give the projects more or less of the board. Auto refits the bars to whatever you choose."></div>
       <div id="wv-grid"></div>
+      <div id="tidal-horizon" hidden></div>
       <p class="hint" id="wv-empty" hidden>Nothing scheduled this week. Suspicious.</p>
     </section>
 
@@ -539,6 +546,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.33.0"></script>
+  <script type="module" src="app.js?v=0.35.0"></script>
 </body>
 </html>
