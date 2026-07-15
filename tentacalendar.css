@@ -1,6 +1,15 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.21.1
+   Version 0.23.0  (banner and --tc-version move together, ALWAYS —
+   0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.23.0 (D89): .wv-dayhead row (dates at the TOP), .view-switch labeled
+   3-way, .wv-modes week-start buttons, .wv-dl deadline blocks. The
+   .wv-load meter is GONE — it looked like progress and wasn't.
+   0.22.1 (D89): week type re-scaled for the real screen — a 55" 4K
+   WHITEBOARD at 4 feet, not a wall at 8. Caps raised so full-width
+   (~548px columns) uses the room instead of stranding tiny text in it.
+   0.22.0 (D88): #week-view — two spanning strips over seven queue
+   columns; clamp() type, min-width:0 on every text-bearing flex child.
    0.21.1 (D84): #cfg-mirror-cal sizes to its row (flex:1, min 12rem).
    0.21.0 (D82): .past-event rows (dimmed, struck time) in the
    #earlier box; #earlier heading matches waiting/done.
@@ -88,7 +97,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.22.0";
+  --tc-version: "0.23.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -723,6 +732,26 @@ body.celebration-wave::after {
    · past days dim, they don't disappear.
    ============================================================ */
 
+.view-switch { display: flex; gap: .2rem; }
+.view-switch button {
+  padding: .25rem .55rem; font-size: .78rem; white-space: nowrap;
+  opacity: .55;
+}
+.view-switch button.active {
+  opacity: 1; background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent);
+}
+
+.wv-modes { display: flex; align-items: center; gap: .25rem; }
+.wv-modes-label {
+  font-size: .7rem; color: var(--ink-dim); text-transform: uppercase;
+  letter-spacing: .05em; margin-right: .25rem;
+}
+.wv-modes button { padding: .2rem .5rem; font-size: .72rem; opacity: .55; }
+.wv-modes button.active {
+  opacity: 1; box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent);
+}
+
 #week-view {
   display: flex; flex-direction: column;
   gap: .6rem; padding: .8rem 1rem 1.2rem;
@@ -752,7 +781,7 @@ body.celebration-wave::after {
   border-radius: 6px;
   padding: .3rem .5rem;
   min-width: 0;
-  font-size: clamp(.75rem, .62vw, 1.15rem);
+  font-size: clamp(.75rem, .62vw, 1.6rem);
   white-space: nowrap;
   /* NO overflow:hidden here — it would clip the project pips, which sit
      on the bar's bottom edge. Each child clips its own text instead. */
@@ -777,6 +806,22 @@ body.celebration-wave::after {
   opacity: .85; border-radius: 0 2px 2px 0;
 }
 /* A pip = a day this project actually wants something. */
+/* D89: the deadline DAY, as a block that lines up with its column —
+   a 7px dot was invisible on a 55" board (Jake's screenshot proved it). */
+.wv-dl {
+  position: absolute; top: 0; bottom: 0;
+  background: rgba(255, 255, 255, .16);
+  border-left: 2px solid var(--ink);
+  border-right: 2px solid var(--ink);
+  pointer-events: none;
+}
+.wv-dl.expired { background: rgba(255, 107, 107, .28); border-color: var(--danger); }
+.wv-proj.expired { box-shadow: inset 0 0 0 1px var(--danger); }
+.wv-proj-next {
+  color: var(--ink-dim); flex-shrink: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  font-size: clamp(.65rem, .5vw, 1.2rem);
+}
 .wv-pip {
   position: absolute; bottom: 5px; width: 7px; height: 7px;
   border-radius: 50%; background: var(--ink-dim);
@@ -801,36 +846,34 @@ body.celebration-wave::after {
 .wv-col.is-today { border-color: var(--accent); background: var(--panel-2); }
 .wv-col.is-past { opacity: .55; }   /* dimmed, NOT gone — D14's promise */
 
-.wv-head {
-  display: flex; align-items: center; gap: .35rem;
-  padding: .35rem .5rem;
-  border-bottom: 1px solid var(--line);
-  background: rgba(0, 0, 0, .18);
-  min-width: 0;
+/* D89 — the date row, at the TOP of the board. */
+.wv-dayhead {
+  display: flex; align-items: baseline; gap: .4rem;
+  padding: .3rem .5rem; min-width: 0;
+  border-bottom: 2px solid var(--line);
+}
+.wv-dayhead.is-today { border-bottom-color: var(--accent); }
+.wv-dayhead.is-past { opacity: .5; }
+.wv-dayhead.is-today .wv-date { color: var(--accent); }
+.wv-left {
+  font-size: clamp(.62rem, .5vw, 1.15rem); color: var(--ink-dim);
+  margin-left: auto; white-space: nowrap;
+}
+.wv-left.none { opacity: .4; font-style: italic; }
+.wv-missed {
+  font-size: clamp(.62rem, .5vw, 1.15rem); color: var(--danger);
+  font-weight: 700; white-space: nowrap;
 }
 .wv-dow {
-  font-size: clamp(.7rem, .55vw, 1.05rem);
+  font-size: clamp(.7rem, .55vw, 1.5rem);
   color: var(--ink-dim); text-transform: uppercase; letter-spacing: .05em;
   font-weight: 700; flex-shrink: 0;
 }
 .wv-date {
-  font-size: clamp(.95rem, .8vw, 1.5rem);
+  font-size: clamp(.95rem, .8vw, 2.4rem);
   font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0;
 }
 .wv-col.is-today .wv-date { color: var(--accent); }
-
-/* The load bar: the week's whole reason for existing. */
-.wv-load {
-  flex: 1; min-width: 0; height: 5px; border-radius: 3px;
-  background: rgba(255, 255, 255, .07); overflow: hidden;
-}
-.wv-load i { display: block; height: 100%; background: var(--accent); opacity: .75; }
-.wv-load i.has-expired { background: var(--danger); opacity: .9; }
-.wv-count {
-  font-size: clamp(.7rem, .55vw, 1rem);
-  color: var(--ink-dim); font-variant-numeric: tabular-nums;
-  min-width: 1ch; text-align: right; flex-shrink: 0;
-}
 
 .wv-list {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -855,19 +898,19 @@ body.celebration-wave::after {
 .wv-row.expired { box-shadow: inset 0 0 0 1px var(--danger); }
 .wv-when {
   grid-area: when;
-  font-size: clamp(.65rem, .5vw, .95rem);
+  font-size: clamp(.65rem, .5vw, 1.25rem);
   color: var(--ink-dim); font-variant-numeric: tabular-nums;
   white-space: nowrap; align-self: center;
 }
 .wv-row.expired .wv-when { color: var(--danger); font-weight: 700; }
 .wv-title {
   grid-area: title; min-width: 0;
-  font-size: clamp(.72rem, .58vw, 1.1rem); font-weight: 600;
+  font-size: clamp(.72rem, .58vw, 1.5rem); font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .wv-sub {
   grid-area: sub; min-width: 0;
-  font-size: clamp(.62rem, .48vw, .9rem); color: var(--ink-dim);
+  font-size: clamp(.62rem, .48vw, 1.2rem); color: var(--ink-dim);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* Stage rows read project-first, stage-second — the project is the noun. */
