@@ -1,7 +1,9 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.25.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.26.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.26.0 (D92): .wv-edit — the ✎ on an expanded bar, so click can mean
+   expand/collapse without stranding the edit path.
    0.25.0 (D91): #week-view height is pinned from JS (100% against a
    parent with no height resolved to auto — that's why the day columns
    walked off the bottom); .forced-full for a bar clicked open at compact
@@ -106,7 +108,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.25.0";
+  --tc-version: "0.26.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -783,6 +785,15 @@ body.celebration-wave::after {
 #wv-projects .wv-proj.forced-full .wv-proj-next,
 #wv-projects .wv-proj.forced-full .wv-proj-pct { display: inline; }
 #wv-projects .wv-proj.forced-full .wv-proj-name { font-size: clamp(.72rem, .58vw, 1.5rem); }
+
+/* D92 — the act-on-it affordance, only on a bar that's been opened for
+   a read. Sits above the deadline block so it stays clickable. */
+.wv-edit {
+  position: relative; z-index: 3;
+  padding: 0 .35rem; margin-left: .3rem;
+  font-size: .78rem; line-height: 1.4; flex-shrink: 0;
+}
+.wv-edit:hover { border-color: var(--accent); color: var(--accent); }
 
 .wv-sizes { display: flex; align-items: center; gap: .2rem; margin-left: .8rem; }
 .wv-sizes button { padding: .2rem .45rem; font-size: .72rem; opacity: .55; }
