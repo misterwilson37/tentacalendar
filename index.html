@@ -1,467 +1,2672 @@
-<!DOCTYPE html>
-<!-- ============================================================
-     Tentacalendar — index.html
-     Version 0.19.0 (banner and data-html-version move together, always)
-     0.19.0 (D86): clear-deck hint rewritten for the GROUPED model.
-     app ?v= → 0.26.0 (queue 0.12.0 rides inside app). css unchanged.
-     0.18.0 (D85): ⚙️ Pipeline tab gains "Clear-the-deck at N% complete"
-     (#cfg-cleardeck) — the point where the queue flips a project from
-     keep-abreast to just-finish-it. app ?v= → 0.25.0 (queue 0.11.0 +
-     store 0.9.0 ride inside app). css unchanged.
-     0.17.2 (D84): the Mirror field escapes cfg-poll's flex .form-row
-     (three children crammed into one row crushed the poll label into
-     a word-stack — Jake's screenshot). Own block now. app ?v= →
-     0.24.0, css → 0.21.1.
-     0.17.1 (D83): app ?v= → 0.23.1. Reference bump only.
-     0.17.0 (D82): #earlier box (passed events sink here, today only)
-     + #followup-modal (title, amount, minutes/hours/days/weeks unit —
-     retires two prompt()s). css ?v= → 0.21.0, app → 0.23.0, queue →
-     0.10.0.
-     0.16.0 (D81): ⚙️ Settings gains the Mirror calendar ID field
-     (cfg-mirror-cal). app ?v= → 0.22.0; css unchanged.
-     0.15.0 (D80): #allday-strip above the queue — all-day events land
-     here as ambient banners, not 12:00 AM queue rows. css ?v= →
-     0.20.0, app → 0.21.0.
-     0.14.1 (D79): lang="en" → "en-US". Native time pickers take their
-     12/24-hour cycle from the DEVICE setting in Chromium, but engines
-     that consult page language (Firefox family, some webviews) treat
-     bare "en" as ambiguous — en-US pins them to AM/PM. The primary
-     fix for Katie's military-time picker is her phone's "Use 24-hour
-     format" setting (see SETUP.md quick hits).
-     0.14.0 (D78): phone chrome — #jump-add ＋ in the header (scrolls
-     to the task form; swaps to Today view first if needed) and
-     #signout-bottom ("Log out", in words, at the very bottom). Both
-     phone-only via the 1000px stacked-layout query; the ⏻ square
-     hides there. css ?v= → 0.19.0, app → 0.20.0.
-     0.13.5 (D77): css ?v= → 0.18.1, app → 0.19.2. Reference bump only.
-     0.13.4 (D76): app ?v= → 0.19.1. Reference bump only.
-     0.13.3 (D74): css ?v= → 0.18.0, app → 0.19.0. Reference bump only.
-     0.13.2 (D73): hint mentions cross-row drags. app ?v= → 0.18.0.
-     0.13.1 (D72): css ?v= → 0.17.0, app → 0.17.0. Reference bump only.
-     0.13.0 (D71): ⛶ fullscreen button, 🧵 hairline bar pin. css ?v= →
-     0.16.0, app → 0.16.0.
-     0.12.1 (D70): "Year wall" → "Annual" (Jake's rename). css ?v= →
-     0.15.0, app → 0.15.0.
-     0.12.0 (D69): ▦▦ Year wall layout button (new default) + Bars
-     size control (Auto/▮/▪/▁). css ?v= → 0.14.0, app → 0.14.0.
-     0.11.0 (D68): year-view layout toggle (Month grid ⇄ Timeline),
-     ＋ New project FAB, #yv-project-modal shell (the REAL form gets
-     reparented in, listeners intact). css ?v= → 0.13.0, app → 0.13.0.
-     0.10.1: css ?v= → 0.12.0, app ?v= → 0.12.0 (D66 day texture +
-     density; form-overflow fix). Reference bump only.
-     0.10.0 (D65, PHASE 2): year view — header 📅 toggle, #year-view
-     section (nav, mode buttons, grid, legend, empty state, drag hint).
-     css ?v= → 0.11.0, app ?v= → 0.11.0.
-     0.9.1 (D64): css ?v= → 0.10.0 (responsive one-line rows). No markup
-     change — reference bump only.
-     0.9.0 (D63): #task-notes textarea. css ?v= → 0.9.0, app ?v= → 0.10.0.
-     0.8.0 (D62 rev): dup modal gains pipeline-review button + 1d/7d/30d
-     snooze row; project-form labels get task-form column treatment
-     (the staggered Starts/Ends); un-dater covers both remnant flavors.
-     css ?v= → 0.8.0, app.js ?v= → 0.9.0.
-     0.7.0 (D62): duplicate modal is a review FORM (name/dates/color/
-     tier/workload + snooze button). css ?v= → 0.7.0, app.js ?v= → 0.8.0.
-     0.6.0: settings modal split into tabs (Tiers / Pipeline / Timing)
-     with deadline-hour (D51) + decision-threshold (D52) fields and
-     #tier-color-hint (D55); new #uncheck-modal (D53) and #dup-modal
-     (D59); decision-modal hint rewritten for ✓/🕐 (D57); Workload ⓘ
-     gains a hover title (D58). css ?v= → 0.6.0, app.js ?v= → 0.7.0.
-     0.5.x: filter chips, workload, due/stages/weekend/decision modals
-     + shared popover (all OUTSIDE #drift-wrap, D37), D49 ?v= ritual.
-     ============================================================ -->
-<html lang="en-US">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tentacalendar</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.21.1">
-</head>
-<body data-html-version="0.19.0">
+// ============================================================
+// Tentacalendar — app.js
+// Version 0.27.0 — "the week" (D88)
+// 0.27.0: THIRD VIEW. day → week → year cycles on one button. The week is
+// seven QUEUE columns, not a clock: a task due at 4 PM is a deadline, not
+// an appointment, and every computed stage deadline lands at deadlineHour,
+// so a time grid would paint a wall of 4 PM collisions that don't exist.
+// Spans (projects w/ stage pips, all-day events) ride the top strips;
+// dated things live in columns. Per-day LOAD BAR — the one thing a week
+// says that a day can't: "Thursday is going to hurt, and it's Monday."
+// Rolling today+6 by default (a kiosk shouldn't spend four columns on
+// history every Friday); ◀ ▶ page, "back to now" returns to rolling.
+// Read-only v1 — drag lands once the layout is proven. queue ?v= → 0.13.0.
+// Version 0.26.0 — "clear the deck, grouped" (D86)
+// 0.26.0: queue ?v= → 0.12.0. D85's blended weight made a U (a 30%-done
+// project outranked a 65%-done one); D86 replaces it with two piles —
+// past-threshold beats catch-up, always. No UI change: same ⚙️ Pipeline
+// setting, same fraction, better sort.
+// Version 0.25.0 — "clear the deck" (D85)
+// 0.25.0: new ⚙️ Pipeline setting — "Clear-the-deck at N% complete"
+// (#cfg-cleardeck, stored as clearDeckThreshold fraction). Below it the
+// queue favors your least-finished projects; at/above it a project flips
+// to "just finish it." Wired to queue.js via setClearDeckThreshold on the
+// config subscription (same pattern as deadlineHour). Tiebreaker only.
+// Version 0.24.0 — "kick it down the road" (D84)
+// 0.24.0: Jake's revised decision — the decision modal now offers BOTH
+// reschedules: 🕐 stays the one-tap next-working-day-9AM, and a new 📅
+// opens the due dialog for "way down the road" (any date + time). The
+// due dialog is generalized: S.dueTarget is now {kind:"stage"|"task",…}
+// and dueSave/dueClear branch — clearing a task's due shelves it to
+// Waiting (a legit third option: 'not now, maybe ever').
+// Version 0.23.1 — "the clock says where" (D83)
+// 0.23.1: decision-modal rows now SAY the 🕐 plan in the sub line
+// ("🕐 → Mon, Jul 13 9 AM") instead of hiding it in a hover tooltip —
+// phones have no hover, and Jake read the silent auto-reschedule as
+// "the modal just closes." Behavior unchanged: 🕐 IS the reschedule.
+// Version 0.23.0 — "time passes, follow-ups flex" (D82, Otto's finale)
+// 0.23.0:
+//  · Passed timed events sink into an EARLIER TODAY box (dimmed,
+//    struck time) instead of loitering in the live queue — today's
+//    view only; past/future days show everything in place.
+//  · Follow-ups get a real dialog (two prompt()s retired) with an
+//    amount + minutes/hours/days/weeks unit. Storage stays offsetDays
+//    (fractional — store.js's materialization already multiplies), so
+//    store.js is untouched. Waiting rows display "+45m/+2h/+3d/+1w".
+// Version 0.22.0 — "the mirror has a home" (D81)
+// 0.22.0: ⚙️ Settings → Calendar gains "Mirror tasks to calendar ID"
+// (config.mirrorCalendarId), consumed by functions 0.2.0's hourly
+// reconcile. Blank = off. The function refuses polled calendars
+// (loop guard); the hint says so too.
+// Version 0.21.0 — "things that are happening" (D80)
+// 0.21.0:
+//  · All-day events render as an ambient BANNER STRIP above the queue
+//    (tier-tinted pills, "Zoo Camp · day 3/5"), not as 12:00 AM rows —
+//    the shape Jake described: not tasks, not appointments, just truth
+//    to glance at. No checkbox, no pin, no expiry; multi-days show
+//    their span; hover shows the full date range. Timed events remain
+//    queue anchors exactly as designed since D3.
+// Version 0.20.0 — "phone chrome" (D78)
+// 0.20.0:
+//  · ＋ in the header (phone widths only) scrolls straight to the
+//    Add-a-task form and focuses the title (keyboard up, ready to
+//    type). If you're in the year view it swaps to Today first — the
+//    form lives there. No modal, per Jake: just the shortcut.
+//  · "Log out", in words, at the very bottom (phone only); the ⏻
+//    mystery-square hides at those widths.
+// Version 0.19.2 — "the ghost is the preview" (D77)
+// 0.19.2 (Jake: "it ends up where it's supposed to, but it strays
+// into May first"):
+//  · The pointer-following chip RETIRES. During a drag the original
+//    bar dims in place; the ghosts — now TINTED in the project's own
+//    color — are the entire moving preview. Nothing strays anywhere;
+//    the transform/width preview code (source of two rounds of visual
+//    bugs) is deleted outright.
+// Version 0.19.1 — "the resolver learns left from right" (D76)
+// 0.19.1 (BUGFIX, Jake's mid-drag screenshot):
+//  · D73's date resolver measured only VERTICAL distance to rows — but
+//    D72 put three months side-by-side, so April's week row "won" for
+//    pointers inside June (same y-band, DOM order), x clamped to
+//    April's edge, and EVERY horizontal position resolved to the same
+//    date → horizontal drags dead, vertical ±7s fine. Now true 2D
+//    distance; inside a rect is distance zero for that rect alone.
+//  · Ghosts clipped to weeks but not MONTHS, so a shared spillover
+//    week (May 31–Jun 6 lives in both May's and June's blocks) lit up
+//    twice. Lanes now carry data-clip-s/e; ghosts draw only where the
+//    bar will actually render.
+// Version 0.19.0 — "the ghost knows where it lands" (D74)
+// 0.19.0:
+//  · DROP GHOSTS: while dragging, dashed accent slots render at body
+//    level in EVERY row the new dates cross — the landing zone is
+//    visible truth, matching the nav label. The lifted chip still
+//    follows the pointer; the ghost is where it lands. Ghosts survive
+//    mid-drag re-renders (they're body-level fixed, and the rowMap
+//    rects remain valid).
+// Version 0.18.0 — "carry it anywhere" (D73)
+// 0.18.0:
+//  · CROSS-ROW DRAGGING: drags hit-test against every week/row
+//    rectangle (captured at grab time), so "what date is under the
+//    pointer" replaces horizontal pixel math. Move a bar from the 12th
+//    up a row to the 5th, across months, or between Gantt quarters —
+//    the bar lifts and follows the pointer; the nav label reads live
+//    dates; release commits with the usual working-day snapping.
+//    Edge-drags use the same date math (width preview stays in-row;
+//    the label guides).
+// Version 0.17.0 — "Katie's quarters" (D72)
+// 0.17.0:
+//  · The Annual is QUARTERS: 4 rows × 3 months (Katie caught the 3×4
+//    orientation error). Wider months serve the future kiosk column.
+//  · PER-QUARTER uniform week heights (Jake's idea): each row of
+//    months sizes to ITS OWN max weekly concurrency — July's 9-project
+//    pileup only taxes Q3; empty quarters collapse. Fit math solves GL
+//    across the actual quarter mix, so today's load lands ~6px bars in
+//    a NORMAL window (fullscreen no longer required).
+// Version 0.16.0 — "nickel and dime" (D71)
+// 0.16.0:
+//  · Annual reclaims its pixels: dow row dropped (weekend shading +
+//    day numbers carry the structure), month chrome estimate honest
+//    (26px), lane padding trimmed, auto floor now GL 3 → 2px hairline
+//    bars. Jake's real numbers (≈1070px, 10 lanes, 6-week Aug) now
+//    land at GL 3 with ~145px slack; ⛶ fullscreen buys GL 4.
+//  · FIT-MATH BUG: measurements were viewport-space, so rendering
+//    while scrolled inflated avail and bars GREW after you scrolled.
+//    Now document-space (rect.top + scrollY) in Annual AND timeline.
+//  · 🧵 hairline pin (LANE 3 / BAR 2, borderless): see the whole year
+//    as color threads; tap for details; edit at bigger sizes.
+//  · ⛶ fullscreen toggle in the year nav; fullscreenchange re-fits.
+// Version 0.15.0 — "the year that fits" (D70)
+// 0.15.0:
+//  · Annual view (né Year wall) auto-density is now WINDOW-FIT, like
+//    the timeline: month rows share the real screen height, GL clamps
+//    5–14; the floor is 3px borderless hairline bars, so a fully
+//    loaded Katie-year still fits one screen before it ever scrolls.
+//    (Column count mirrors the CSS breakpoints — change together.)
+//  · Annual week heights are UNIFORM (global max concurrency), so the
+//    12 calendars line up like a real wall instead of July towering
+//    over an empty August (Jake). Stacked Months keeps per-week fit.
+//  · Bar labels appear on ANY bar tall enough to hold them (≥16px and
+//    ≥3 days) — the Annual view included, e.g. with ▮ pinned.
+//  · NOT a bug, recorded for posterity: progress fill is positional in
+//    time (D30a) — a May–July project at 25% shows its saturation in
+//    MAY; a July-onward window shows only ghost. Jan–Dec reveals it.
+// Version 0.14.0 — "the whole year on the wall" (D69)
+// 0.14.0:
+//  · YEAR WALL layout (the view Jake was picturing all along): 12 mini
+//    month calendars in a 4×3 grid — the wall of calendars. New
+//    default; ▦▦/▦/▬ toggle. Zooming a wall month renders it big
+//    (stacked-month styling). Wall bars never carry inline labels —
+//    hover/tap/legend speak. Wall auto-density runs one notch thinner.
+//  · BAR SIZE control (Jake): Auto (per-layout judgment, incl. the
+//    timeline's window fit) or pinned ▮ 20px / ▪ 10px / ▁ 5px bars —
+//    persisted per device (tc-year-barsize).
+// Version 0.13.0 — "the wall calendar" (D68)
+// 0.13.0:
+//  · MONTH-GRID layout (Jake's "traditional view"): months stacked,
+//    Sun–Sat columns, weeks as rows; bars clip per week ∩ month with
+//    per-week lane packing (gcal-style), same drag/stretch/tap/fill.
+//    Toggle (▦ Month grid ⇄ ▬ Timeline) left of the mode buttons;
+//    grid is the default, choice persists (tc-year-layout). The
+//    days-in-a-row layout now has its name in the UI: a Gantt chart.
+//  · Timeline bars size to the WINDOW: total lanes share the real
+//    vertical space (clamped 9–34px lanes), re-flowing on resize —
+//    2K gets thick bars, phones get readable slivers.
+//  · ＋ New project FAB (bottom-right of the year view) reparents the
+//    REAL project form into a modal — listeners, color assistant, and
+//    working-day interception ride along — and returns it on close.
+// Version 0.12.0 — "days are key" (D66)
+// 0.12.0:
+//  · Day texture in BOTH year rows and month zoom: weekend shading
+//    blocks, faint day gridlines, stronger Monday week lines (month
+//    boundaries remain strongest). Compact grids shed day lines first.
+//  · Adaptive bar density for Katie's real concurrency: ≤4 lanes =
+//    full 20px bars with inline labels; ≤9 = half-height 10px; beyond
+//    = quarter-height 5px. Thin bars drop inline labels — hover titles,
+//    tap popovers, and the legend carry the names (Jake's suggestion).
+//  · Rows now size to the lanes they actually use (a quiet quarter is
+//    a short quarter) while every project keeps its one global lane.
+// Version 0.11.0 — "PHASE 2: the year view" (D65)
+// 0.11.0:
+//  · Header 📅 toggles between Today and a quarter-aligned year view:
+//    4 rows × 3 months, three anchor modes (Jan–Dec / quarter-first /
+//    month-first, D31), ◀▶ pages 12 months, "back to now" resets.
+//  · Project bars (D30a): pale ghost of the project color saturating
+//    left-to-right by pipeline %, continuous across quarter rows via
+//    per-segment gradient clipping; global lane packing keeps each
+//    project on ONE lane all year; today line; legend + tap-for-details
+//    popover (D27); labels hide on narrow grids (container query).
+//  · Drag to move, edge-drag to stretch (D32): document-level pointer
+//    listeners survive re-renders; live date readout in the nav label;
+//    release snaps to the tier's working days (start fwd / end back,
+//    order-guarded — same rules as the form and 🔁 duplicate).
+//  · Tap a month name to zoom it full-width with day ticks (D18);
+//    ◀▶ then steps one month; "◱ whole year" returns.
+//  · View + anchor mode persist per device (tc-view / tc-year-mode).
+// Version 0.10.0 — "the encore" (Katie's notes field, D63)
+// 0.10.0:
+//  · Tasks get an optional NOTES field: short title in the row, details
+//    behind a ▸ toggle underneath (tap the title or the chevron).
+//  · Row layout v2 (the phone smoking-gun screenshot): queue/waiting/
+//    done rows are now two lines — [checkbox + title] over [tier chip +
+//    actions] — so long titles wrap as prose instead of one-word
+//    columns squeezed beside four buttons. Shared rowScaffold builder.
+// Version 0.9.0 — "the goodbye release" (Inky's last)
+// 0.9.0:
+//  · D62 rev: dup modal gains "✎⋮ Review the pipeline first…" — edits
+//    next year's stage list BEFORE anything is created (stages editor
+//    borrowed via the "@dup" target; dup modal hides and returns).
+//  · Snooze row: remind me in 1 day / 1 week / 1 month (30d alone was
+//    too blunt).
+//  · Un-dater broadened: remnants come in TWO flavors — after/end/0
+//    (Katie's window experiments) AND after/start/0 (the 0.6.0/0.6.1
+//    editors' default, per the D50 caveat). v0.8.0 only caught "end";
+//    Jake's screenshot showed the other half untouched. Now any
+//    After + 0wd row converts, either anchor.
+// Version 0.8.0 — "the smoke-test release"
+// 0.8.0:
+//  · D61: queue hides a tier's items on days outside its allowedDays
+//    (Katie's weekend queue is clear of Work; cards still show all).
+//  · D62: duplicate-for-next-year is a REVIEW FORM — name (with the
+//    year token auto-bumped, e.g. resv2606 → resv2706), dates, color,
+//    tier, workload all editable before creation; "Remind me in a
+//    month" snoozes it into a real task instead.
+//  · Date/time fields: task due defaults to today; clicking any
+//    date/time input opens the native picker (showPicker) where the
+//    browser supports it, instead of demanding the tiny icon.
+//  · Stage-editor rows: undated stages now GHOST their anchor/offset
+//    controls (visibility, not display) so columns stay aligned — the
+//    "name field ate the row" report was the layout collapsing into
+//    the vacancy left by display:none.
+// Version 0.7.0 — "the exit-checklist release"
+// 0.7.0:
+//  · DECISION MODAL v2 (D57): rows are LIVE (re-derived from real
+//    state every render), ✓ completes the ACTIVE stage (the old code
+//    completed the deadline stage — Jake's "still on the first phase"
+//    bug), 🕐 replaces ↷ and reschedules the overdue DEADLINE to the
+//    tier's next allowed day 9 AM, modal auto-closes when emptied.
+//  · Collapsible project cards + pinned header buttons + finished
+//    projects folded into their own section (D56).
+//  · Un-complete-parent rewind modal, 3 options (D53).
+//  · Duplicate-for-next-year: completion prompt + 🔁 card button (D59).
+//  · Settings split into tabs; deadline hour (D51) + decision
+//    threshold (D52) settable; per-tier allowed-day toggles (D60);
+//    tier color conflict assistant (D55).
+//  · ⓘ popover fix (D58): a tap inside a <label> re-dispatches a
+//    click to the label's control, and THAT second click closed the
+//    popover in the same instant it opened. preventDefault() stops
+//    the forwarding. (Jake: "the i doesn't show anything.")
+// 0.6.x: D50 undated stages, D49 versioned module imports, D43–D48
+// priority engine v2 + modals + filters.
+// ============================================================
 
-  <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
-       ancestor becomes the containing block for position:fixed descendants,
-       which broke the settings modal's viewport centering. The modal and the
-       confetti canvas must stay OUTSIDE this div. -->
-  <div id="drift-wrap">
+import { CONFIG_VERSION } from "./config.js?v=0.4.0";
+import {
+  watchAuth, signIn, signOutUser, STORE_VERSION,
+  subscribeTiers, subscribeTasks, subscribeEvents, subscribeConfig,
+  subscribeProjects, subscribeStageTemplate,
+  addTask, addFollowUp, setTaskDone, deleteTask, updateTask, rewindFollowUps,
+  addProject, addProjectWithStages, deleteProject, updateProject,
+  setStageDone, setStageDue, setProjectStages,
+  saveTier, deleteTier, saveConfig, saveStageTemplate
+} from "./store.js?v=0.9.0";
+import {
+  buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
+  isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
+  setClearDeckThreshold, buildWeek, addDaysLocal, fmtTime, fmtDay, QUEUE_VERSION
+} from "./queue.js?v=0.13.0";
+import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-  <!-- ============ AUTH SCREEN ============ -->
-  <div id="auth-screen">
-    <div class="auth-card">
-      <div class="logo">🐙</div>
-      <h1>Tentacalendar</h1>
-      <p class="tagline">The to-do list that refuses to let go.</p>
-      <button id="signin-btn" class="primary">Sign in with Google</button>
-    </div>
-  </div>
+export const APP_VERSION = "0.27.0";
+const $ = sel => document.querySelector(sel);
+const DAY_MS = 86400000;
 
-  <!-- ============ APP ============ -->
-  <div id="app-screen" hidden>
-    <header>
-      <div class="brand">🐙 Tentacalendar <span id="version" class="version"></span></div>
-      <div class="header-right">
-        <span id="user-label" class="user"></span>
-        <button id="view-toggle" class="icon-btn" title="Year view">📅</button>
-        <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
-        <button id="jump-add" class="icon-btn" title="Jump to Add a task">＋</button>
-        <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
-      </div>
-    </header>
+// ---------- State ----------
+const S = {
+  user: null,
+  tiers: [], tasks: [], events: [], projects: [], stageTemplate: [],
+  config: null,
+  viewDay: Date.now(),
+  editingTaskId: null,
+  editingProjectId: null,
+  dueTarget: null,          // {projectId, stageIndex}
+  stagesTarget: null,       // projectId
+  weekendPending: null,     // {payload, field} mid-validation project save
+  decisionIds: null,        // Set of item keys while decision modal is open (D57)
+  dupTarget: null,          // {projectId, stages} pending duplicate (D59/D62)
+  stagesFromDup: false,     // stages editor opened FROM the dup modal (D62 rev)
+  expandedNotes: new Set(), // task ids with details open (D63; ephemeral by design)
+  uncheckTarget: null,      // task pending the un-complete rewind choice (D53)
+  expandedProjects: new Set(JSON.parse(localStorage.getItem("tc-expanded-projects") || "[]")), // D56
+  showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
+  hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
+  view: ["year", "week", "day"].includes(localStorage.getItem("tc-view")) ? localStorage.getItem("tc-view") : "day", // D65/D88 (persists per device)
+  weekAnchor: null,   // D88: null = rolling (today + 6); a ts = a paged week
+  yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
+  yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
+  yearZoom: null,          // D18 month zoom: month-start ts, or null for the 12-month grid
+  yearLayout: localStorage.getItem("tc-year-layout") || "wall",  // D68/D69: "wall" | "grid" | "timeline"
+  yearBarSize: localStorage.getItem("tc-year-barsize") || "auto", // D69: "auto" | "full" | "half" | "quarter"
+  lastSuggestedColor: "#4dabf7",
+  unsubs: []
+};
 
-    <main>
-      <!-- ===== Queue column ===== -->
-      <section id="queue-panel">
-        <div class="day-nav">
-          <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
-          <h2 id="day-label">Today</h2>
-          <button id="day-next" class="icon-btn" title="Next day">▶</button>
-          <button id="day-today" class="mini" hidden>back to today</button>
-        </div>
+// ---------- Boot ----------
+document.addEventListener("DOMContentLoaded", () => {
+  reportVersions();
+  $("#signin-btn").addEventListener("click", () => signIn().catch(err => alert(err.message)));
+  $("#signout-btn").addEventListener("click", () => signOutUser());
+  $("#signout-bottom").addEventListener("click", () => signOutUser());  // D78
+  $("#fu-save").addEventListener("click", saveFollowUpModal);            // D82
+  $("#fu-cancel").addEventListener("click", () => { $("#followup-modal").hidden = true; fuTarget = null; });
+  $("#jump-add").addEventListener("click", () => {                      // D78
+    if (S.view !== "day") setView("day"); // the form lives in Today
+    $("#task-form").scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => $("#task-title").focus({ preventScroll: true }), 350);
+  });
+  $("#settings-btn").addEventListener("click", openSettings);
+  $("#settings-close").addEventListener("click", closeSettings);
+  $("#day-prev").addEventListener("click", () => shiftDay(-1));
+  $("#day-next").addEventListener("click", () => shiftDay(1));
+  $("#day-today").addEventListener("click", () => { S.viewDay = Date.now(); render(); });
 
-        <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
+  // D65 year view
+  $("#view-toggle").addEventListener("click", () => setView({ day: "week", week: "year", year: "day" }[S.view] || "day")); // D88
+  $("#yv-prev").addEventListener("click", () => shiftYear(-1));
+  $("#yv-next").addEventListener("click", () => shiftYear(1));
+  // D88 week nav
+  $("#wv-prev").addEventListener("click", () => weekPage(-1));
+  $("#wv-next").addEventListener("click", () => weekPage(1));
+  $("#wv-today").addEventListener("click", () => { S.weekAnchor = null; renderWeek(); });
+  $("#wv-fullscreen").addEventListener("click", () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen?.();
+  });
 
-        <div id="pinned" hidden></div>
-        <div id="allday-strip" hidden></div>
-        <div id="queue"></div>
+  $("#yv-today").addEventListener("click", () => { S.yearOffset = 0; S.yearZoom = null; renderYear(); });
+  $("#yv-unzoom").addEventListener("click", () => { S.yearZoom = null; renderYear(); });
+  $("#yv-modes").querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => {
+      S.yearMode = b.dataset.mode;
+      localStorage.setItem("tc-year-mode", S.yearMode);
+      S.yearOffset = 0; S.yearZoom = null;
+      renderYear();
+    }));
+  $("#yv-layouts").querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => {
+      S.yearLayout = b.dataset.layout;
+      localStorage.setItem("tc-year-layout", S.yearLayout);
+      renderYear();
+    }));
+  $("#yv-sizes").querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => {
+      S.yearBarSize = b.dataset.size;
+      localStorage.setItem("tc-year-barsize", S.yearBarSize);
+      renderYear();
+    }));
+  $("#yv-fullscreen").addEventListener("click", () => {  // D71: reclaim the browser chrome
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
+  document.addEventListener("fullscreenchange", () => { if (S.view === "year") renderYear(); });
+  $("#yv-add-project").addEventListener("click", openYvProjectModal);
+  $("#yv-project-close").addEventListener("click", closeYvProjectModal);
+  window.addEventListener("resize", () => {           // D68: timeline resizes with the window
+    clearTimeout(yvResizeT);
+    yvResizeT = setTimeout(() => { if (S.view === "year") renderYear(); }, 150);
+  });
+  $("#task-form").addEventListener("submit", onTaskFormSubmit);
+  $("#task-cancel").addEventListener("click", cancelTaskEdit);
+  $("#project-form").addEventListener("submit", onProjectFormSubmit);
+  $("#project-cancel").addEventListener("click", cancelProjectEdit);
+  $("#project-color").addEventListener("input", checkProjectColor);
+  $("#tier-add").addEventListener("click", () => tierEditorRow({}, true));
+  $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
+  $("#settings-save").addEventListener("click", onSaveSettings);
+  $("#cfg-poll").addEventListener("input", updatePollCostHint);
+  $("#due-save").addEventListener("click", dueSave);
+  $("#due-clear").addEventListener("click", dueClear);
+  $("#due-cancel").addEventListener("click", () => { $("#due-modal").hidden = true; });
+  $("#stages-save").addEventListener("click", stagesSave);
+  $("#stages-cancel").addEventListener("click", () => {
+    $("#stages-modal").hidden = true;
+    if (S.stagesFromDup) { S.stagesFromDup = false; $("#dup-modal").hidden = false; } // back to the dup form, unsaved
+  });
+  $("#stage-proj-add").addEventListener("click", () =>
+    projStageRow({ name: "", direction: "none", anchor: "start", offsetDays: 0, completedAt: null, dueAt: null }, -1, true));
+  // Cleanup for pre-D50 experiments: rows saved as after/end/0 were
+  // "dated at project end" by accident — flip them to No date IN THE
+  // EDITOR (nothing writes until Save, so it's reviewable).
+  $("#stage-proj-undate").addEventListener("click", () => {
+    // BOTH remnant flavors (Jake's screenshot): after/end/0 (window
+    // experiments) and after/start/0 (0.6.0/0.6.1 editor default).
+    for (const row of document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")) {
+      if (row.querySelector(".st-dir").value === "after" &&
+          (parseInt(row.querySelector(".st-off").value, 10) || 0) === 0) {
+        row.querySelector(".st-dir").value = "none";
+        syncTimingRow(row);
+      }
+    }
+  });
+  $("#decision-close").addEventListener("click", closeDecision);
 
-        <div id="waiting" hidden>
-          <h3>Waiting on…</h3>
-          <div id="waiting-list"></div>
-        </div>
+  // Settings tabs (D52)
+  document.querySelectorAll(".tab-btn").forEach(btn =>
+    btn.addEventListener("click", () => switchSettingsTab(btn.dataset.tab)));
 
-        <div id="earlier" hidden>
-          <h3>Earlier today</h3>
-          <div id="earlier-list"></div>
-        </div>
+  // Tier color conflict assistant (D55) — delegated, rows are dynamic
+  $("#tier-editor").addEventListener("input", ev => {
+    if (ev.target.classList.contains("t-color") || ev.target.classList.contains("t-name")) checkTierColors();
+  });
 
-        <div id="done" hidden>
-          <h3>Done today <span id="done-count" class="badge-done"></span></h3>
-          <div id="done-list"></div>
-        </div>
-      </section>
+  // Un-complete rewind modal (D53)
+  $("#uncheck-oops").addEventListener("click", () => resolveUncheck("oops"));
+  $("#uncheck-rewind").addEventListener("click", () => resolveUncheck("rewind"));
+  $("#uncheck-keep").addEventListener("click", () => resolveUncheck("keep"));
 
-      <!-- ===== Projects column (Katie's pipeline) ===== -->
-      <section id="projects-panel">
-        <h3>Projects</h3>
-        <p id="projects-empty" class="hint">No projects yet. Create one on the right — its whole pipeline comes with it.</p>
-        <div id="projects-list"></div>
-      </section>
+  // Duplicate-for-next-year modal (D59)
+  $("#dup-yes").addEventListener("click", dupConfirm);
+  $("#dup-stages").addEventListener("click", openDupStages);
+  $("#dup-snooze-1").addEventListener("click", () => dupSnooze(1));
+  $("#dup-snooze-7").addEventListener("click", () => dupSnooze(7));
+  $("#dup-snooze-30").addEventListener("click", () => dupSnooze(30));
+  $("#dup-no").addEventListener("click", () => { S.dupTarget = null; $("#dup-modal").hidden = true; });
 
-      <!-- ===== Forms column ===== -->
-      <section id="form-panel">
-        <h3 id="task-form-title">New task</h3>
-        <form id="task-form">
-          <input id="task-title" type="text" placeholder="What needs doing?" required>
-          <textarea id="task-notes" rows="2" placeholder="Details (optional — tucked behind a ▸ under the task)"></textarea>
-          <label>Tier
-            <select id="task-tier"></select>
-          </label>
-          <div class="form-row">
-            <label>Due date <input id="task-date" type="date" required></label>
-            <label>Time <input id="task-time" type="time" value="09:00"></label>
-          </div>
-          <label class="esc-label">If ignored, nag again every
-            <span class="esc-inputs">
-              <input id="task-esc-n" type="number" min="1" value="1">
-              <select id="task-esc-unit">
-                <option value="minutes">minutes</option>
-                <option value="hours" selected>hours</option>
-                <option value="days">days</option>
-                <option value="weeks">weeks</option>
-                <option value="months">months</option>
-              </select>
-            </span>
-          </label>
-          <div class="form-actions">
-            <button type="submit" id="task-submit" class="primary">Add to the tentacles</button>
-            <button type="button" id="task-cancel" class="mini" hidden>Cancel edit</button>
-          </div>
-        </form>
-        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish.</p>
+  // Any date/time field opens its native picker on click/focus where
+  // supported (Chromium). Safari ignores showPicker — typing still works.
+  document.addEventListener("click", ev => {
+    const inp = ev.target;
+    if (inp instanceof HTMLInputElement && (inp.type === "date" || inp.type === "time") && inp.showPicker) {
+      try { inp.showPicker(); } catch (_) { /* needs gesture / unsupported */ }
+    }
+  });
 
-        <h3 id="project-form-title">New project</h3>
-        <form id="project-form">
-          <input id="project-name" type="text" placeholder="Project name (e.g. Alabama Farmers)" required>
-          <div class="form-row">
-            <label>Color <input id="project-color" type="color" value="#4dabf7"></label>
-            <label>Stage tier <select id="project-tier"></select></label>
-          </div>
-          <div class="form-row">
-            <label>Starts <input id="project-start" type="date" required></label>
-            <label>Ends <input id="project-end" type="date" required></label>
-          </div>
-          <label><span class="label-line">Workload <span class="info-dot" title="How heavy is this project overall? Ties in the queue break toward heavier projects with more pipeline remaining. (Tap for details.)" data-info="How heavy is this project overall? A 10-million project and a 30k project can share a pipeline but not a calendar. Ties in the queue break toward heavier projects with more pipeline remaining.">i</span></span>
-            <select id="project-workload">
-              <option value="1">Light (1)</option>
-              <option value="2" selected>Standard (2)</option>
-              <option value="3">Heavy (3)</option>
-            </select>
-          </label>
-          <p class="hint warn" id="project-color-hint"></p>
-          <div class="form-actions">
-            <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
-            <button type="button" id="project-cancel" class="mini" hidden>Cancel edit</button>
-          </div>
-        </form>
-        <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
-      </section>
-    </main>
+  $("#task-date").value = toDateInput(new Date()); // due date defaults to today
 
-    <!-- ============ YEAR VIEW (Phase 2, D65) ============
-         Toggled with the header 📅; quarter-aligned 4 rows × 3 months
-         (D31 modes), progress ghost-fill bars (D30a), drag to move /
-         edge-drag to stretch (D32), month-tap zoom (D18), legend +
-         tap-for-details (D27). -->
-    <section id="year-view" hidden>
-      <div class="yv-nav">
-        <button id="yv-prev" class="icon-btn" title="Back one year (one month while zoomed)">◀</button>
-        <h2 id="yv-label">Year</h2>
-        <button id="yv-next" class="icon-btn" title="Forward one year (one month while zoomed)">▶</button>
-        <button id="yv-today" class="mini" hidden>back to now</button>
-        <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
-        <button id="yv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
-        <div class="yv-layouts" id="yv-layouts" title="Month grid: weeks as rows, Sun–Sat — the wall-calendar look. Timeline: days in one long row per quarter (a Gantt chart).">
-          <button data-layout="wall" class="mini">▦▦ Annual</button>
-          <button data-layout="grid" class="mini">▦ Months</button>
-          <button data-layout="timeline" class="mini">▬ Timeline</button>
-        </div>
-        <div class="yv-sizes" id="yv-sizes" title="Bar thickness: Auto fits the layout (and your window); ▮ pins thick 20px, ▪ medium 10px, ▁ thin 5px.">
-          <span class="yv-sizes-label">Bars</span>
-          <button data-size="auto" class="mini">Auto</button>
-          <button data-size="full" class="mini">▮</button>
-          <button data-size="half" class="mini">▪</button>
-          <button data-size="quarter" class="mini">▁</button>
-          <button data-size="hair" class="mini" title="Hairline: 2px color threads — see the year, tap for details, edit elsewhere">🧵</button>
-        </div>
-        <div class="yv-modes" id="yv-modes" title="What sits top-left: January, the current quarter, or the current month (rolling 12 months either way)">
-          <button data-mode="calendar" class="mini">Jan–Dec</button>
-          <button data-mode="quarter" class="mini">Quarter first</button>
-          <button data-mode="month" class="mini">Month first</button>
-        </div>
-      </div>
-      <div id="yv-grid"></div>
-      <p id="yv-empty" class="hint" hidden>No projects land in this window. Create one in Today view — its bar shows up here.</p>
-      <div id="yv-legend"></div>
-      <p class="hint">Drag a bar to move a project — across weeks, months, and rows · drag either end to stretch or shrink it · tap a bar for details · tap a month name to zoom in. Dates keep to the project tier's working days.</p>
-      <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
-    </section>
+  // Tap-to-reveal ⓘ popovers (phones can't hover).
+  // D58: preventDefault() is load-bearing — when the ⓘ lives inside a
+  // <label>, the label re-dispatches the click to its form control, and
+  // that second click's target isn't the dot OR the popover, so the
+  // handler's else-branch hid the popover in the same tick it appeared.
+  document.addEventListener("click", ev => {
+    const dot = ev.target.closest(".info-dot");
+    const pop = $("#popover");
+    if (dot && dot.dataset.info) {
+      ev.preventDefault();
+      pop.textContent = dot.dataset.info;
+      pop.hidden = false;
+      const r = dot.getBoundingClientRect();
+      pop.style.top = `${r.bottom + 6}px`;
+      pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8))}px`;
+      ev.stopPropagation();
+    } else if (!ev.target.closest("#popover")) {
+      pop.hidden = true;
+    }
+  });
 
-    <!-- D82: follow-up create/edit — retires the prompt() pair -->
-    <div id="followup-modal" class="modal-shell" hidden>
-      <div class="modal-card">
-        <h3 id="fu-heading">Follow-up</h3>
-        <label>Title <input id="fu-title" type="text"></label>
-        <label>Materializes
-          <input id="fu-n" type="number" min="1" step="1" value="3" style="width:4.5rem">
-          <select id="fu-unit">
-            <option value="minutes">minutes</option>
-            <option value="hours">hours</option>
-            <option value="days" selected>days</option>
-            <option value="weeks">weeks</option>
-          </select>
-          after completion</label>
-        <div class="modal-actions">
-          <button id="fu-save" class="primary">Save</button>
-          <button id="fu-cancel">Cancel</button>
-        </div>
-      </div>
-    </div>
+  watchAuth(onSignedIn, onSignedOut);
+  setInterval(tick, 60 * 1000);
+  setInterval(drift, 5 * 1000);
+});
 
-    <!-- D78: phone-only, in words, at the very bottom — where a
-         logout belongs on a device you rarely log out of. -->
-    <button id="signout-bottom">Log out</button>
+function reportVersions() {
+  const cssVersion = getComputedStyle(document.documentElement)
+    .getPropertyValue("--tc-version").trim().replace(/"/g, "") || "?";
+  const htmlVersion = document.body.dataset.htmlVersion || "?";
+  const report =
+    `app.js ${APP_VERSION} · store.js ${STORE_VERSION} · queue.js ${QUEUE_VERSION} · ` +
+    `celebrate.js ${CELEBRATE_VERSION} · config.js ${CONFIG_VERSION} · css ${cssVersion} · html ${htmlVersion}`;
+  $("#version").textContent = "v" + APP_VERSION;
+  $("#version").title = report;
+  const line = $("#versions-line");
+  if (line) line.textContent = report;
+}
 
-    <!-- D68: the REAL project form is reparented in here from the form
-         panel while this is open — listeners, color assistant, and the
-         working-day interception all come along for free. -->
-    <div id="yv-project-modal" class="modal-shell" hidden>
-      <div class="modal-card yv-project-card">
-        <button id="yv-project-close" class="icon-btn yv-modal-close" title="Close">✕</button>
-        <div id="yv-project-slot"></div>
-      </div>
-    </div>
-  </div>
+function onSignedIn(user) {
+  S.user = user;
+  $("#auth-screen").hidden = true;
+  $("#app-screen").hidden = false;
+  $("#user-label").textContent = user.email;
+  setView(S.view); // D65: restore this device's last view (year renders on first snapshot)
+  S.unsubs.push(subscribeTiers(t => { S.tiers = t; refreshTierSelects(); renderFilters(); render(); }));
+  S.unsubs.push(subscribeTasks(t => { S.tasks = t; render(); maybeDecisionTime(); }));
+  S.unsubs.push(subscribeEvents(e => { S.events = e; render(); }));
+  S.unsubs.push(subscribeProjects(p => { S.projects = p; suggestProjectColor(); render(); maybeDecisionTime(); }));
+  S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
+  S.unsubs.push(subscribeConfig(c => {
+    S.config = c;
+    setDeadlineHour(c?.deadlineHour ?? 16); // D51 — queue math follows settings
+    setClearDeckThreshold(c?.clearDeckThreshold ?? 0.6); // D85
+    render();
+  }));
+}
 
-  </div><!-- /drift-wrap -->
+function onSignedOut() {
+  S.unsubs.forEach(u => u());
+  S.unsubs = [];
+  S.user = null;
+  $("#auth-screen").hidden = false;
+  $("#app-screen").hidden = true;
+}
 
-  <!-- ============ SETTINGS MODAL (tabbed, D52) ============ -->
-  <div id="settings-modal" hidden>
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>⚙️ Settings</h2>
-        <button id="settings-close" class="icon-btn">✕</button>
-      </div>
+// ---------- Tick / rollover / drift ----------
+let lastTickDay = new Date().getDate();
 
-      <div class="tab-bar">
-        <button class="tab-btn active" data-tab="tiers">Tiers</button>
-        <button class="tab-btn" data-tab="pipeline">Pipeline</button>
-        <button class="tab-btn" data-tab="timing">Timing</button>
-      </div>
+function tick() {
+  const d = new Date();
+  if (d.getDate() !== lastTickDay) {
+    lastTickDay = d.getDate();
+    S.viewDay = Date.now();
+    maybeDecisionTime();
+  }
+  render();
+}
 
-      <div class="tab-pane" data-pane="tiers">
-        <h3>Tiers (priority queue)</h3>
-        <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. The day toggles are the tier's working days: reschedules land on them, project dates outside them get flagged, and pipeline offsets only count them (weekend jobs → check Sa/Su). Hover anything in a row for an explanation.</p>
-        <div id="tier-editor"></div>
-        <p class="hint" id="tier-color-hint"></p>
-        <button id="tier-add" class="mini">+ Add tier</button>
-      </div>
+// D37: drift transforms #drift-wrap, NEVER <body>.
+let driftT = 0;
+function drift() {
+  driftT += 0.03;
+  const wrap = $("#drift-wrap");
+  if (wrap) wrap.style.transform =
+    `translate(${(Math.sin(driftT) * 2).toFixed(2)}px, ${(Math.cos(driftT * 0.7) * 2).toFixed(2)}px)`;
+}
 
-      <div class="tab-pane" data-pane="pipeline" hidden>
-        <h3>Project stage template</h3>
-        <p class="hint">The universal pipeline copied into every NEW project (existing projects keep their own copy). <em>No date</em> = the stage is pipeline weight — it just has to happen before the next dated thing. <em>Before/After</em> = a real target date, offset in working days from project start or end. A stage never surfaces before its predecessors are checked, whatever its date.</p>
-        <div id="stage-template-editor"></div>
-        <button id="stage-add" class="mini">+ Add stage</button>
-        <div class="form-row">
-          <label>Clear the deck at <input id="cfg-cleardeck" type="number" min="0" max="100"> % complete</label>
-        </div>
-        <p class="hint">Two piles. Projects at or past this mark are in the <em>finish it</em> pile and sort <em>most</em>-done first — they sit above everything still catching up, however heavy. Below the mark, the <em>least</em>-done leads, so nothing gets abandoned. Workload only breaks a tie between two projects at the same %, heavier first. Tiebreaker only — anything due sooner still comes first.</p>
-      </div>
+function shiftDay(n) { S.viewDay += n * DAY_MS; render(); }
 
-      <div class="tab-pane" data-pane="timing" hidden>
-        <h3>Timing</h3>
-        <div class="form-row">
-          <label>Computed stage deadlines count as due by <input id="cfg-deadline-hour" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
-        </div>
-        <p class="hint">Stages dated by pipeline math (not hard ⏰ dues) are "due by this hour" on their day — so a 9 AM task outranks them, and midnight doesn't flip them red.</p>
-        <div class="form-row">
-          <label>🐙 Decision time opens after <input id="cfg-decision-days" type="number" min="1" max="30"> day(s) overdue</label>
-        </div>
-        <div class="form-row">
-          <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr clock: 9 = 9 AM, 21 = 9 PM)</span></label>
-        </div>
-        <div class="form-row">
-          <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
-          <label>until <input id="cfg-sleep-end" type="number" min="0" max="23"> :00</label>
-        </div>
-        <div class="form-row">
-          <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
-        </div>
-        <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
-        <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
-        <p class="hint" id="poll-cost-hint"></p>
-      </div>
+// ---------- Tier filters (D47) ----------
 
-      <div class="modal-foot">
-        <span id="versions-line" class="hint-inline"></span>
-        <button id="settings-save" class="primary">Save settings</button>
-      </div>
-    </div>
-  </div>
+function persistHidden() {
+  localStorage.setItem("tc-hidden-tiers", JSON.stringify([...S.hiddenTierIds]));
+}
 
-  <!-- ============ DUE-DATE DIALOG ============ -->
-  <div id="due-modal" class="modal-shell" hidden>
-    <div class="modal-card modal-sm">
-      <h3 id="due-title">Hard due date</h3>
-      <div class="form-row">
-        <label>Date <input id="due-date" type="date"></label>
-        <label>Time <input id="due-time" type="time" value="17:00"></label>
-      </div>
-      <div class="modal-foot">
-        <button id="due-clear" class="mini">Clear due date</button>
-        <span class="flex-spring"></span>
-        <button id="due-cancel" class="mini">Cancel</button>
-        <button id="due-save" class="primary">Save</button>
-      </div>
-    </div>
-  </div>
+function renderFilters() {
+  const box = $("#tier-filters");
+  if (!box) return;
+  box.innerHTML = "";
+  for (const t of S.tiers) {
+    const chip = document.createElement("button");
+    const hidden = S.hiddenTierIds.has(t.id);
+    chip.className = "filter-chip" + (hidden ? " chip-off" : "");
+    chip.textContent = (hidden ? "○ " : "● ") + t.name;
+    chip.style.borderColor = t.color;
+    if (!hidden) chip.style.background = hexToRgba(t.color, 0.18);
+    chip.title = hidden ? `Show ${t.name} in the queue` : `Hide ${t.name} from the queue (this device only)`;
+    chip.addEventListener("click", () => {
+      if (!hidden && (t.rank ?? 99) <= 4) {
+        if (!confirm(`"${t.name}" is a top-priority tier (rank ${t.rank}). Hide it from this device's queue anyway?\n\nHidden tiers are also excluded from overdue check-ins until you show them again.`)) return;
+      }
+      if (hidden) S.hiddenTierIds.delete(t.id); else S.hiddenTierIds.add(t.id);
+      persistHidden();
+      renderFilters();
+      render();
+    });
+    box.append(chip);
+  }
+}
 
-  <!-- ============ PER-PROJECT STAGE EDITOR ============ -->
-  <div id="stages-modal" class="modal-shell" hidden>
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2 id="stages-title">✎ Stages</h2>
-        <button id="stages-cancel" class="icon-btn">✕</button>
-      </div>
-      <p class="hint">This edits THIS project only — the template in ⚙️ Settings is untouched. ✓ = already completed, ⏰ = has a hard due date; both survive renames and reordering. Offsets count this tier's working days.</p>
-      <div id="stage-proj-editor"></div>
-      <button id="stage-proj-add" class="mini">+ Add stage</button>
-      <button id="stage-proj-undate" class="mini" title="Early experiments and the old editors saved stages as 'After + 0wd' (from start OR end), silently dating them. This flips every such row to No date — review, then Save.">Un-date all "+0wd" stages</button>
-      <div class="modal-foot">
-        <span></span>
-        <button id="stages-save" class="primary">Save stages</button>
-      </div>
-    </div>
-  </div>
+// ---------- Rendering ----------
 
-  <!-- ============ WORKING-DAY DATE CHECK (D45→D60) ============ -->
-  <div id="weekend-modal" class="modal-shell" hidden>
-    <div class="modal-card modal-sm">
-      <h3>🗓️ Working-day check</h3>
-      <p id="weekend-text"></p>
-      <div class="weekend-choices">
-        <button id="weekend-yes" class="mini">Yes, keep it</button>
-        <button id="weekend-fri" class="primary"></button>
-        <button id="weekend-mon" class="primary"></button>
-        <button id="weekend-back" class="mini">Go back</button>
-      </div>
-    </div>
-  </div>
+function render() {
+  if (!S.user) return;
+  const now = Date.now();
+  const q = buildQueue({
+    tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
+    now, viewDay: S.viewDay, hiddenTierIds: S.hiddenTierIds
+  });
 
-  <!-- ============ OVERDUE DECISION TIME (D46/D57) ============ -->
-  <div id="decision-modal" class="modal-shell" hidden>
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>🐙 Decision time</h2>
-        <button id="decision-close" class="icon-btn">✕</button>
-      </div>
-      <p class="hint">These have been overdue past your check-in threshold (⚙️ Timing). ✓ completes the next step, 🕐 pushes the deadline to the next working day at 9 AM — or close this and live dangerously; it won't ask again until tomorrow.</p>
-      <div id="decision-list"></div>
-    </div>
-  </div>
+  // D80: the all-day shelf — ambient, checkbox-free, above the fold.
+  const strip = $("#allday-strip");
+  if (strip) {
+    strip.innerHTML = "";
+    strip.hidden = !(q.banners && q.banners.length);
+    (q.banners || []).forEach(b => {
+      const pill = document.createElement("span");
+      pill.className = "banner";
+      const c = b.tier?.color || "#4dd0c4";
+      pill.style.borderLeftColor = c;
+      pill.style.background = hexToRgba(c, 0.14);
+      pill.textContent = b.title;
+      if (b.dayTotal > 1) {
+        const sp = document.createElement("span");
+        sp.className = "banner-span";
+        sp.textContent = ` · day ${b.dayN}/${b.dayTotal}`;
+        pill.append(sp);
+      }
+      pill.title = b.dayTotal > 1
+        ? `${b.title} — ${fmtDay(b.start)} → ${fmtDay((b.end || b.start) - 1)}`
+        : `${b.title} — ${fmtDay(b.start)}`;
+      strip.append(pill);
+    });
+  }
 
-  <!-- ============ UN-COMPLETE REWIND (D53) ============ -->
-  <div id="uncheck-modal" class="modal-shell" hidden>
-    <div class="modal-card modal-sm">
-      <h3 id="uncheck-title">↩️ Un-complete?</h3>
-      <p id="uncheck-text" class="hint"></p>
-      <div class="weekend-choices">
-        <button id="uncheck-oops" class="primary">Oops — keep it done</button>
-        <button id="uncheck-rewind" class="primary">Un-complete & pull follow-ups back to "Waiting on…"</button>
-        <button id="uncheck-keep" class="mini">Un-complete, but follow-ups keep their dates</button>
-      </div>
-    </div>
-  </div>
+  // D82: passed events sink here (today only), dimmed with struck time.
+  const earlier = $("#earlier"), earlierList = $("#earlier-list");
+  if (earlier) {
+    earlierList.innerHTML = "";
+    earlier.hidden = !(q.passedEvents && q.passedEvents.length);
+    (q.passedEvents || []).forEach(pe => {
+      const row = document.createElement("div");
+      row.className = "row past-event";
+      const c = pe.tier?.color || "#4dd0c4";
+      const when = pe.end
+        ? `${fmtTime(pe.start)}–${fmtTime(pe.end)}`
+        : fmtTime(pe.start);
+      row.innerHTML = `<div class="row-main"><strong>${esc(pe.title)}</strong><span class="sub">${when}</span></div>`;
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = pe.tier?.name || "";
+      chip.style.background = hexToRgba(c, 0.18);
+      row.append(chip);
+      earlierList.append(row);
+    });
+  }
 
-  <!-- ============ DUPLICATE FOR NEXT YEAR (D59/D62) ============ -->
-  <div id="dup-modal" class="modal-shell" hidden>
-    <div class="modal-card modal-sm">
-      <h3>🔁 Same time next year?</h3>
-      <p id="dup-text" class="hint"></p>
-      <div class="form-row">
-        <label class="dup-wide">Name <input id="dup-name" type="text"></label>
-      </div>
-      <div class="form-row">
-        <label>Start <input id="dup-start" type="date"></label>
-        <label>End <input id="dup-end" type="date"></label>
-      </div>
-      <div class="form-row">
-        <label>Color <input id="dup-color" type="color"></label>
-        <label>Tier <select id="dup-tier"></select></label>
-        <label>Workload
-          <select id="dup-workload">
-            <option value="1">1 — light</option>
-            <option value="2">2 — standard</option>
-            <option value="3">3 — heavy</option>
-          </select>
-        </label>
-      </div>
-      <p class="hint">✎⋮ below edits next year's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
-      <div class="weekend-choices">
-        <button id="dup-stages" class="mini">✎⋮ Review the pipeline first…</button>
-        <button id="dup-yes" class="primary">Create next year's run</button>
-        <div class="snooze-row"><span class="hint-inline">🕐 Remind me in</span>
-          <button id="dup-snooze-1" class="mini">a day</button>
-          <button id="dup-snooze-7" class="mini">a week</button>
-          <button id="dup-snooze-30" class="mini">a month</button>
-        </div>
-        <button id="dup-no" class="mini">No thanks</button>
-      </div>
-    </div>
-  </div>
+  const sameDay = new Date(S.viewDay).toDateString() === new Date(now).toDateString();
+  $("#day-label").textContent = sameDay ? `Today — ${fmtDay(S.viewDay)}` : fmtDay(S.viewDay);
+  $("#day-today").hidden = sameDay;
 
-  <!-- Shared tap-popover for ⓘ dots -->
-  <div id="popover" hidden></div>
+  renderPinned(q.pinned, now);
+  renderQueue(q.items, now);
+  renderWaiting(q.waiting);
+  renderDone(q.doneToday);
+  renderProjects(now);
+  renderDecision(); // D57: modal rows track live state while open
+  if (S.view === "year") renderYear(); // D65: live updates flow into the grid
+  if (S.view === "week") renderWeek(); // D88: same deal for the week
+}
 
-  <script type="module" src="app.js?v=0.26.0"></script>
-</body>
-</html>
+function tierChip(tier) {
+  const span = document.createElement("span");
+  span.className = "chip";
+  span.textContent = tier ? tier.name : "?";
+  span.style.background = tier ? tier.color : "#666";
+  return span;
+}
+
+function renderPinned(pinned, now) {
+  const box = $("#pinned");
+  box.innerHTML = "";
+  box.hidden = pinned.length === 0;
+  for (const e of pinned) {
+    const row = document.createElement("div");
+    row.className = "row pinned-row";
+    row.append(tierChip(e.tier));
+    const label = document.createElement("div");
+    label.className = "row-main";
+    const mins = Math.round((e.time - now) / 60000);
+    label.innerHTML = `<strong>${esc(e.title)}</strong><span class="sub">${
+      mins > 0 ? `in ${mins} min — ${fmtTime(e.time)}` : `NOW — ${fmtTime(e.time)}`
+    }</span>`;
+    row.append(label);
+    box.append(row);
+  }
+}
+
+function staleGlow(row, deadline, now) {
+  const days = (now - deadline) / DAY_MS;
+  if (days <= 0) return;
+  const blur = Math.min(3 + days * 3.5, 16);
+  const alpha = Math.min(0.25 + days * 0.12, 0.7);
+  row.style.boxShadow = `0 0 ${blur.toFixed(0)}px rgba(255,107,107,${alpha.toFixed(2)})`;
+}
+
+/** Time + date, date omitted only when it's the viewed day (the Bonnie fix). */
+function whenLabel(ts) {
+  return sameDayAsView(ts) ? fmtTime(ts) : `${fmtTime(ts)} ${fmtDay(ts)}`;
+}
+
+/** D63 row layout: line 1 = lead (checkbox/dot) + title (+ ▸ when the
+ *  task has notes), line 2 = tier chip + actions pinned right, details
+ *  expanding underneath. One builder so queue/waiting/done stay twins. */
+function rowScaffold(row, { lead, tier, mainHTML, buttons = [], notes = "", noteKey = null }) {
+  row.classList.add("row-2l");
+  const top = document.createElement("div");
+  top.className = "row-top";
+  if (lead) top.append(lead);
+  const main = document.createElement("div");
+  main.className = "row-main";
+  main.innerHTML = mainHTML;
+  top.append(main);
+  const hasNotes = !!(notes && String(notes).trim()) && noteKey != null;
+  if (hasNotes) {
+    const open = S.expandedNotes.has(noteKey);
+    const chev = document.createElement("button");
+    chev.type = "button";
+    chev.className = "icon-btn note-chev";
+    chev.textContent = open ? "▾" : "▸";
+    chev.title = open ? "Hide details" : "Show details";
+    const toggle = () => {
+      if (S.expandedNotes.has(noteKey)) S.expandedNotes.delete(noteKey);
+      else S.expandedNotes.add(noteKey);
+      render();
+    };
+    chev.addEventListener("click", toggle);
+    main.classList.add("has-notes");
+    main.title = open ? "Hide details" : "Show details";
+    main.addEventListener("click", toggle);
+    top.append(chev);
+  }
+  row.append(top);
+  const actions = document.createElement("div");
+  actions.className = "row-actions";
+  if (tier !== undefined) actions.append(tierChip(tier));
+  const spacer = document.createElement("span");
+  spacer.className = "row-spacer";
+  actions.append(spacer, ...buttons);
+  row.append(actions);
+  if (hasNotes && S.expandedNotes.has(noteKey)) {
+    const n = document.createElement("div");
+    n.className = "row-notes";
+    n.textContent = String(notes);
+    row.append(n);
+  }
+}
+
+function renderQueue(items, now) {
+  const list = $("#queue");
+  list.innerHTML = "";
+  if (items.length === 0) {
+    list.innerHTML = `<div class="empty">Nothing in the queue. The octopus rests. 🐙</div>`;
+    return;
+  }
+  for (const it of items) {
+    const row = document.createElement("div");
+    row.className = "row" + (it.expired ? " overdue" : "") + (it.kind === "event" ? " event-row" : "");
+    if (it.kind === "stage") {
+      row.style.borderLeft = `4px solid ${it.projectColor || "#4dd0c4"}`;
+      const pct = Math.round((it.progressPct || 0) * 100);
+      row.style.background =
+        `linear-gradient(90deg, ${hexToRgba(it.projectColor || "#4dd0c4", 0.16)} ${pct}%, transparent ${pct}%)`;
+    }
+    if (it.expired) staleGlow(row, it.kind === "stage" ? it.deadline : it.originalDue, now);
+
+    let lead;
+    if (it.kind === "task") {
+      lead = document.createElement("input");
+      lead.type = "checkbox";
+      lead.addEventListener("change", ev => {
+        setTaskDone(it.id, lead.checked);
+        if (lead.checked) celebrate(1, clickPoint(ev));
+      });
+    } else if (it.kind === "stage") {
+      lead = document.createElement("input");
+      lead.type = "checkbox";
+      lead.title = `Mark "${it.title}" done`;
+      lead.addEventListener("change", ev => onStageToggle(it.projectId, it.stageIndex, lead.checked, ev));
+    } else {
+      lead = document.createElement("span");
+      lead.className = "event-dot";
+      lead.textContent = "📌";
+    }
+
+    let sub;
+    if (it.kind === "event") {
+      sub = fmtTime(it.time) + (it.end ? "–" + fmtTime(it.end) : "");
+    } else if (it.kind === "stage") {
+      const dl = `${esc(it.deadlineStageName)} — ${fmtDay(it.deadline)}${it.deadlineManual ? " " + fmtTime(it.deadline) : ""}`;
+      sub = it.expired
+        ? `<s>${dl}</s> <span class="badge">❗ missed</span>`
+        : `next: ${dl}` + (it.workload !== 2 ? ` · ${it.workload === 3 ? "heavy" : "light"}` : "");
+    } else if (it.expired) {
+      sub = `<s>${whenLabel(it.originalDue)}</s> → ${fmtTime(it.time)} <span class="badge">❗ overdue</span>`;
+    } else {
+      sub = whenLabel(it.originalDue);
+    }
+    const stagePrefix = it.kind === "stage"
+      ? `<span class="stage-proj" style="color:${it.projectColor}">${esc(it.projectName)}</span> · ` : "";
+    const buttons = it.kind === "task" ? [
+      iconBtn("✎", "Edit this task", () => startTaskEdit(it.raw)),
+      iconBtn("↳", "Add follow-up", () => followUpPrompt(it)),
+      iconBtn("✕", "Delete", () => { if (confirm(`Delete "${it.title}"?`)) deleteTask(it.id); })
+    ] : it.kind === "stage" ? [
+      iconBtn("⏰", "Set/change this stage's hard due date", () =>
+        openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex }, `Hard due date — ${it.title}`, it.dueAt))
+    ] : [];
+    rowScaffold(row, {
+      lead, tier: it.tier,
+      mainHTML: `<strong>${stagePrefix}${esc(it.title)}</strong><span class="sub">${sub}</span>`,
+      buttons,
+      notes: it.kind === "task" ? (it.raw?.notes || "") : "",
+      noteKey: it.kind === "task" ? it.id : null
+    });
+    list.append(row);
+  }
+}
+
+function sameDayAsView(ts) {
+  return new Date(ts).toDateString() === new Date(S.viewDay).toDateString();
+}
+
+function renderWaiting(waiting) {
+  const box = $("#waiting");
+  const list = $("#waiting-list");
+  list.innerHTML = "";
+  box.hidden = waiting.length === 0;
+  for (const t of waiting) {
+    const parent = S.tasks.find(p => p.id === t.parentTaskId);
+    const tier = S.tiers.find(x => x.id === t.tierId);
+    const row = document.createElement("div");
+    row.className = "row waiting-row";
+    rowScaffold(row, {
+      lead: null, tier,
+      mainHTML: `<strong>${esc(t.title)}</strong><span class="sub">+${fmtOffset(t.offsetDays)} after: ${esc(parent ? parent.title : "(deleted task)")}</span>`,
+      buttons: [
+        iconBtn("✎", "Edit title / offset", () => openFollowUpModal({ mode: "edit", task: t })),
+        iconBtn("✕", "Delete", () => deleteTask(t.id))
+      ],
+      notes: t.notes || "",
+      noteKey: t.id
+    });
+    list.append(row);
+  }
+}
+
+function renderDone(done) {
+  const box = $("#done");
+  const list = $("#done-list");
+  list.innerHTML = "";
+  box.hidden = done.length === 0;
+  $("#done-count").textContent = done.length;
+  for (const t of done) {
+    const tier = S.tiers.find(x => x.id === t.tierId);
+    const row = document.createElement("div");
+    row.className = "row done-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.addEventListener("change", () => onTaskUncheck(t));
+    rowScaffold(row, {
+      lead: cb, tier,
+      mainHTML: `<strong>✓ ${esc(t.title)}</strong><span class="sub">done ${fmtTime(t.completedAt)}</span>`,
+      notes: t.notes || "",
+      noteKey: t.id
+    });
+    list.append(row);
+  }
+}
+
+// ---------- Project panel ----------
+
+function persistExpanded() {
+  localStorage.setItem("tc-expanded-projects", JSON.stringify([...S.expandedProjects]));
+}
+
+function renderProjects(now) {
+  const box = $("#projects-list");
+  box.innerHTML = "";
+  $("#projects-empty").hidden = S.projects.length !== 0;
+
+  // D56: unfinished projects up top (whatever their dates — a stalled
+  // past project stays visible on purpose); finished ones fold into
+  // their own collapsed section below. Both keep start-date order.
+  const open = S.projects.filter(p => !p.completedAt);
+  const finished = S.projects.filter(p => p.completedAt);
+
+  for (const p of open) box.append(projectCard(p));
+
+  if (finished.length) {
+    const toggle = document.createElement("button");
+    toggle.className = "mini finished-toggle";
+    toggle.textContent = `${S.showFinished ? "▾" : "▸"} Finished ✓ (${finished.length})`;
+    toggle.title = "Completed projects, kept for the record";
+    toggle.addEventListener("click", () => {
+      S.showFinished = !S.showFinished;
+      localStorage.setItem("tc-show-finished", S.showFinished ? "1" : "0");
+      render();
+    });
+    box.append(toggle);
+    if (S.showFinished) for (const p of finished) box.append(projectCard(p));
+  }
+}
+
+/** D56: collapsed = header row + dates + progress bar. The header row
+ *  never wraps: [chevron][name (wraps internally)][buttons] — the
+ *  buttons Jake kept losing to the second row are now pinned. */
+function projectCard(p) {
+  const prog = projectProgress(p);
+  const expanded = S.expandedProjects.has(p.id);
+  const card = document.createElement("div");
+  card.className = "project-card" + (p.completedAt ? " project-done" : "");
+  card.style.borderTop = `3px solid ${p.color}`;
+
+  const head = document.createElement("div");
+  head.className = "project-head";
+  head.title = expanded ? "Collapse" : "Expand stages";
+  const chev = document.createElement("span");
+  chev.className = "proj-chevron";
+  chev.textContent = expanded ? "▾" : "▸";
+  const nameEl = document.createElement("strong");
+  nameEl.textContent = p.name;
+  const btns = document.createElement("span");
+  btns.className = "proj-btns";
+  btns.append(
+    iconBtn("🔁", "Duplicate this project for next year (same window, stages reset)", () => openDuplicateModal(p)),
+    iconBtn("✎", "Edit project (name, color, tier, dates, workload)", () => startProjectEdit(p)),
+    iconBtn("✎⋮", "Edit this project's stages (rename, reorder, add, remove)", () => openStagesDialog(p)),
+    iconBtn("✕", "Delete project", () => {
+      if (confirm(`Delete project "${p.name}" and its pipeline?`)) deleteProject(p.id);
+    })
+  );
+  head.append(chev, nameEl, btns);
+  head.addEventListener("click", ev => {
+    if (ev.target.closest("button")) return; // buttons act, header toggles
+    if (expanded) S.expandedProjects.delete(p.id); else S.expandedProjects.add(p.id);
+    persistExpanded();
+    render();
+  });
+  card.append(head);
+
+  const wl = p.workload === 3 ? " · heavy" : p.workload === 1 ? " · light" : "";
+  const dates = document.createElement("div");
+  dates.className = "project-dates sub";
+  dates.textContent = `${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}${wl}` +
+    (p.completedAt ? ` · finished ${fmtDay(p.completedAt)}` : "");
+  card.append(dates);
+
+  const barWrap = document.createElement("div");
+  barWrap.className = "progress-wrap";
+  barWrap.title = `${prog.done}/${prog.total} stages`;
+  const bar = document.createElement("div");
+  bar.className = "progress-fill";
+  bar.style.width = `${(prog.pct * 100).toFixed(0)}%`;
+  bar.style.background = p.color;
+  barWrap.append(bar);
+  const barLabel = document.createElement("span");
+  barLabel.className = "progress-label";
+  barLabel.textContent = `${prog.done}/${prog.total}`;
+  barWrap.append(barLabel);
+  card.append(barWrap);
+
+  if (!expanded) return card;
+
+  const stages = p.stages || [];
+  const activeIdx = stages.findIndex(x => !x.completedAt);
+  const list = document.createElement("div");
+  list.className = "stage-list";
+  stages.forEach((sRaw, i) => {
+    const st = normalizeStage(sRaw);
+    const row = document.createElement("div");
+    row.className = "stage-row"
+      + (st.completedAt ? " stage-done" : "")
+      + (i === activeIdx ? " stage-active" : "");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!st.completedAt;
+    cb.addEventListener("change", ev => onStageToggle(p.id, i, cb.checked, ev));
+    row.append(cb);
+
+    const label = document.createElement("span");
+    label.className = "stage-name";
+    label.textContent = st.name;
+    row.append(label);
+
+    if (st.direction && st.direction !== "none") {
+      const code = `${st.direction === "before" ? "−" : "+"}${st.offsetDays}wd ${st.anchor === "end" ? "end" : "start"}`;
+      row.append(badge(code, `${st.offsetDays} working day(s) ${st.direction} project ${st.anchor} (counts this tier's allowed days)`));
+    }
+    if (st.dueAt) {
+      const due = badge(`⏰ ${fmtDay(st.dueAt)}`, "Hard due date — click to change/clear");
+      due.classList.add("clickable");
+      due.addEventListener("click", () => openDueDialog({ kind: "stage", projectId: p.id, stageIndex: i }, `Hard due date — ${st.name}`, st.dueAt));
+      row.append(due);
+    } else if (!st.completedAt) {
+      const setDue = iconBtn("⏰", "Set a hard due date", () => openDueDialog({ kind: "stage", projectId: p.id, stageIndex: i }, `Hard due date — ${st.name}`, null));
+      setDue.classList.add("stage-due-btn");
+      row.append(setDue);
+    }
+    list.append(row);
+  });
+  card.append(list);
+  return card;
+}
+
+async function onStageToggle(projectId, stageIndex, done, ev) {
+  const result = await setStageDone(projectId, stageIndex, done);
+  if (done && result) {
+    celebrate(result.allDone ? 3 : 2, clickPoint(ev));
+    // D59: once the fireworks land, offer next year's run.
+    if (result.allDone) {
+      const p = S.projects.find(x => x.id === projectId);
+      if (p) setTimeout(() => openDuplicateModal(p), 2600);
+    }
+  }
+}
+
+// ---------- Duplicate for next year (D59) ----------
+
+/** Same calendar date next year; Feb 29 clamps to Feb 28. */
+function plusOneYear(ts) {
+  const d = new Date(ts);
+  const m = d.getMonth();
+  d.setFullYear(d.getFullYear() + 1);
+  if (d.getMonth() !== m) d.setDate(0); // rolled over → back to month end
+  return d.getTime();
+}
+
+function openDuplicateModal(p) {
+  const tier = S.tiers.find(t => t.id === p.tierId);
+  const allowed = tier?.allowedDays;
+  // Shift the window +1 year, then snap onto the tier's working days:
+  // start slides FORWARD to the next allowed day, end slides BACK to the
+  // previous one (never widening the window), with an order guard.
+  let startDate = plusOneYear(p.startDate);
+  let endDate = plusOneYear(p.endDate);
+  if (!isDayAllowed(startDate, allowed)) startDate = allowedNeighbors(startDate, allowed).next;
+  if (!isDayAllowed(endDate, allowed)) endDate = allowedNeighbors(endDate, allowed).prev;
+  if (endDate < startDate) endDate = allowedNeighbors(startDate, allowed).next;
+  // D62 rev: the stage list is part of the review — copied (and reset)
+  // up front so "✎⋮ Review the pipeline first…" can edit it pre-create.
+  const stages = (p.stages || []).map(sRaw => {
+    const st = normalizeStage(sRaw);
+    return {
+      name: st.name,
+      direction: st.direction || "none",
+      anchor: st.anchor || "start",
+      offsetDays: st.offsetDays || 0,
+      completedAt: null,
+      dueAt: null
+    };
+  });
+  S.dupTarget = { projectId: p.id, stages };
+  $("#dup-text").textContent =
+    `Everything below is pre-filled for next year and editable — double-check before creating. ` +
+    `The ${stages.length}-stage pipeline copies over exactly as this project has it (surgery included), ` +
+    `checkboxes and hard dues reset; review or reshape it first with ✎⋮ below.`;
+  $("#dup-name").value = bumpYearTokens(p.name, new Date(p.startDate).getFullYear(), new Date(startDate).getFullYear());
+  $("#dup-start").value = toDateInput(new Date(startDate));
+  $("#dup-end").value = toDateInput(new Date(endDate));
+  $("#dup-color").value = p.color;
+  const taskTiers = S.tiers.filter(t => t.kind !== "anchor");
+  $("#dup-tier").innerHTML = taskTiers.map(t =>
+    `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
+  $("#dup-tier").value = p.tierId;
+  $("#dup-workload").value = String(p.workload || 2);
+  $("#dup-modal").hidden = false;
+}
+
+/** D62: bump year tokens in a project name — the full year (2026→2027)
+ *  and Katie's YYNN codes (resv2606→resv2706, where the first two
+ *  digits are the two-digit year of the project's start). */
+function bumpYearTokens(name, fromYear, toYear) {
+  let out = String(name);
+  out = out.replace(new RegExp(`(^|\\D)${fromYear}(?=\\D|$)`, "g"), `$1${toYear}`);
+  const fyy = String(fromYear % 100).padStart(2, "0");
+  const tyy = String(toYear % 100).padStart(2, "0");
+  out = out.replace(new RegExp(`(^|\\D)${fyy}(\\d{2})(?=\\D|$)`, "g"), `$1${tyy}$2`);
+  return out;
+}
+
+function dupConfirm() {
+  const t = S.dupTarget;
+  if (!t) { $("#dup-modal").hidden = true; return; }
+  const p = S.projects.find(x => x.id === t.projectId);
+  if (!p) { S.dupTarget = null; $("#dup-modal").hidden = true; return; }
+  const name = $("#dup-name").value.trim() || p.name;
+  const startDate = new Date(`${$("#dup-start").value}T00:00`).getTime();
+  const endDate = new Date(`${$("#dup-end").value}T00:00`).getTime();
+  const tierId = $("#dup-tier").value;
+  const workload = parseInt($("#dup-workload").value, 10) || 2;
+  if (isNaN(startDate) || isNaN(endDate)) { alert("Both dates are needed."); return; }
+  if (endDate < startDate) { alert("Project can't end before it starts. (The octopus checked.)"); return; }
+  // Edited dates still respect the chosen tier's working days (D60).
+  const tier = S.tiers.find(x => x.id === tierId);
+  for (const [label, ts] of [["start", startDate], ["end", endDate]]) {
+    if (!isDayAllowed(ts, tier?.allowedDays)) {
+      const { prev, next } = allowedNeighbors(ts, tier?.allowedDays);
+      alert(`${fmtDay(ts)} is outside ${tier ? tier.name + "'s" : "this tier's"} working days — ` +
+        `try ${fmtDay(prev)} or ${fmtDay(next)} for the ${label} date.`);
+      return;
+    }
+  }
+  const stages = t.stages || [];
+  S.dupTarget = null;
+  $("#dup-modal").hidden = true;
+  addProjectWithStages({
+    name, color: $("#dup-color").value, tierId, workload, startDate, endDate, stages
+  }).then(ref => {
+    // Open the new card so the pipeline is immediately reviewable
+    // (✎⋮ from there for stage surgery — "Excel setup" → five steps).
+    if (ref?.id) { S.expandedProjects.add(ref.id); persistExpanded(); }
+  });
+}
+
+/** D62 rev: edit next year's pipeline BEFORE it exists — borrows the
+ *  per-project stages editor against the staged copy ("@dup" target). */
+function openDupStages() {
+  if (!S.dupTarget) return;
+  const p = S.projects.find(x => x.id === S.dupTarget.projectId);
+  S.stagesTarget = "@dup";
+  S.stagesFromDup = true;
+  $("#dup-modal").hidden = true;
+  $("#stages-title").textContent = `✎ Stages — next year's ${p ? p.name : "run"}`;
+  const box = $("#stage-proj-editor");
+  box.innerHTML = "";
+  (S.dupTarget.stages || []).forEach(st => projStageRow(st, -1, false));
+  $("#stages-modal").hidden = false;
+}
+
+/** D62: "too soon after the fireworks" escape hatch — snooze the
+ *  duplication decision into a real task 1/7/30 days out. */
+function dupSnooze(days) {
+  const t = S.dupTarget;
+  S.dupTarget = null;
+  $("#dup-modal").hidden = true;
+  if (!t) return;
+  const p = S.projects.find(x => x.id === t.projectId);
+  if (!p) return;
+  const tier = S.tiers.find(x => x.id === p.tierId);
+  let due = Date.now() + days * DAY_MS;
+  if (!isDayAllowed(due, tier?.allowedDays)) due = allowedNeighbors(due, tier?.allowedDays).next;
+  const d = new Date(due); d.setHours(9, 0, 0, 0);
+  addTask({
+    title: `🔁 Set up next year's "${p.name}"?`,
+    tierId: p.tierId,
+    dueAt: d.getTime(),
+    escalation: { every: 1, unit: "days" }
+  });
+}
+
+function badge(text, title) {
+  const b = document.createElement("span");
+  b.className = "stage-badge";
+  b.textContent = text;
+  b.title = title || "";
+  return b;
+}
+
+function clickPoint(ev) {
+  if (ev && ev.target) {
+    const r = ev.target.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+  return {};
+}
+
+// ---------- Due-date dialog ----------
+
+function openDueDialog(target, label, existingDueAt) {
+  // D84: target = {kind:"stage", projectId, stageIndex} | {kind:"task", taskId}
+  S.dueTarget = target;
+  $("#due-title").textContent = label;
+  if (existingDueAt) {
+    const d = new Date(existingDueAt);
+    $("#due-date").value = toDateInput(d);
+    $("#due-time").value = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  } else {
+    $("#due-date").value = "";
+    $("#due-time").value = "17:00";
+  }
+  $("#due-clear").hidden = !existingDueAt;
+  $("#due-modal").hidden = false;
+}
+
+function dueSave() {
+  const date = $("#due-date").value;
+  if (!date || !S.dueTarget) { $("#due-modal").hidden = true; return; }
+  const time = $("#due-time").value || "17:00";
+  const ts = new Date(`${date}T${time}`).getTime();
+  if (S.dueTarget.kind === "task") updateTask(S.dueTarget.taskId, { dueAt: ts });
+  else setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, ts);
+  $("#due-modal").hidden = true;
+}
+
+function dueClear() {
+  if (S.dueTarget?.kind === "task") updateTask(S.dueTarget.taskId, { dueAt: null }); // → Waiting
+  else if (S.dueTarget) setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, null);
+  $("#due-modal").hidden = true;
+}
+
+// ---------- Per-project stage surgery (D42) ----------
+
+function openStagesDialog(p) {
+  S.stagesTarget = p.id;
+  $("#stages-title").textContent = `✎ Stages — ${p.name}`;
+  const box = $("#stage-proj-editor");
+  box.innerHTML = "";
+  (p.stages || []).forEach((st, i) => projStageRow(normalizeStage(st), i, false));
+  $("#stages-modal").hidden = false;
+}
+
+function timingSelects(st) {
+  const dir = st.direction || "none";
+  const undated = dir === "none";
+  return `
+    <select class="st-dir" title="No date: this stage is pipeline weight — it just has to happen before the next dated thing. Before/After: this stage has a real target date.">
+      <option value="none" ${undated ? "selected" : ""}>No date</option>
+      <option value="before" ${dir === "before" ? "selected" : ""}>Before</option>
+      <option value="after" ${dir === "after" ? "selected" : ""}>After</option>
+    </select>
+    <select class="st-anchor${undated ? " st-ghost" : ""}" title="Counted from project start or project end">
+      <option value="start" ${st.anchor !== "end" ? "selected" : ""}>start</option>
+      <option value="end" ${st.anchor === "end" ? "selected" : ""}>end</option>
+    </select>
+    <label class="st-off-label${undated ? " st-ghost" : ""}" title="Working-day offset — this tier's off days never count."><input class="st-off" type="number" min="0" value="${st.offsetDays || 0}">wd</label>`;
+}
+
+function syncTimingRow(row) {
+  // st-ghost (visibility) keeps the columns aligned across dated and
+  // undated rows — display:none let the name field swallow the space.
+  const undated = row.querySelector(".st-dir").value === "none";
+  row.querySelector(".st-anchor").classList.toggle("st-ghost", undated);
+  row.querySelector(".st-off-label").classList.toggle("st-ghost", undated);
+}
+
+function projStageRow(st, origIndex, isNew) {
+  const box = $("#stage-proj-editor");
+  const row = document.createElement("div");
+  row.className = "stage-tmpl-row" + (st.completedAt ? " proj-stage-done" : "");
+  row.dataset.orig = String(origIndex);
+  row.innerHTML = `
+    <span class="st-move"><button type="button" class="st-up" title="Move up">▲</button><button type="button" class="st-down" title="Move down">▼</button></span>
+    <input class="st-name" type="text" value="${esc(st.name || "")}" placeholder="Stage name">
+    ${timingSelects(st)}
+    <span class="st-flags">${st.completedAt ? "✓" : ""}${st.dueAt ? " ⏰" : ""}</span>
+    <button type="button" class="st-del" title="Remove stage from this project">✕</button>`;
+  wireTmplRow(row, box);
+  box.append(row);
+  if (isNew) row.querySelector(".st-name").focus();
+}
+
+function stagesSave() {
+  if (S.stagesTarget === "@dup") {
+    // D62 rev: collect into the staged copy — nothing writes until
+    // "Create next year's run"; checkboxes/dues stay reset by design.
+    if (S.dupTarget) {
+      S.dupTarget.stages = [...document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")].map(row => ({
+        name: row.querySelector(".st-name").value.trim() || "Untitled stage",
+        direction: row.querySelector(".st-dir").value,
+        anchor: row.querySelector(".st-anchor").value,
+        offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
+        completedAt: null,
+        dueAt: null
+      }));
+      $("#dup-text").textContent = $("#dup-text").textContent.replace(/The \d+-stage pipeline/, `The ${S.dupTarget.stages.length}-stage pipeline`);
+    }
+    S.stagesTarget = null;
+    S.stagesFromDup = false;
+    $("#stages-modal").hidden = true;
+    $("#dup-modal").hidden = false;
+    return;
+  }
+  const p = S.projects.find(x => x.id === S.stagesTarget);
+  if (!p) { $("#stages-modal").hidden = true; return; }
+  const orig = p.stages || [];
+  const stages = [...document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")].map(row => {
+    const oi = parseInt(row.dataset.orig, 10);
+    const carried = (oi >= 0 && orig[oi]) ? orig[oi] : { completedAt: null, dueAt: null };
+    return {
+      name: row.querySelector(".st-name").value.trim() || "Untitled stage",
+      direction: row.querySelector(".st-dir").value,
+      anchor: row.querySelector(".st-anchor").value,
+      offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
+      completedAt: carried.completedAt ?? null,
+      dueAt: carried.dueAt ?? null
+    };
+  });
+  setProjectStages(S.stagesTarget, stages);
+  $("#stages-modal").hidden = true;
+}
+
+// ---------- Overdue decision modal (D46) ----------
+
+function decisionKey() {
+  const d = new Date();
+  return `tc-decision-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** Items ≥ threshold days past deadline in visible tiers, right now. */
+function staleItems() {
+  const now = Date.now();
+  const threshold = (S.config?.decisionThresholdDays ?? 2) * DAY_MS; // D52
+  const q = buildQueue({
+    tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
+    now, viewDay: now, hiddenTierIds: S.hiddenTierIds
+  });
+  return q.items.filter(it =>
+    it.expired && (now - (it.kind === "stage" ? it.deadline : it.originalDue)) >= threshold);
+}
+
+/** One project = one modal row across its whole lifetime in the modal,
+ *  however many stages it burns through while it's open. */
+function decisionItemKey(it) {
+  return it.kind === "stage" ? `proj:${it.projectId}` : `task:${it.id}`;
+}
+
+function maybeDecisionTime() {
+  if (!S.user || S.decisionIds) return;           // already open
+  if (localStorage.getItem(decisionKey())) return; // today's shot is spent
+  const stale = staleItems();
+  if (!stale.length) return;
+  localStorage.setItem(decisionKey(), "1"); // once per day per device
+  S.decisionIds = new Set(stale.map(decisionItemKey));
+  renderDecision();
+  $("#decision-modal").hidden = false;
+}
+
+function closeDecision() {
+  S.decisionIds = null;
+  $("#decision-modal").hidden = true;
+}
+
+/** D57: the modal is a live view. Every render re-derives its rows from
+ *  current state, so ✓ and 🕐 visibly resolve items, a project row
+ *  advances to its next stage instead of lying, and the modal closes
+ *  itself once everything is dealt with. */
+function renderDecision() {
+  if (!S.decisionIds) return;
+  const current = staleItems().filter(it => S.decisionIds.has(decisionItemKey(it)));
+  if (!current.length) { closeDecision(); return; }
+  const now = Date.now();
+  const list = $("#decision-list");
+  list.innerHTML = "";
+  for (const it of current) {
+    const overdueSince = it.kind === "stage" ? it.deadline : it.originalDue;
+    const days = Math.floor((now - overdueSince) / DAY_MS);
+    const row = document.createElement("div");
+    row.className = "row decision-row";
+    // D60: reschedule lands on the tier's next ALLOWED day — a weekend
+    // check is unnecessary by construction (disallowed days are skipped).
+    const target = (() => {
+      const t = addAllowedDays(now, 1, it.tier?.allowedDays);
+      const d = new Date(t); d.setHours(9, 0, 0, 0); return d.getTime();
+    })();
+    // D83: say the plan out loud — tooltips don't exist on phones.
+    const plan = ` · 🕐 → ${fmtDay(target)} 9 AM`;
+    const main = document.createElement("div");
+    main.className = "row-main";
+    if (it.kind === "stage") {
+      // Show the ACTIVE stage (what ✓ completes); name the overdue
+      // deadline separately when it's a different, later stage.
+      const dl = it.deadlineStageIndex !== it.stageIndex
+        ? ` · deadline: ${esc(it.deadlineStageName)}` : "";
+      main.innerHTML = `<strong>${esc(it.projectName)}: ${esc(it.title)}</strong>` +
+        `<span class="sub">${days} day${days === 1 ? "" : "s"} overdue${dl}${plan}</span>`;
+    } else {
+      main.innerHTML = `<strong>${esc(it.title)}</strong>` +
+        `<span class="sub">${days} day${days === 1 ? "" : "s"} overdue${plan}</span>`;
+    }
+    row.append(main);
+    row.append(
+      iconBtn("✓", it.kind === "stage" ? `Mark "${it.title}" done` : "Mark it done", ev => {
+        if (it.kind === "stage") onStageToggle(it.projectId, it.stageIndex, true, ev);
+        else { setTaskDone(it.id, true); celebrate(1, clickPoint(ev)); }
+      }),
+      iconBtn("🕐", `Reschedule to ${fmtDay(target)} 9:00 AM`, () => {
+        if (it.kind === "stage") setStageDue(it.projectId, it.deadlineStageIndex, target);
+        else updateTask(it.id, { dueAt: target });
+      }),
+      iconBtn("📅", "Pick a date — kick it way down the road", () => {  // D84
+        if (it.kind === "stage") {
+          openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.deadlineStageIndex },
+            `Reschedule — ${it.deadlineStageName}`, it.deadline);
+        } else {
+          openDueDialog({ kind: "task", taskId: it.id }, `Reschedule — ${it.title}`, it.originalDue);
+        }
+      })
+    );
+    list.append(row);
+  }
+}
+
+// ---------- Task form (create + edit) ----------
+
+function refreshTierSelects() {
+  const taskTiers = S.tiers.filter(t => t.kind !== "anchor"); // rank-sorted upstream
+  const taskOpts = taskTiers.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+  const projOpts = taskTiers.map(t => `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
+  const keep1 = $("#task-tier").value, keep2 = $("#project-tier").value;
+  $("#task-tier").innerHTML = taskOpts;
+  $("#project-tier").innerHTML = projOpts;
+  if (keep1 && taskTiers.some(t => t.id === keep1)) $("#task-tier").value = keep1;
+  if (keep2 && taskTiers.some(t => t.id === keep2)) {
+    $("#project-tier").value = keep2;
+  } else {
+    const work = taskTiers.find(t => t.name.toLowerCase() === "work");
+    if (work) $("#project-tier").value = work.id;
+  }
+}
+
+function startTaskEdit(task) {
+  S.editingTaskId = task.id;
+  $("#task-form-title").textContent = "✎ Edit task";
+  $("#task-submit").textContent = "Save changes";
+  $("#task-cancel").hidden = false;
+  $("#task-title").value = task.title;
+  $("#task-notes").value = task.notes || "";
+  $("#task-tier").value = task.tierId;
+  const d = new Date(task.dueAt);
+  $("#task-date").value = toDateInput(d);
+  $("#task-time").value = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  $("#task-esc-n").value = task.escalation?.every ?? 1;
+  $("#task-esc-unit").value = task.escalation?.unit ?? "hours";
+  $("#task-title").focus();
+}
+
+function cancelTaskEdit() {
+  S.editingTaskId = null;
+  $("#task-form-title").textContent = "New task";
+  $("#task-submit").textContent = "Add to the tentacles";
+  $("#task-cancel").hidden = true;
+  $("#task-form").reset();
+  $("#task-time").value = "09:00";
+  $("#task-esc-n").value = 1;
+}
+
+function onTaskFormSubmit(ev) {
+  ev.preventDefault();
+  const title = $("#task-title").value.trim();
+  const tierId = $("#task-tier").value;
+  const date = $("#task-date").value;
+  const time = $("#task-time").value || "09:00";
+  const every = parseInt($("#task-esc-n").value, 10) || 1;
+  const unit = $("#task-esc-unit").value;
+  if (!title || !tierId || !date) return;
+  const dueAt = new Date(`${date}T${time}`).getTime();
+  const payload = { title, tierId, dueAt, escalation: { every, unit }, notes: $("#task-notes").value.trim() };
+  if (S.editingTaskId) updateTask(S.editingTaskId, payload).then(cancelTaskEdit);
+  else addTask(payload).then(() => { $("#task-title").value = ""; $("#task-notes").value = ""; });
+}
+
+// ---------- Project form (create + edit) + weekend interception (D45) ----------
+
+function startProjectEdit(p) {
+  S.editingProjectId = p.id;
+  $("#project-form-title").textContent = "✎ Edit project";
+  $("#project-submit").textContent = "Save changes";
+  $("#project-cancel").hidden = false;
+  $("#project-name").value = p.name;
+  $("#project-color").value = p.color;
+  $("#project-tier").value = p.tierId;
+  $("#project-workload").value = String(p.workload || 2);
+  $("#project-start").value = toDateInput(new Date(p.startDate));
+  $("#project-end").value = toDateInput(new Date(p.endDate));
+  checkProjectColor();
+  $("#project-name").focus();
+}
+
+function cancelProjectEdit() {
+  S.editingProjectId = null;
+  $("#project-form-title").textContent = "New project";
+  $("#project-submit").textContent = "Launch pipeline";
+  $("#project-cancel").hidden = true;
+  $("#project-form").reset();
+  $("#project-workload").value = "2";
+  suggestProjectColor(true);
+  $("#project-color-hint").textContent = "";
+}
+
+function onProjectFormSubmit(ev) {
+  ev.preventDefault();
+  const name = $("#project-name").value.trim();
+  const color = $("#project-color").value;
+  const tierId = $("#project-tier").value;
+  const workload = parseInt($("#project-workload").value, 10) || 2;
+  const start = $("#project-start").value;
+  const end = $("#project-end").value;
+  if (!name || !tierId || !start || !end) return;
+  const payload = {
+    name, color, tierId, workload,
+    startDate: new Date(`${start}T00:00`).getTime(),
+    endDate: new Date(`${end}T00:00`).getTime()
+  };
+  if (payload.endDate < payload.startDate) {
+    alert("Project can't end before it starts. (The octopus checked.)");
+    return;
+  }
+  validateWeekends(payload, "startDate");
+}
+
+/** D45→D60: project start/end should land on the tier's ALLOWED days —
+ *  everything else is computed from them. A tier that allows all seven
+ *  days (e.g. Personal) never triggers this modal. Checks fields one at
+ *  a time via the interception modal. */
+function validateWeekends(payload, field) {
+  if (field === null) { commitProject(payload); return; }
+  const next = field === "startDate" ? "endDate" : null;
+  const tier = S.tiers.find(t => t.id === payload.tierId);
+  const allowed = tier?.allowedDays;
+  if (isDayAllowed(payload[field], allowed)) { validateWeekends(payload, next); return; }
+  const { prev, next: after } = allowedNeighbors(payload[field], allowed);
+  S.weekendPending = { payload, field, next, fri: prev, mon: after };
+  const which = field === "startDate" ? "start" : "end";
+  const dow = new Date(payload[field]).toLocaleDateString([], { weekday: "long" });
+  $("#weekend-text").textContent =
+    `${fmtDay(payload[field])} is a ${dow} — that's outside ${tier ? `the ${tier.name} tier's` : "this tier's"} working days, ` +
+    `and pipeline math only counts those. Keep it as the project ${which} date anyway?`;
+  $("#weekend-fri").textContent = `No — ${fmtDay(prev)}`;
+  $("#weekend-mon").textContent = `No — ${fmtDay(after)}`;
+  $("#weekend-modal").hidden = false;
+}
+
+function weekendChoice(choice) {
+  const w = S.weekendPending;
+  $("#weekend-modal").hidden = true;
+  if (!w) return;
+  S.weekendPending = null;
+  if (choice === "back") return;
+  if (choice === "fri") w.payload[w.field] = w.fri;
+  if (choice === "mon") w.payload[w.field] = w.mon;
+  // "yes" keeps the weekend date as chosen
+  if (w.field === "startDate") $("#project-start").value = toDateInput(new Date(w.payload.startDate));
+  else $("#project-end").value = toDateInput(new Date(w.payload.endDate));
+  validateWeekends(w.payload, w.next);
+}
+document.addEventListener("DOMContentLoaded", () => {
+  $("#weekend-yes").addEventListener("click", () => weekendChoice("yes"));
+  $("#weekend-fri").addEventListener("click", () => weekendChoice("fri"));
+  $("#weekend-mon").addEventListener("click", () => weekendChoice("mon"));
+  $("#weekend-back").addEventListener("click", () => weekendChoice("back"));
+});
+
+function commitProject(payload) {
+  if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(() => { cancelProjectEdit(); closeYvProjectModal(); });
+  else addProject(payload).then(() => { $("#project-name").value = ""; suggestProjectColor(true); closeYvProjectModal(); }); // D68: new bar appears behind the closing modal
+}
+
+// ---------- Color conflict assistant (D40) ----------
+
+const COLOR_POOL = [
+  "#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b197fc",
+  "#f783ac", "#63e6be", "#e599f7", "#ff9f43", "#54a0ff", "#00d2d3",
+  "#feca57", "#5f27cd", "#48dbfb", "#1dd1a1"
+];
+
+function hexToRgb(hex) {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+// ---------- D65: Year view (Phase 2) ----------
+// Quarter-aligned 4 rows × 3 months (D31: calendar / quarter-first /
+// month-first anchors), D30a ghost bars saturating left-to-right by
+// pipeline %, D32 drag-to-move + edge-drag-to-stretch, D18 month zoom,
+// D27 legend + tap details. Bars are %-positioned inside each row, so
+// one renderer serves the year grid AND the zoomed single month.
+
+let yvTapSquelch = false; // a completed drag must not fire the tap popover
+let yvDragging = false;
+
+function startOfDayTs(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+
+function setView(v) {
+  S.view = v;
+  localStorage.setItem("tc-view", v);
+  $("main").hidden = v !== "day";            // D35's [hidden]!important beats main's display:grid
+  $("#week-view").hidden = v !== "week";     // D88
+  $("#year-view").hidden = v !== "year";
+  const b = $("#view-toggle");
+  // D88: day → week → year → day. The glyph shows WHERE YOU'RE GOING.
+  const next = { day: "week", week: "year", year: "day" }[v];
+  b.textContent = { week: "🗓️", year: "📅", day: "📋" }[next];
+  b.title = { week: "Week view", year: "Year view", day: "Today view" }[next];
+  if (v === "year") renderYear();
+  if (v === "week") renderWeek();
+}
+
+// ---------- D88: THE WEEK ----------
+// Seven queue columns, not a clock. A task due at 4 PM is a DEADLINE, not
+// a 4 PM appointment — and every computed stage deadline lands at
+// deadlineHour, so a time grid would paint a wall of fake 4 PM collisions.
+// Spans live up top (projects + all-day), dated things live in columns.
+// Sized for a 55" 4K wall: ~137px columns, big type, nothing hover-only.
+
+function weekAnchor() {
+  return S.weekAnchor ?? startOfDayTs(Date.now()); // null = rolling: today + 6
+}
+
+function renderWeek() {
+  const now = Date.now();
+  const w = buildWeek({
+    tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
+    now, anchorDay: weekAnchor(), days: 7, hiddenTierIds: S.hiddenTierIds
+  });
+
+  const rolling = S.weekAnchor === null;
+  $("#wv-label").textContent = rolling
+    ? `Next 7 days — ${fmtDay(w.days[0].dayStart)} → ${fmtDay(w.days[6].dayStart)}`
+    : `${fmtDay(w.days[0].dayStart)} → ${fmtDay(w.days[6].dayStart)}`;
+  $("#wv-today").hidden = rolling;
+
+  renderWeekBanners(w);
+  renderWeekProjects(w);
+
+  const grid = $("#wv-grid");
+  grid.innerHTML = "";
+  let anything = 0;
+  for (const col of w.days) {
+    const c = document.createElement("div");
+    c.className = "wv-col" + (col.isToday ? " is-today" : "") + (col.isPast ? " is-past" : "");
+
+    const head = document.createElement("div");
+    head.className = "wv-head";
+    const d = new Date(col.dayStart);
+    head.innerHTML = `<span class="wv-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>` +
+      `<span class="wv-date">${d.getDate()}</span>`;
+    // The load signal — the one thing a week can say that a day cannot:
+    // "Thursday is going to hurt, and it's Monday."
+    const load = document.createElement("div");
+    load.className = "wv-load";
+    load.title = col.load.total
+      ? `${col.load.total} due — ${col.load.stages} project stage(s), ${col.load.tasks} task(s), ${col.load.events} event(s)` +
+        (col.load.expired ? ` · ${col.load.expired} MISSED` : "")
+      : "Nothing due";
+    const fill = document.createElement("i");
+    fill.style.width = `${Math.round(col.loadShare * 100)}%`;
+    if (col.load.expired) fill.classList.add("has-expired");
+    load.append(fill);
+    const n = document.createElement("span");
+    n.className = "wv-count";
+    n.textContent = col.load.total || "";
+    head.append(load, n);
+    c.append(head);
+
+    const list = document.createElement("div");
+    list.className = "wv-list";
+    if (!col.items.length) {
+      const e = document.createElement("div");
+      e.className = "wv-clear";
+      e.textContent = col.isPast ? "" : "clear";
+      list.append(e);
+    }
+    for (const it of col.items) { list.append(weekRow(it, now)); anything++; }
+    c.append(list);
+    grid.append(c);
+  }
+  $("#wv-empty").hidden = anything > 0 || w.projectSpans.length > 0 || w.bannerSpans.length > 0;
+}
+
+/** One compact row. Big enough to read across a room; tap = open the day. */
+function weekRow(it, now) {
+  const row = document.createElement("div");
+  row.className = "wv-row" + (it.expired ? " expired" : "") + ` k-${it.kind}`;
+  const color = it.kind === "stage" ? (it.projectColor || "#888") : (it.tier?.color || "#4dd0c4");
+  row.style.borderLeftColor = color;
+  row.style.background = hexToRgba(color, it.expired ? 0.2 : 0.1);
+
+  const when = it.kind === "event"
+    ? (it.end ? `${fmtTime(it.time)}–${fmtTime(it.end)}` : fmtTime(it.time))
+    : fmtTime(it.originalDue ?? it.time);
+  const title = it.kind === "stage" ? it.projectName : it.title;
+  const sub = it.kind === "stage" ? it.title : "";
+
+  row.innerHTML =
+    `<span class="wv-when">${it.expired ? "❗" : ""}${esc(when)}</span>` +
+    `<span class="wv-title">${esc(title)}</span>` +
+    (sub ? `<span class="wv-sub">${esc(sub)}</span>` : "");
+  row.title = it.kind === "stage"
+    ? `${it.projectName} — ${it.title}${it.expired ? " (MISSED)" : ""}\nDue ${fmtDay(it.originalDue ?? it.time)} ${fmtTime(it.originalDue ?? it.time)}`
+    : `${title}${it.expired ? " (MISSED)" : ""}\n${fmtDay(it.time)} ${when}`;
+  return row;
+}
+
+function renderWeekBanners(w) {
+  const strip = $("#wv-banners");
+  strip.innerHTML = "";
+  strip.hidden = !w.bannerSpans.length;
+  for (const b of w.bannerSpans) {
+    const el = document.createElement("div");
+    el.className = "wv-span wv-banner";
+    el.style.gridColumn = `${b.fromIdx + 1} / ${b.toIdx + 2}`;
+    const c = b.tier?.color || "#4dd0c4";
+    el.style.borderLeftColor = c;
+    el.style.background = hexToRgba(c, 0.16);
+    el.textContent = `${b.clippedLeft ? "… " : ""}${b.title}${b.clippedRight ? " …" : ""}`;
+    el.title = `${b.title}${b.dayTotal > 1 ? ` — ${b.dayTotal} days` : ""}`;
+    strip.append(el);
+  }
+}
+
+function renderWeekProjects(w) {
+  const strip = $("#wv-projects");
+  strip.innerHTML = "";
+  strip.hidden = !w.projectSpans.length;
+  for (const p of w.projectSpans) {
+    const el = document.createElement("div");
+    el.className = "wv-span wv-proj" + (p.deckRank === 0 ? " clear-deck" : "");
+    el.style.gridColumn = `${p.fromIdx + 1} / ${p.toIdx + 2}`;
+    el.style.borderLeftColor = p.color;
+    el.style.background = hexToRgba(p.color, 0.14);
+
+    const pct = Math.round(p.pct * 100);
+    el.innerHTML =
+      `<span class="wv-proj-name">${p.clippedLeft ? "… " : ""}${esc(p.name)}${p.clippedRight ? " …" : ""}</span>` +
+      `<span class="wv-proj-pct">${pct}%</span>`;
+    const meter = document.createElement("i");
+    meter.className = "wv-proj-meter";
+    meter.style.width = `${pct}%`;
+    meter.style.background = p.color;
+    el.append(meter);
+
+    // Pips: the days this project actually wants something from you.
+    for (const pip of p.pips) {
+      const dot = document.createElement("b");
+      dot.className = "wv-pip" + (pip.done ? " done" : "") + (pip.isActive ? " active" : "");
+      const rel = pip.dayIdx - p.fromIdx, span = (p.toIdx - p.fromIdx) + 1;
+      dot.style.left = `calc(${((rel + 0.5) / span) * 100}% - 4px)`;
+      dot.title = `${pip.name} — ${pip.done ? "done" : "due"} ${fmtDay(w.days[pip.dayIdx].dayStart)}`;
+      el.append(dot);
+    }
+    el.title = `${p.name} — ${p.done}/${p.total} stages (${pct}%)\nNow: ${p.activeStageName}` +
+      (p.deckRank === 0 ? "\n🏁 past the clear-the-deck line — finish it" : "");
+    strip.append(el);
+  }
+}
+
+function weekPage(n) {
+  S.weekAnchor = addDaysLocal(weekAnchor(), n * 7);
+  if (S.weekAnchor === startOfDayTs(Date.now())) S.weekAnchor = null; // back to rolling
+  renderWeek();
+}
+
+/** First month of the visible 12 (D31 mode + paging offset). */
+function yearAnchorMonth() {
+  const now = new Date();
+  let m0 = 0;
+  if (S.yearMode === "quarter") m0 = Math.floor(now.getMonth() / 3) * 3;
+  else if (S.yearMode === "month") m0 = now.getMonth();
+  return new Date(now.getFullYear(), m0 + S.yearOffset, 1);
+}
+
+function shiftYear(n) {
+  if (S.yearZoom != null) {
+    const z = new Date(S.yearZoom);
+    S.yearZoom = new Date(z.getFullYear(), z.getMonth() + n, 1).getTime();
+  } else {
+    S.yearOffset += n * 12;
+  }
+  renderYear();
+}
+
+function yvDetails(p, prog) {
+  const tier = S.tiers.find(t => t.id === p.tierId);
+  const nd = nextDeadline(p, tier?.allowedDays);
+  const s0 = startOfDayTs(p.startDate || 0), e0 = startOfDayTs(p.endDate || p.startDate || 0);
+  let out = `${p.name}\n${fmtDay(s0)} → ${fmtDay(e0)} · ${prog.done}/${prog.total} stages (${Math.round(prog.pct * 100)}%)`;
+  if (p.completedAt) out += "\n✓ complete";
+  else if (nd) out += `\nnext: ${nd.stage.name} — ${fmtDay(nd.date)}`;
+  return out;
+}
+
+function yvShowDetails(bar, p) {
+  const pop = $("#popover");
+  pop.textContent = yvDetails(p, projectProgress(p));
+  pop.hidden = false;
+  const r = bar.getBoundingClientRect();
+  pop.style.top = `${r.bottom + 6}px`;
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8))}px`;
+}
+
+/** Commit a drag: snap to the tier's working days exactly like the
+ *  form save does (start forward, end back, order-guarded — D59/D60). */
+function commitBarDrag(p, ns, ne) {
+  const allowed = S.tiers.find(t => t.id === p.tierId)?.allowedDays;
+  if (!isDayAllowed(ns, allowed)) ns = allowedNeighbors(ns, allowed).next;
+  if (!isDayAllowed(ne, allowed)) ne = allowedNeighbors(ne, allowed).prev;
+  if (ne < ns) ne = allowedNeighbors(ns, allowed).next;
+  updateProject(p.id, { startDate: ns, endDate: ne });
+}
+
+// ---------- D74: drag drop-ghosts ----------
+let yvGhosts = [];
+function yvClearGhosts() { yvGhosts.forEach(g => g.remove()); yvGhosts = []; }
+
+/** Tinted landing slots for [ns..ne] in every row they cross —
+ *  D77: colored like the project; they ARE the drag preview. */
+function yvShowGhosts(ns, ne, rowMap, color) {
+  yvClearGhosts();
+  const endEx = ne + DAY_MS; // inclusive end day → exclusive bound
+  for (const w of rowMap) {
+    // D76: clip to where the bar will actually render (week ∩ month in
+    // the calendar layouts) — no more twin ghosts in spillover weeks.
+    const lo = w.clipS || w.ws;
+    const rd = new Date(w.ws);
+    rd.setDate(rd.getDate() + w.days);
+    const hi = w.clipE || rd.getTime();
+    const segS = Math.max(ns, lo), segE = Math.min(endEx, hi);
+    if (segE <= segS) continue;
+    const d0 = Math.round((segS - w.ws) / DAY_MS);
+    const d1 = Math.round((segE - w.ws) / DAY_MS);
+    const g = document.createElement("div");
+    g.className = "yv-ghost";
+    if (color) {
+      g.style.background = hexToRgba(color, 0.4);
+      g.style.borderColor = color;
+    }
+    g.style.left = `${w.rect.left + (d0 / w.days) * w.rect.width}px`;
+    g.style.width = `${Math.max(4, ((d1 - d0) / w.days) * w.rect.width)}px`;
+    g.style.top = `${w.rect.top}px`;
+    g.style.height = `${w.rect.height}px`;
+    document.body.append(g);
+    yvGhosts.push(g);
+  }
+}
+
+/** D73: which DATE is under the pointer? Nearest tagged row by
+ *  vertical distance (so drags between rows/months/quarters resolve),
+ *  x clamped inside it, day index by fraction of the row's window. */
+function yvDateAt(clientX, clientY, rowMap) {
+  let best = null, bd = Infinity;
+  for (const w of rowMap) {
+    const r = w.rect;
+    // D76: TRUE 2D distance — months sit side-by-side (D72), so rows
+    // share y-bands; vertical-only distance let April answer for June.
+    const ddx = clientX < r.left ? r.left - clientX : clientX > r.right ? clientX - r.right : 0;
+    const ddy = clientY < r.top ? r.top - clientY : clientY > r.bottom ? clientY - r.bottom : 0;
+    const d2 = ddx * ddx + ddy * ddy;
+    if (d2 < bd) { bd = d2; best = w; }
+  }
+  if (!best) return null;
+  const r = best.rect;
+  const fx = Math.min(Math.max(clientX, r.left), r.right - 1);
+  const idx = Math.min(best.days - 1, Math.max(0, Math.floor((fx - r.left) / r.width * best.days)));
+  const d = new Date(best.ws);
+  d.setDate(d.getDate() + idx);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** D32 pointer plumbing. Listeners live on document during the drag so
+ *  re-renders can't orphan the gesture; the grabbed bar previews via
+ *  transform/width only, and truth is committed on release (Firestore's
+ *  latency compensation re-renders the real thing instantly). */
+function wireBarDrag(bar, p, rowSpanMs, lanes) {
+  bar.addEventListener("pointerdown", ev => {
+    if (yvDragging || (ev.button != null && ev.button !== 0)) return;
+    const mode = ev.target.classList && ev.target.classList.contains("yv-handle")
+      ? (ev.target.classList.contains("l") ? "start" : "end") : "move";
+    const originX = ev.clientX, originY = ev.clientY;
+    const s0 = startOfDayTs(p.startDate || 0);
+    const e0 = startOfDayTs(p.endDate || p.startDate || 0);
+    // D73: snapshot every tagged row so the drag resolves dates across
+    // weeks, months, and quarter rows.
+    const rowMap = [...$("#yv-grid").querySelectorAll("[data-ws]")].map(el => ({
+      rect: el.getBoundingClientRect(), ws: +el.dataset.ws, days: +el.dataset.days,
+      clipS: +el.dataset.clipS, clipE: +el.dataset.clipE   // D76
+    }));
+    const grabDate = yvDateAt(ev.clientX, ev.clientY, rowMap) ?? s0;
+    let moved = false, ns = s0, ne = e0;
+    yvDragging = true;
+    const onMove = e => {
+      const dx = e.clientX - originX, dy = e.clientY - originY;
+      if (!moved && Math.hypot(dx, dy) < 4) return;
+      moved = true;
+      bar.classList.add("dragging");
+      const under = yvDateAt(e.clientX, e.clientY, rowMap);
+      const dDays = under == null ? 0 : Math.round((under - grabDate) / DAY_MS);
+      ns = s0; ne = e0;
+      if (mode !== "end") ns += dDays * DAY_MS;
+      if (mode !== "start") ne += dDays * DAY_MS;
+      if (ne < ns) { if (mode === "start") ns = ne; else ne = ns; }
+      yvShowGhosts(ns, ne, rowMap, p.color);              // D77: the tinted ghost IS the preview
+      $("#yv-label").textContent = `${fmtDay(ns)} → ${fmtDay(ne)}`;
+      e.preventDefault();
+    };
+    const finish = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", finish);
+      document.removeEventListener("pointercancel", finish);
+      yvClearGhosts();                                      // D74
+      yvDragging = false;
+      if (moved) {
+        yvTapSquelch = true;
+        setTimeout(() => { yvTapSquelch = false; }, 50);
+        commitBarDrag(p, ns, ne);
+      }
+      renderYear(); // restores label + geometry; the snapshot re-renders saved truth
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", finish);
+    document.addEventListener("pointercancel", finish);
+  });
+  bar.addEventListener("click", ev => {
+    ev.stopPropagation(); // keep the global popover-closer out of it
+    if (yvTapSquelch || yvDragging) return;
+    yvShowDetails(bar, p);
+  });
+}
+
+function renderYearLegend(projs) {
+  const box = $("#yv-legend");
+  box.innerHTML = "";
+  for (const p of projs) {
+    const k = document.createElement("span");
+    k.className = "yv-key";
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = p.color || "#4dd0c4";
+    const prog = projectProgress(p);
+    k.append(sw, document.createTextNode(`${p.name} · ${prog.done}/${prog.total}`));
+    k.title = yvDetails(p, prog);
+    box.append(k);
+  }
+}
+
+let yvResizeT = 0;
+
+// ---------- D68: ＋ New project modal (form reparenting) ----------
+let projFormReturn = null; // where the form goes home to
+
+function openYvProjectModal() {
+  const title = $("#project-form-title"), form = $("#project-form");
+  if (!projFormReturn) projFormReturn = { parent: title.parentElement, next: form.nextElementSibling };
+  $("#yv-project-slot").append(title, form);
+  $("#yv-project-modal").hidden = false;
+  $("#project-name").focus();
+}
+
+function closeYvProjectModal() {
+  const modal = $("#yv-project-modal");
+  if (modal.hidden) return;
+  modal.hidden = true;
+  const { parent, next } = projFormReturn;
+  parent.insertBefore($("#project-form-title"), next);
+  parent.insertBefore($("#project-form"), next);
+}
+
+// ---------- D68: month-grid layout ----------
+
+/** A month's Sun-anchored week windows: [{ws,we}] plus [mS,mE). */
+function gridWeeksOfMonth(monthStart) {
+  const d0 = new Date(monthStart);
+  const mE = new Date(d0.getFullYear(), d0.getMonth() + 1, 1).getTime();
+  const first = new Date(monthStart);
+  first.setDate(first.getDate() - first.getDay()); // back to Sunday
+  const weeks = [];
+  const c = new Date(first);
+  while (c.getTime() < mE) {
+    const ws = c.getTime();
+    const e = new Date(c);
+    e.setDate(e.getDate() + 7);
+    weeks.push([ws, e.getTime()]);
+    c.setDate(c.getDate() + 7);
+  }
+  return { mS: monthStart, mE, weeks };
+}
+
+/** D69: the user-pinned bar sizing, or null when "auto" (each layout
+ *  then applies its own judgment). Pins are honest pixels everywhere. */
+function yvPinnedSize() {
+  return { full: { LANE: 24, BAR: 20 }, half: { LANE: 14, BAR: 10 }, quarter: { LANE: 9, BAR: 5 }, hair: { LANE: 3, BAR: 2 } }[S.yearBarSize] || null;
+}
+
+/** Wall-calendar rendering: bars clip to week ∩ month (so shared
+ *  spillover weeks don't show the same bar in two month blocks), and
+ *  lanes pack PER WEEK, gcal-style. Drag works within a week row —
+ *  the live date readout still tracks past its edges. */
+function renderYearGrid(grid, monthsList, projs, now, wall = false) {
+  // Pass 1: pack every week; the max concurrency sets the density.
+  const months = monthsList.map(m => {
+    const { mS, mE, weeks } = gridWeeksOfMonth(m);
+    const packed = weeks.map(([ws, we]) => {
+      const lo = Math.max(ws, mS), hi = Math.min(we, mE);
+      const segs = [], laneEnds = [];
+      for (const p of projs) {
+        const ps = startOfDayTs(p.startDate || 0);
+        const pe = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS;
+        const segS = Math.max(ps, lo), segE = Math.min(pe, hi);
+        if (segE <= segS) continue;
+        let li = laneEnds.findIndex(le => le <= segS);
+        if (li === -1) { li = laneEnds.length; laneEnds.push(segE); } else laneEnds[li] = segE;
+        segs.push({ p, ps, pe, segS, segE, lane: li });
+      }
+      return { ws, we, segs, laneCount: laneEnds.length };
+    });
+    return { mS, mE, weeks: packed };
+  });
+  const maxConc = months.reduce((mx, m) => Math.max(mx, 0, ...m.weeks.map(w => w.laneCount)), 0);
+  const pin = yvPinnedSize();               // D69: pins beat every auto
+  let GL, GB;
+  if (wall) {
+    // D72: rows ARE quarters. Columns MIRROR the CSS breakpoints
+    // (850/520 → 3/2/1) — change both together. Each visual row of
+    // months sizes to ITS OWN max weekly concurrency (Jake), so the
+    // fit solves GL across the real quarter mix instead of letting
+    // one loaded week tax the whole year.
+    const rect = grid.getBoundingClientRect();
+    const gw = rect.width || 1200;
+    const cols = gw >= 850 ? 3 : gw >= 520 ? 2 : 1;
+    const stats = [];
+    for (let i = 0; i < months.length; i += cols) {
+      const g = months.slice(i, i + cols);
+      const st = {
+        lanes: Math.max(1, ...g.flatMap(m => m.weeks.map(w => w.laneCount))),
+        weeks: Math.max(...g.map(m => m.weeks.length))
+      };
+      g.forEach(m => { m.rowLanes = st.lanes; });
+      stats.push(st);
+    }
+    if (pin) { GL = pin.LANE; GB = pin.BAR; }
+    else {
+      const docTop = rect.top + window.scrollY;               // D71: document-space
+      const avail = Math.max(240, window.innerHeight - docTop - 110);
+      const denom = Math.max(1, stats.reduce((a, st) => a + st.weeks * st.lanes, 0));
+      GL = Math.floor((avail - stats.length * 26 - (stats.length - 1) * 10) / denom);
+      GL = Math.max(3, Math.min(14, GL));   // floor = 2px hairline bars
+      GB = Math.max(2, GL - (GL <= 4 ? 1 : GL <= 8 ? 2 : 4));
+    }
+  } else if (pin) { GL = pin.LANE; GB = pin.BAR; }
+  else {
+    GL = maxConc <= 4 ? 20 : maxConc <= 9 ? 13 : 9;
+    GB = GL - 4;
+  }
+  const gLabels = GB >= 16 && true;         // D70: any bar tall enough speaks (wall included)
+
+  const dows = wall ? ["S", "M", "T", "W", "T", "F", "S"]
+                    : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const todayTs = startOfDayTs(now);
+  for (const m of months) {
+    const box = document.createElement("div");
+    box.className = "yvg-month";
+    const md = new Date(m.mS);
+    const head = document.createElement("div");
+    head.className = "yvg-head";
+    const nd0 = new Date(now);
+    if (nd0.getFullYear() === md.getFullYear() && nd0.getMonth() === md.getMonth()) head.classList.add("yv-now");
+    head.textContent = wall
+      ? md.toLocaleDateString([], md.getMonth() === 0 ? { month: "short", year: "numeric" } : { month: "short" })
+      : md.toLocaleDateString([], { month: "long", year: "numeric" });
+    if (S.yearZoom == null) {
+      head.title = "Zoom to this month";
+      head.addEventListener("click", () => { S.yearZoom = m.mS; renderYear(); });
+    }
+    box.append(head);
+
+    if (!wall) { // D71: the Annual view spends these pixels on lanes instead
+      const dowRow = document.createElement("div");
+      dowRow.className = "yvg-dow";
+      dows.forEach(d => {
+        const sp = document.createElement("span");
+        sp.textContent = d;
+        dowRow.append(sp);
+      });
+      box.append(dowRow);
+    }
+
+    for (const wk of m.weeks) {
+      const wkEl = document.createElement("div");
+      wkEl.className = "yvg-week";
+      const daysEl = document.createElement("div");
+      daysEl.className = "yvg-days";
+      const c = new Date(wk.ws);
+      for (let i = 0; i < 7; i++) {
+        const cell = document.createElement("div");
+        cell.className = "yvg-day";
+        const ts = c.getTime();
+        const inMonth = ts >= m.mS && ts < m.mE;
+        if (!inMonth) cell.classList.add("yvg-out");
+        if (c.getDay() === 0 || c.getDay() === 6) cell.classList.add("yvg-we");
+        if (inMonth && ts === todayTs) cell.classList.add("yvg-today");
+        cell.textContent = c.getDate();
+        daysEl.append(cell);
+        c.setDate(c.getDate() + 1);
+      }
+      wkEl.append(daysEl);
+
+      const lanes = document.createElement("div");
+      lanes.className = "yvg-lanes";
+      lanes.dataset.ws = wk.ws;                             // D73: drag hit-testing
+      lanes.dataset.days = 7;
+      lanes.dataset.clipS = Math.max(wk.ws, m.mS);          // D76: ghosts respect the
+      lanes.dataset.clipE = Math.min(wk.we, m.mE);          // month-clip, like bars do
+      lanes.style.height = `${(wall ? m.rowLanes : Math.max(1, wk.laneCount)) * GL + 2}px`; // D72: uniform per QUARTER row
+      const span = wk.we - wk.ws;
+      for (const g of wk.segs) {
+        const bar = document.createElement("div");
+        bar.className = "yv-bar" + (g.ps < g.segS ? " cont-l" : "") + (g.pe > g.segE ? " cont-r" : "");
+        bar.style.left = `${((g.segS - wk.ws) / span) * 100}%`;
+        bar.style.width = `${((g.segE - g.segS) / span) * 100}%`;
+        bar.style.top = `${g.lane * GL}px`;
+        bar.style.height = `${GB}px`;
+        bar.style.setProperty("--bar-r", GB >= 14 ? "5px" : GB >= 5 ? "3px" : "2px");
+        if (GB <= 4) bar.classList.add("thin");             // D70: hairlines drop the border
+        const prog = projectProgress(g.p);
+        const fillT = g.ps + prog.pct * (g.pe - g.ps);
+        const fillPct = Math.max(0, Math.min(1, (fillT - g.segS) / (g.segE - g.segS))) * 100;
+        const col = g.p.color || "#4dd0c4";
+        bar.style.background = `linear-gradient(90deg, ${hexToRgba(col, 0.95)} ${fillPct}%, ${hexToRgba(col, 0.28)} ${fillPct}%)`;
+        if (gLabels && (g.segE - g.segS) >= 3 * DAY_MS) {
+          const lbl = document.createElement("span");
+          lbl.className = "yv-bar-label";
+          lbl.textContent = g.p.name;
+          if (fillPct < 35) {
+            lbl.style.color = "#dce7f0";
+            lbl.style.textShadow = "0 1px 2px rgba(0,0,0,.7)";
+          }
+          bar.append(lbl);
+        }
+        bar.title = yvDetails(g.p, prog);
+        if (g.ps === g.segS) { const h = document.createElement("div"); h.className = "yv-handle l"; bar.append(h); }
+        if (g.pe === g.segE) { const h = document.createElement("div"); h.className = "yv-handle r"; bar.append(h); }
+        wireBarDrag(bar, g.p, span, lanes);
+        lanes.append(bar);
+      }
+      wkEl.append(lanes);
+      box.append(wkEl);
+    }
+    grid.append(box);
+  }
+}
+
+function renderYear() {
+  if (S.view !== "year" || !S.user) return;
+  const grid = $("#yv-grid");
+  grid.innerHTML = "";
+  const now = Date.now();
+
+  // Row windows: one zoomed month, or 4 quarter-aligned rows of 3.
+  let rows = [];
+  if (S.yearZoom != null) {
+    const z = new Date(S.yearZoom);
+    rows.push([z.getTime(), new Date(z.getFullYear(), z.getMonth() + 1, 1).getTime()]);
+  } else {
+    const a = yearAnchorMonth();
+    for (let r = 0; r < 4; r++) {
+      rows.push([
+        new Date(a.getFullYear(), a.getMonth() + r * 3, 1).getTime(),
+        new Date(a.getFullYear(), a.getMonth() + r * 3 + 3, 1).getTime()
+      ]);
+    }
+  }
+  const winStart = rows[0][0], winEnd = rows[rows.length - 1][1];
+
+  // Nav chrome
+  if (S.yearZoom != null) {
+    $("#yv-label").textContent = new Date(S.yearZoom).toLocaleDateString([], { month: "long", year: "numeric" });
+  } else {
+    const a1 = new Date(winStart), a2 = new Date(winEnd - 1);
+    $("#yv-label").textContent = a1.getMonth() === 0
+      ? String(a1.getFullYear())
+      : `${a1.toLocaleDateString([], { month: "short", year: "numeric" })} – ${a2.toLocaleDateString([], { month: "short", year: "numeric" })}`;
+  }
+  $("#yv-today").hidden = S.yearOffset === 0 && S.yearZoom == null;
+  $("#yv-unzoom").hidden = S.yearZoom == null;
+  $("#yv-modes").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.mode === S.yearMode));
+
+  // Visible projects — everything intersecting the window, finished
+  // included (their bars read fully saturated; that IS the year story).
+  const projs = S.projects
+    .filter(p => startOfDayTs(p.startDate || 0) < winEnd &&
+                 startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS > winStart)
+    .sort((x, y) => (x.startDate || 0) - (y.startDate || 0));
+  $("#yv-empty").hidden = projs.length !== 0;
+  $("#yv-layouts").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.layout === S.yearLayout));
+
+  $("#yv-sizes").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.size === S.yearBarSize));
+
+  // D68/D69: calendar layouts take over here; the Gantt continues below.
+  // A zoomed wall month renders BIG (stacked-month styling) — the wall
+  // cell look is for the 12-up overview only.
+  const wall = S.yearLayout === "wall" && S.yearZoom == null;
+  grid.classList.toggle("yv-wall", wall);
+  if (S.yearLayout !== "timeline") {
+    const monthsList = [];
+    if (S.yearZoom != null) monthsList.push(S.yearZoom);
+    else {
+      const a = yearAnchorMonth();
+      for (let m = 0; m < 12; m++) monthsList.push(new Date(a.getFullYear(), a.getMonth() + m, 1).getTime());
+    }
+    renderYearGrid(grid, monthsList, projs, now, wall);
+    renderYearLegend(projs);
+    return;
+  }
+
+  // Global greedy lane packing: a project keeps ONE lane all year.
+  const laneOf = new Map(), laneEnds = [];
+  for (const p of projs) {
+    const s0 = startOfDayTs(p.startDate || 0), e0 = startOfDayTs(p.endDate || p.startDate || 0);
+    let li = laneEnds.findIndex(le => le < s0);
+    if (li === -1) { li = laneEnds.length; laneEnds.push(e0); } else laneEnds[li] = e0;
+    laneOf.set(p.id, li);
+  }
+  // D68: bars size to the WINDOW — the rows' total lanes share the
+  // vertical space Jake actually has (2K gets thick bars, phones get
+  // slivers), clamped to 9–34px lanes; a resize re-flows (debounced).
+  const rowLanes = rows.map(([rs0, re0]) => projs.reduce((mx, p) => {
+    const ps0 = startOfDayTs(p.startDate || 0);
+    const pe0 = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS;
+    return (pe0 <= rs0 || ps0 >= re0) ? mx : Math.max(mx, laneOf.get(p.id) + 1);
+  }, 1));
+  const totalLanes = rowLanes.reduce((a, b) => a + b, 0);
+  const pin = yvPinnedSize();                               // D69: pins beat the window fit
+  const docTop = grid.getBoundingClientRect().top + window.scrollY; // D71: document-space
+  const avail = Math.max(220, window.innerHeight - docTop - 150);
+  const LANE_H = pin ? pin.LANE
+    : Math.max(9, Math.min(34, Math.floor((avail - rows.length * 46) / totalLanes)));
+  const BAR_H = LANE_H - 4;
+  const showLabels = BAR_H >= 16;
+
+  for (const [rs, re] of rows) {
+    const span = re - rs;
+    const row = document.createElement("div");
+    row.className = "yv-row";
+
+    // Month headers flex-grown by day count (day ticks when zoomed).
+    const months = document.createElement("div");
+    months.className = "yv-months";
+    if (S.yearZoom != null) {
+      const dcount = Math.round(span / DAY_MS);
+      for (let d = 0; d < dcount; d++) {
+        const c = document.createElement("div");
+        c.className = "yv-month yv-day-tick";
+        c.style.flexGrow = 1;
+        c.textContent = d + 1;
+        months.append(c);
+      }
+    } else {
+      for (let m = 0; m < 3; m++) {
+        const ms = new Date(rs);
+        ms.setMonth(ms.getMonth() + m);
+        const me = new Date(ms.getFullYear(), ms.getMonth() + 1, 1);
+        const c = document.createElement("div");
+        c.className = "yv-month";
+        const nd = new Date(now);
+        if (nd.getFullYear() === ms.getFullYear() && nd.getMonth() === ms.getMonth()) c.classList.add("yv-now");
+        c.style.flexGrow = Math.round((me.getTime() - ms.getTime()) / DAY_MS);
+        c.textContent = ms.toLocaleDateString([], ms.getMonth() === 0 ? { month: "short", year: "numeric" } : { month: "short" });
+        c.title = "Zoom to this month";
+        c.addEventListener("click", () => { S.yearZoom = ms.getTime(); renderYear(); });
+        months.append(c);
+      }
+    }
+    row.append(months);
+
+    const lanes = document.createElement("div");
+    lanes.className = "yv-lanes";
+    lanes.dataset.ws = rs;                                  // D73: drag hit-testing
+    lanes.dataset.days = Math.round(span / DAY_MS);
+    lanes.dataset.clipS = rs; lanes.dataset.clipE = re;     // D76: ghost clip = full row
+    const rowMax = projs.reduce((mx, p) => {
+      const ps0 = startOfDayTs(p.startDate || 0);
+      const pe0 = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS;
+      return (pe0 <= rs || ps0 >= re) ? mx : Math.max(mx, laneOf.get(p.id));
+    }, 0);
+    lanes.style.height = `${(rowMax + 1) * LANE_H + 4}px`; // only the lanes this row uses
+
+    // D66 day texture (both views): weekend shading, faint day lines,
+    // stronger Monday week lines; month boundaries strongest.
+    const cur = new Date(rs);
+    while (cur.getTime() < re) {
+      const ts = cur.getTime();
+      if (cur.getDay() === 6) {                 // Saturday → shade through Sunday
+        const wkEnd = new Date(cur);
+        wkEnd.setDate(wkEnd.getDate() + 2);
+        const w = document.createElement("div");
+        w.className = "yv-weekend";
+        w.style.left = `${((ts - rs) / span) * 100}%`;
+        w.style.width = `${((Math.min(wkEnd.getTime(), re) - ts) / span) * 100}%`;
+        lanes.append(w);
+      }
+      if (ts !== rs && cur.getDate() !== 1) {   // 1sts get the month line below
+        const gl = document.createElement("div");
+        gl.className = "yv-gridline " + (cur.getDay() === 1 ? "yv-weekline" : "yv-dayline");
+        gl.style.left = `${((ts - rs) / span) * 100}%`;
+        lanes.append(gl);
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (S.yearZoom == null) {
+      for (let m = 1; m < 3; m++) {
+        const ms = new Date(rs);
+        ms.setMonth(ms.getMonth() + m);
+        const gl = document.createElement("div");
+        gl.className = "yv-gridline";
+        gl.style.left = `${((ms.getTime() - rs) / span) * 100}%`;
+        lanes.append(gl);
+      }
+    }
+
+    if (now >= rs && now < re) {
+      const t = document.createElement("div");
+      t.className = "yv-todayline";
+      t.style.left = `${((now - rs) / span) * 100}%`;
+      lanes.append(t);
+    }
+
+    for (const p of projs) {
+      const ps = startOfDayTs(p.startDate || 0);
+      const pe = startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS; // end day inclusive
+      if (pe <= rs || ps >= re) continue;
+      const segS = Math.max(ps, rs), segE = Math.min(pe, re);
+      const bar = document.createElement("div");
+      bar.className = "yv-bar" + (ps < rs ? " cont-l" : "") + (pe > re ? " cont-r" : "");
+      bar.style.left = `${((segS - rs) / span) * 100}%`;
+      bar.style.width = `${((segE - segS) / span) * 100}%`;
+      bar.style.top = `${laneOf.get(p.id) * LANE_H + 2}px`;
+      bar.style.height = `${BAR_H}px`;
+      bar.style.setProperty("--bar-r", BAR_H >= 16 ? "6px" : "3px");
+
+      // D30a: pale ghost of the project color, saturating left-to-right
+      // by pipeline % — computed against the WHOLE bar, clipped to this
+      // segment, so multi-quarter projects fill continuously.
+      const prog = projectProgress(p);
+      const fillT = ps + prog.pct * (pe - ps);
+      const fillPct = Math.max(0, Math.min(1, (fillT - segS) / (segE - segS))) * 100;
+      const c = p.color || "#4dd0c4";
+      bar.style.background = `linear-gradient(90deg, ${hexToRgba(c, 0.95)} ${fillPct}%, ${hexToRgba(c, 0.28)} ${fillPct}%)`;
+
+      if (showLabels) { // thin bars speak through hover/tap/legend (D66)
+        const lbl = document.createElement("span");
+        lbl.className = "yv-bar-label";
+        lbl.textContent = p.name;
+        if (fillPct < 35) { // label sits over the ghost — go light-on-dark
+          lbl.style.color = "#dce7f0";
+          lbl.style.textShadow = "0 1px 2px rgba(0,0,0,.7)";
+        }
+        bar.append(lbl);
+      }
+      bar.title = yvDetails(p, prog);
+
+      // Stretch handles only where this segment shows a TRUE end.
+      if (ps >= rs) { const h = document.createElement("div"); h.className = "yv-handle l"; bar.append(h); }
+      if (pe <= re) { const h = document.createElement("div"); h.className = "yv-handle r"; bar.append(h); }
+      wireBarDrag(bar, p, span, lanes);
+      lanes.append(bar);
+    }
+    row.append(lanes);
+    grid.append(row);
+  }
+  renderYearLegend(projs);
+}
+
+function hexToRgba(hex, a) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function colorDistance(h1, h2) {
+  const [r1, g1, b1] = hexToRgb(h1), [r2, g2, b2] = hexToRgb(h2);
+  return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+}
+function bestFreeColor() {
+  const used = S.projects.filter(p => p.id !== S.editingProjectId).map(p => p.color);
+  if (!used.length) return COLOR_POOL[Math.floor(Math.random() * COLOR_POOL.length)];
+  let best = COLOR_POOL[0], bestScore = -1;
+  for (const c of COLOR_POOL) {
+    const score = Math.min(...used.map(u => colorDistance(c, u)));
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  return best;
+}
+function suggestProjectColor(force = false) {
+  const field = $("#project-color");
+  if (!field || S.editingProjectId) return;
+  if (force || field.value.toLowerCase() === S.lastSuggestedColor.toLowerCase()) {
+    const c = bestFreeColor();
+    field.value = c;
+    S.lastSuggestedColor = c;
+    checkProjectColor();
+  }
+}
+function checkProjectColor() {
+  const hint = $("#project-color-hint");
+  if (!hint) return;
+  const chosen = $("#project-color").value;
+  let nearest = null, nearestDist = Infinity;
+  for (const p of S.projects) {
+    if (p.id === S.editingProjectId) continue;
+    const d = colorDistance(chosen, p.color);
+    if (d < nearestDist) { nearestDist = d; nearest = p; }
+  }
+  if (nearest && nearestDist < 25) {
+    hint.textContent = `⚠️ Same color as ${nearest.name} (${fmtDay(nearest.startDate)} – ${fmtDay(nearest.endDate)}). Try ${bestFreeColor()}.`;
+  } else if (nearest && nearestDist < 60) {
+    hint.textContent = `⚠️ Very close to ${nearest.name} (${fmtDay(nearest.startDate)} – ${fmtDay(nearest.endDate)}). Try ${bestFreeColor()}.`;
+  } else {
+    hint.textContent = "";
+  }
+}
+
+// ---------- Un-complete rewind (D53) ----------
+
+/** Incomplete children that HAVE a dueAt were materialized by this
+ *  parent's completion (follow-ups are born with dueAt:null). */
+function materializedKids(parentId) {
+  return S.tasks.filter(t =>
+    t.parentTaskId === parentId && t.dueAt != null && !t.completedAt);
+}
+
+function onTaskUncheck(t) {
+  const kids = materializedKids(t.id);
+  if (!kids.length) { setTaskDone(t.id, false); return; }
+  S.uncheckTarget = t;
+  const names = kids.map(k => `"${k.title}" (${fmtDay(k.dueAt)})`).join(", ");
+  $("#uncheck-title").textContent = `Un-complete "${t.title}"?`;
+  $("#uncheck-text").textContent =
+    `Completing it scheduled ${kids.length === 1 ? "a follow-up" : "follow-ups"}: ${names}. What should happen?`;
+  $("#uncheck-modal").hidden = false;
+  render(); // snap the checkbox back to ✓ until a choice is made
+}
+
+function resolveUncheck(choice) {
+  const t = S.uncheckTarget;
+  S.uncheckTarget = null;
+  $("#uncheck-modal").hidden = true;
+  if (!t) return;
+  if (choice === "oops") { render(); return; }        // stays done, follow-ups keep dates
+  if (choice === "rewind") {                          // truly not done: pull kids back to Waiting
+    setTaskDone(t.id, false).then(() => rewindFollowUps(t.id));
+    return;
+  }
+  setTaskDone(t.id, false);                           // "keep": un-done, follow-ups stay dated
+}
+
+/** D82: "+45m", "+2h", "+3d", "+1w" from fractional offsetDays. */
+function fmtOffset(days) {
+  const m = Math.round((days || 0) * 1440);
+  if (m > 0 && m % 10080 === 0) return `${m / 10080}w`;
+  if (m > 0 && m % 1440 === 0) return `${m / 1440}d`;
+  if (m > 0 && m % 60 === 0) return `${m / 60}h`;
+  return `${m}m`;
+}
+
+/** Decompose fractional days into the friendliest {n, unit}. */
+function splitOffset(days) {
+  const m = Math.round((days || 0) * 1440);
+  if (m > 0 && m % 10080 === 0) return { n: m / 10080, unit: "weeks" };
+  if (m > 0 && m % 1440 === 0) return { n: m / 1440, unit: "days" };
+  if (m > 0 && m % 60 === 0) return { n: m / 60, unit: "hours" };
+  return { n: Math.max(1, m), unit: "minutes" };
+}
+
+const OFFSET_UNIT_DAYS = { minutes: 1 / 1440, hours: 1 / 24, days: 1, weeks: 7 };
+let fuTarget = null; // {mode:"create", item} | {mode:"edit", task}
+
+function openFollowUpModal(target) {
+  fuTarget = target;
+  const isEdit = target.mode === "edit";
+  $("#fu-heading").textContent = isEdit ? "Edit follow-up" : `Follow-up to "${(target.item || target.task).title}"`;
+  const t = isEdit ? target.task : null;
+  $("#fu-title").value = isEdit ? t.title : `Follow up: ${target.item.title}`;
+  const { n, unit } = splitOffset(isEdit ? t.offsetDays : 3);
+  $("#fu-n").value = n;
+  $("#fu-unit").value = unit;
+  $("#followup-modal").hidden = false;
+  $("#fu-title").focus();
+}
+
+function saveFollowUpModal() {
+  const title = $("#fu-title").value.trim();
+  const n = Math.max(1, parseInt($("#fu-n").value, 10) || 0);
+  const unit = $("#fu-unit").value;
+  if (!title || !OFFSET_UNIT_DAYS[unit]) return;
+  const offsetDays = n * OFFSET_UNIT_DAYS[unit];
+  if (fuTarget?.mode === "edit") updateTask(fuTarget.task.id, { title, offsetDays });
+  else if (fuTarget?.mode === "create") addFollowUp(fuTarget.item.id, { title, offsetDays, tierId: fuTarget.item.tier?.id || fuTarget.item.raw.tierId });
+  $("#followup-modal").hidden = true;
+  fuTarget = null;
+}
+
+function followUpPrompt(item) {
+  openFollowUpModal({ mode: "create", item });
+}
+
+// ---------- Settings ----------
+
+function switchSettingsTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tab-pane").forEach(p =>
+    { p.hidden = p.dataset.pane !== tab; });
+}
+
+function openSettings() {
+  $("#settings-modal").hidden = false;
+  switchSettingsTab("tiers");
+  const c = S.config || {};
+  $("#cfg-carryover").value = c.carryoverWriteHour ?? 9;
+  $("#cfg-sleep-start").value = c.sleepStart ?? 22;
+  $("#cfg-sleep-end").value = c.sleepEnd ?? 6;
+  $("#cfg-poll").value = c.pollIntervalMinutes ?? 60;
+  $("#cfg-mirror-cal").value = c.mirrorCalendarId ?? "";  // D81
+  $("#cfg-deadline-hour").value = c.deadlineHour ?? 16;   // D51
+  $("#cfg-decision-days").value = c.decisionThresholdDays ?? 2; // D52
+  $("#cfg-cleardeck").value = Math.round((c.clearDeckThreshold ?? 0.6) * 100); // D85
+  updatePollCostHint();
+  const box = $("#tier-editor");
+  box.innerHTML = "";
+  for (const t of S.tiers) tierEditorRow(t, false);
+  checkTierColors();
+  const stBox = $("#stage-template-editor");
+  stBox.innerHTML = "";
+  for (const st of S.stageTemplate) stageTemplateRow(normalizeStage(st), false);
+}
+
+/** D55: tiers get the same conflict assistant projects have. One shared
+ *  hint line under the editor names the closest colliding pair. */
+function checkTierColors() {
+  const hint = $("#tier-color-hint");
+  if (!hint) return;
+  const rows = [...document.querySelectorAll("#tier-editor .tier-row")].map(r => ({
+    name: r.querySelector(".t-name").value.trim() || "Untitled",
+    color: r.querySelector(".t-color").value
+  }));
+  let worst = null;
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const d = colorDistance(rows[i].color, rows[j].color);
+      if (d < 60 && (!worst || d < worst.d)) worst = { d, a: rows[i], b: rows[j] };
+    }
+  }
+  if (!worst) { hint.textContent = ""; return; }
+  const used = rows.map(r => r.color.toLowerCase());
+  const fresh = TIER_PALETTE.filter(c => !used.includes(c));
+  let suggestion = fresh[0] || TIER_PALETTE[0];
+  if (fresh.length) {
+    let bestScore = -1;
+    for (const cand of fresh) {
+      const score = Math.min(...used.map(u => colorDistance(cand, u)));
+      if (score > bestScore) { bestScore = score; suggestion = cand; }
+    }
+  }
+  hint.textContent = worst.d < 25
+    ? `⚠️ ${worst.a.name} and ${worst.b.name} are the same color. Try ${suggestion}.`
+    : `⚠️ ${worst.a.name} and ${worst.b.name} are very close. Try ${suggestion}.`;
+}
+
+const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b197fc", "#f783ac", "#63e6be", "#ffc9c9", "#a5d8ff"];
+
+function tierEditorRow(t, isNew) {
+  const box = $("#tier-editor");
+  if (isNew) {
+    const ranks = [...box.querySelectorAll(".t-rank")].map(el => parseInt(el.value, 10) || 0);
+    const used = new Set([...box.querySelectorAll(".t-color")].map(el => el.value.toLowerCase()));
+    const fresh = TIER_PALETTE.filter(c => !used.has(c));
+    t = {
+      rank: (ranks.length ? Math.max(...ranks) : 0) + 1,
+      color: (fresh.length ? fresh : TIER_PALETTE)[Math.floor(Math.random() * (fresh.length ? fresh.length : TIER_PALETTE.length))],
+      kind: "task"
+    };
+  }
+  const row = document.createElement("div");
+  row.className = "tier-row";
+  row.dataset.id = t.id || "";
+  // D60: which days count for this tier — reschedule targets, project
+  // date interception, and stage-offset math all follow these toggles.
+  const allowed = new Set((Array.isArray(t.allowedDays) && t.allowedDays.length) ? t.allowedDays : [1, 2, 3, 4, 5]);
+  const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  const dayToggles = dayNames.map((n, d) =>
+    `<label class="t-day" title="${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d]}"><input type="checkbox" class="t-dow" data-dow="${d}" ${allowed.has(d) ? "checked" : ""}>${n}</label>`
+  ).join("");
+  row.innerHTML = `
+    <input class="t-rank" type="number" min="1" value="${t.rank ?? 1}" title="Priority rank: only breaks ties in the queue now (D43), but orders the filter chips and dropdowns">
+    <input class="t-name" type="text" value="${esc(t.name || "")}" placeholder="Tier name">
+    <input class="t-color" type="color" value="${t.color || "#4dabf7"}" title="Tier color (chips in the queue)">
+    <select class="t-kind" title="Tasks = checkable items you create here. Calendar = appointments pulled from a Google Calendar (they pin near their start time and never nag).">
+      <option value="task" ${t.kind !== "anchor" ? "selected" : ""}>Tasks</option>
+      <option value="anchor" ${t.kind === "anchor" ? "selected" : ""}>Calendar</option>
+    </select>
+    <label class="t-carry-label" title="If tasks in this tier are still unchecked at midnight, they get written onto tomorrow's Google Calendar with a ❗ at the carryover hour below. (Phase 3 feature.)"><input class="t-carry" type="checkbox" ${t.midnightCarryover ? "checked" : ""}> ❗ carryover</label>
+    <button class="t-del" title="Delete tier">✕</button>
+    <span class="t-days" title="Working days for this tier: reschedules land on these days, project dates outside them get intercepted, and pipeline offsets only count them. Weekend jobs? Check Sa/Su." ${t.kind === "anchor" ? "hidden" : ""}>${dayToggles}</span>
+    <input class="t-cal" type="text" value="${esc(t.gcalCalendarId || "")}"
+      placeholder="Google Calendar ID — GCal ⚙️ → pick calendar → 'Integrate calendar' → Calendar ID"
+      title="Which Google Calendar feeds this tier. calendar.google.com → ⚙️ Settings → click the calendar → 'Integrate calendar' → Calendar ID. Your main personal calendar's ID is just your Gmail address."
+      ${t.kind === "anchor" ? "" : "hidden"}>`;
+  row.querySelector(".t-kind").addEventListener("change", ev => {
+    row.querySelector(".t-cal").hidden = ev.target.value !== "anchor";
+    row.querySelector(".t-days").hidden = ev.target.value === "anchor";
+  });
+  row.querySelector(".t-del").addEventListener("click", () => {
+    if (row.dataset.id) {
+      if (!confirm(`Delete tier "${t.name}"? Tasks in it will show as "?" until re-tiered.`)) return;
+      deleteTier(row.dataset.id);
+    }
+    row.remove();
+  });
+  box.append(row);
+  if (isNew) row.querySelector(".t-name").focus();
+}
+
+function wireTmplRow(row, box) {
+  row.querySelector(".st-dir").addEventListener("change", () => syncTimingRow(row));
+  row.querySelector(".st-up").addEventListener("click", () => {
+    if (row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
+  });
+  row.querySelector(".st-down").addEventListener("click", () => {
+    if (row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
+  });
+  row.querySelector(".st-del").addEventListener("click", () => row.remove());
+}
+
+function stageTemplateRow(st, isNew) {
+  const box = $("#stage-template-editor");
+  const row = document.createElement("div");
+  row.className = "stage-tmpl-row";
+  row.innerHTML = `
+    <span class="st-move"><button class="st-up" title="Move up">▲</button><button class="st-down" title="Move down">▼</button></span>
+    <input class="st-name" type="text" value="${esc(st.name || "")}" placeholder="Stage name">
+    ${timingSelects(st)}
+    <button class="st-del" title="Remove stage">✕</button>`;
+  wireTmplRow(row, box);
+  box.append(row);
+  if (isNew) row.querySelector(".st-name").focus();
+}
+
+function onSaveSettings() {
+  saveConfig({
+    carryoverWriteHour: clampInt($("#cfg-carryover").value, 0, 23, 9),
+    pollIntervalMinutes: clampInt($("#cfg-poll").value, 5, 1440, 60),
+    mirrorCalendarId: $("#cfg-mirror-cal").value.trim(),   // D81
+    sleepStart: clampInt($("#cfg-sleep-start").value, 0, 23, 22),
+    sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6),
+    deadlineHour: clampInt($("#cfg-deadline-hour").value, 0, 23, 16),      // D51
+    decisionThresholdDays: clampInt($("#cfg-decision-days").value, 1, 30, 2), // D52
+    clearDeckThreshold: clampInt($("#cfg-cleardeck").value, 0, 100, 60) / 100 // D85
+  });
+  for (const row of document.querySelectorAll(".tier-row")) {
+    const kind = row.querySelector(".t-kind").value;
+    // D60: gather the day toggles; an accidental zero-day tier falls
+    // back to Mon–Fri rather than making scheduling math impossible.
+    let allowedDays = [...row.querySelectorAll(".t-dow")]
+      .filter(cb => cb.checked)
+      .map(cb => parseInt(cb.dataset.dow, 10));
+    if (!allowedDays.length) allowedDays = [1, 2, 3, 4, 5];
+    const data = {
+      rank: clampInt(row.querySelector(".t-rank").value, 1, 99, 99),
+      name: row.querySelector(".t-name").value.trim() || "Untitled",
+      color: row.querySelector(".t-color").value,
+      kind,
+      midnightCarryover: row.querySelector(".t-carry").checked,
+      gcalCalendarId: kind === "anchor" ? row.querySelector(".t-cal").value.trim() : "",
+      allowedDays
+    };
+    if (kind === "anchor") data.defaultLeadWindowMinutes = 30;
+    saveTier(row.dataset.id || null, data);
+  }
+  const stages = [...document.querySelectorAll("#stage-template-editor .stage-tmpl-row")].map(row => ({
+    name: row.querySelector(".st-name").value.trim() || "Untitled stage",
+    direction: row.querySelector(".st-dir").value,
+    anchor: row.querySelector(".st-anchor").value,
+    offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0)
+  }));
+  saveStageTemplate(stages);
+  closeSettings();
+}
+
+function closeSettings() { $("#settings-modal").hidden = true; }
+
+function updatePollCostHint() {
+  const raw = parseInt($("#cfg-poll").value, 10);
+  const mins = clampInt($("#cfg-poll").value, 5, 1440, 60);
+  const runs = Math.round((60 / mins) * 24 * 30.4);
+  const clampNote = (!isNaN(raw) && raw !== mins) ? `Minimum is 5 minutes, so I'm using ${mins}. ` : "";
+  $("#poll-cost-hint").textContent =
+    `${clampNote}Checking every ${mins} min ≈ ${runs.toLocaleString()} checks/month ` +
+    `(avg 30.4 days). Google charges nothing until 2,000,000/month — unreachable here. ` +
+    `(Phase 3 feature — has no effect yet.)`;
+}
+
+// ---------- Utils ----------
+
+function toDateInput(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function clampInt(v, min, max, dflt) {
+  const n = parseInt(v, 10);
+  if (isNaN(n)) return dflt;
+  return Math.max(min, Math.min(max, n));
+}
+
+function iconBtn(txt, title, fn) {
+  const b = document.createElement("button");
+  b.className = "icon-btn";
+  b.textContent = txt;
+  b.title = title;
+  b.addEventListener("click", fn);
+  return b;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
