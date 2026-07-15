@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.21.0 (banner and data-html-version move together, always)
+     Version 0.22.0 (banner and data-html-version move together, always)
+     0.22.0 (D90): nav-slots in ALL THREE views — "back to now" no longer
+     shoves ▶ sideways; it sits on the side matching its direction of
+     travel and the arrows never move (Jake: three clicks forward should
+     be three clicks forward). #wv-sizes bar-height control. app → 0.29.0,
+     css → 0.24.0.
      0.21.0 (D89): dates move to a header row ABOVE the strips (Jake:
      "duplicate the date at the top — it's expected there"); week-start
      mode buttons (Today+6 / Sun–Sat / Mon–Sun); the view toggle becomes
@@ -83,9 +88,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tentacalendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.23.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.24.0">
 </head>
-<body data-html-version="0.21.0">
+<body data-html-version="0.22.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -125,9 +130,10 @@
       <section id="queue-panel">
         <div class="day-nav">
           <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
+          <span class="nav-slot" id="day-slot-back"></span>
           <h2 id="day-label">Today</h2>
+          <span class="nav-slot" id="day-slot-fwd"><button id="day-today" class="mini" hidden>back to today</button></span>
           <button id="day-next" class="icon-btn" title="Next day">▶</button>
-          <button id="day-today" class="mini" hidden>back to today</button>
         </div>
 
         <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
@@ -227,9 +233,10 @@
     <section id="week-view" hidden>
       <div class="wv-nav">
         <button id="wv-prev" class="icon-btn" title="Back one week">◀</button>
+        <span class="nav-slot" id="wv-slot-back"></span>
         <h2 id="wv-label">Week</h2>
+        <span class="nav-slot" id="wv-slot-fwd"><button id="wv-today" class="mini" hidden>back to now</button></span>
         <button id="wv-next" class="icon-btn" title="Forward one week">▶</button>
-        <button id="wv-today" class="mini" hidden>back to now</button>
         <button id="wv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
       </div>
       <div class="wv-modes" id="wv-modes" title="Where the week starts. Rolling wastes no columns on a kiosk; Sun–Sat / Mon–Sun keep the days you just had, because reflecting on them is how you plan the next ones.">
@@ -237,6 +244,14 @@
         <button data-wmode="rolling" class="mini">Today +6</button>
         <button data-wmode="sunday" class="mini">Sun–Sat</button>
         <button data-wmode="monday" class="mini">Mon–Sun</button>
+        <span class="wv-sizes" id="wv-sizes" title="Project bar height. Auto thins them out as the list grows so the day columns always get room; ▮ full (name + next step + %), ▪ medium, ▁ thin, 🧵 colour threads only (hover for names).">
+          <span class="wv-modes-label">Bars</span>
+          <button data-size="auto" class="mini">Auto</button>
+          <button data-size="full" class="mini">▮</button>
+          <button data-size="half" class="mini">▪</button>
+          <button data-size="quarter" class="mini">▁</button>
+          <button data-size="hair" class="mini">🧵</button>
+        </span>
       </div>
       <div class="wv-strip" id="wv-days"></div>
       <div id="wv-strips">
@@ -250,9 +265,10 @@
     <section id="year-view" hidden>
       <div class="yv-nav">
         <button id="yv-prev" class="icon-btn" title="Back one year (one month while zoomed)">◀</button>
+        <span class="nav-slot" id="yv-slot-back"></span>
         <h2 id="yv-label">Year</h2>
+        <span class="nav-slot" id="yv-slot-fwd"><button id="yv-today" class="mini" hidden>back to now</button></span>
         <button id="yv-next" class="icon-btn" title="Forward one year (one month while zoomed)">▶</button>
-        <button id="yv-today" class="mini" hidden>back to now</button>
         <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
         <button id="yv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
         <div class="yv-layouts" id="yv-layouts" title="Month grid: weeks as rows, Sun–Sat — the wall-calendar look. Timeline: days in one long row per quarter (a Gantt chart).">
@@ -497,6 +513,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.28.0"></script>
+  <script type="module" src="app.js?v=0.29.0"></script>
 </body>
 </html>
