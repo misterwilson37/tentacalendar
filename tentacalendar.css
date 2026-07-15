@@ -88,7 +88,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.21.1";
+  --tc-version: "0.22.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -709,3 +709,171 @@ body.celebration-wave::after {
   max-width: 100%;
 }
 .banner .banner-span { color: var(--ink-dim); }
+
+/* ============================================================
+   D88 — THE WEEK VIEW
+   Built for a 55" 4K wall at a quarter width (~960px → ~137px per
+   column), read from across a room. Consequences, all deliberate:
+   · type scales with the viewport (clamp), not fixed rem — the same
+     markup has to survive a laptop tab AND the kiosk;
+   · nothing lives in a hover title alone (a wall display has no mouse);
+   · rows are two lines max, ellipsised, never wrapped into a word-stack
+     (flexbox's five scalps, D84 — min-width:0 on every flex child that
+     holds text);
+   · past days dim, they don't disappear.
+   ============================================================ */
+
+#week-view {
+  display: flex; flex-direction: column;
+  gap: .6rem; padding: .8rem 1rem 1.2rem;
+  height: 100%; min-height: 0;
+}
+
+.wv-nav { display: flex; align-items: center; gap: .5rem; }
+.wv-nav h2 {
+  margin: 0; flex: 1; text-align: center; min-width: 0;
+  font-size: clamp(1.05rem, 1.1vw, 2rem);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* --- the two spanning strips --- */
+#wv-strips { display: flex; flex-direction: column; gap: .3rem; }
+.wv-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: .3rem;
+  align-items: start;
+}
+.wv-strip[hidden] { display: none; }
+
+.wv-span {
+  position: relative;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: .3rem .5rem;
+  min-width: 0;
+  font-size: clamp(.75rem, .62vw, 1.15rem);
+  white-space: nowrap;
+  /* NO overflow:hidden here — it would clip the project pips, which sit
+     on the bar's bottom edge. Each child clips its own text instead. */
+}
+
+.wv-banner {
+  color: var(--ink); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+.wv-proj { display: flex; align-items: baseline; gap: .4rem; padding-bottom: .55rem; }
+.wv-proj-name {
+  flex: 1; min-width: 0; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wv-proj-pct { color: var(--ink-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* Past the clear-the-deck line (D86): this one wants FINISHING. */
+.wv-proj.clear-deck { box-shadow: inset 0 0 0 1px var(--accent); }
+.wv-proj.clear-deck .wv-proj-pct { color: var(--accent); font-weight: 700; }
+.wv-proj-meter {
+  position: absolute; left: 0; bottom: 0; height: 3px;
+  opacity: .85; border-radius: 0 2px 2px 0;
+}
+/* A pip = a day this project actually wants something. */
+.wv-pip {
+  position: absolute; bottom: 5px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--ink-dim);
+  border: 1px solid var(--panel);
+}
+.wv-pip.done { background: var(--accent); opacity: .5; }
+.wv-pip.active { background: var(--ink); box-shadow: 0 0 0 2px var(--panel); }
+
+/* --- seven columns --- */
+#wv-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: .3rem;
+  flex: 1; min-height: 0;
+}
+
+.wv-col {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+}
+.wv-col.is-today { border-color: var(--accent); background: var(--panel-2); }
+.wv-col.is-past { opacity: .55; }   /* dimmed, NOT gone — D14's promise */
+
+.wv-head {
+  display: flex; align-items: center; gap: .35rem;
+  padding: .35rem .5rem;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0, 0, 0, .18);
+  min-width: 0;
+}
+.wv-dow {
+  font-size: clamp(.7rem, .55vw, 1.05rem);
+  color: var(--ink-dim); text-transform: uppercase; letter-spacing: .05em;
+  font-weight: 700; flex-shrink: 0;
+}
+.wv-date {
+  font-size: clamp(.95rem, .8vw, 1.5rem);
+  font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.wv-col.is-today .wv-date { color: var(--accent); }
+
+/* The load bar: the week's whole reason for existing. */
+.wv-load {
+  flex: 1; min-width: 0; height: 5px; border-radius: 3px;
+  background: rgba(255, 255, 255, .07); overflow: hidden;
+}
+.wv-load i { display: block; height: 100%; background: var(--accent); opacity: .75; }
+.wv-load i.has-expired { background: var(--danger); opacity: .9; }
+.wv-count {
+  font-size: clamp(.7rem, .55vw, 1rem);
+  color: var(--ink-dim); font-variant-numeric: tabular-nums;
+  min-width: 1ch; text-align: right; flex-shrink: 0;
+}
+
+.wv-list {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: .3rem; display: flex; flex-direction: column; gap: .25rem;
+}
+.wv-clear {
+  color: var(--ink-dim); opacity: .45; text-align: center;
+  padding: .5rem 0; font-size: clamp(.68rem, .52vw, .95rem);
+  font-style: italic;
+}
+
+.wv-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "when title" "when sub";
+  column-gap: .35rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 5px;
+  padding: .3rem .4rem;
+  min-width: 0;
+}
+.wv-row.expired { box-shadow: inset 0 0 0 1px var(--danger); }
+.wv-when {
+  grid-area: when;
+  font-size: clamp(.65rem, .5vw, .95rem);
+  color: var(--ink-dim); font-variant-numeric: tabular-nums;
+  white-space: nowrap; align-self: center;
+}
+.wv-row.expired .wv-when { color: var(--danger); font-weight: 700; }
+.wv-title {
+  grid-area: title; min-width: 0;
+  font-size: clamp(.72rem, .58vw, 1.1rem); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wv-sub {
+  grid-area: sub; min-width: 0;
+  font-size: clamp(.62rem, .48vw, .9rem); color: var(--ink-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Stage rows read project-first, stage-second — the project is the noun. */
+.wv-row.k-stage .wv-title { font-weight: 700; }
+
+@media (max-width: 900px) {
+  #wv-grid, .wv-strip { grid-template-columns: repeat(3, 1fr); }
+  .wv-span { grid-column: auto !important; }
+}
