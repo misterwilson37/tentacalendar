@@ -1,6 +1,15 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.15.0
+// Version 0.16.0
+// 0.16.0 (D100): THE CLOCK GRID's geometry — clockBlocks() + weekClockWindow().
+// Built on D93, NOT on D91's diagram, and the difference is the whole point:
+// a task time is a DUE date, so a task's block ENDS at its deadline and its
+// runway trails BACKWARD — [due − estimate, due]. D91 drew it forward to
+// midnight, which says "start this at 6 PM" when the truth is "have this done
+// by 6 PM". Only the OVERDUE state extends forward, from the deadline to now,
+// because that's the one thing that really is growing. Events are the other
+// animal entirely: they own [start, end] outright (D93/D80) — nothing to
+// estimate, nothing to infer.
 // 0.15.0 (D97): REFLECTION — dayReflection() answers the two questions a
 // past day is actually for: what got DONE (victories) and what got PUT OFF.
 // Both were promised by 5a-bis and neither was derivable from buildWeek's
@@ -67,7 +76,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.15.0";
+export const QUEUE_VERSION = "0.16.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -510,6 +519,127 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
  * clippedLeft/clippedRight so the UI can show "this continues offscreen"
  * rather than lying about a start date.
  */
+/** D100 — what an unestimated task is drawn as. Not a guess at her work: a
+ *  legible minimum so the block has a grabbable edge. The UI marks these. */
+export const DEFAULT_ESTIMATE_MINUTES = 30;
+export const MIN_ESTIMATE_MINUTES = 5;
+export const MAX_ESTIMATE_MINUTES = 12 * 60;
+
+/** D100 — null/0/absent all mean "she never said". Only a real number counts. */
+export function taskEstimate(t) {
+  const m = t?.estimateMinutes;
+  return (typeof m === "number" && m >= MIN_ESTIMATE_MINUTES) ? m : null;
+}
+
+/**
+ * D100 — THE CLOCK GEOMETRY. One day's items → positioned blocks.
+ *
+ * Per D93, three different shapes, because they are three different claims:
+ *   EVENT — owns [start, end]. Given, not inferred.
+ *   TASK  — owns a DEADLINE. Block is [due − estimate, due]: the runway you
+ *           have to do it in, ending at the promise. Backward. Never forward.
+ *   STAGE — a deadline too; same shape, default length (stages carry no
+ *           estimate field and inventing one would be a lie).
+ *
+ * OVERDUE extends FORWARD from due → now, and only today (`expired` is
+ * viewingToday-gated in buildQueue, D97), because that's the only direction
+ * a blown deadline actually travels.
+ *
+ * Blocks that overlap in time share the column's width via greedy lane
+ * packing — the same convention a calendar uses, so "Tuesday is full" is a
+ * thing you can SEE rather than count.
+ */
+export function clockBlocks({ items = [], dayStart, now, defaultEstimate = DEFAULT_ESTIMATE_MINUTES }) {
+  const dayEnd = addDaysLocal(dayStart, 1);
+  const clamp = ms => Math.max(dayStart, Math.min(dayEnd, ms));
+  const blocks = [];
+
+  for (const it of items) {
+    let startMs, endMs, estimated = true, overdueTo = null;
+
+    if (it.kind === "event") {
+      startMs = it.time;
+      endMs = it.end ?? (it.time + defaultEstimate * 60000);
+      estimated = false;                       // an event is not an estimate
+    } else {
+      // The HONEST due (D83/D93): escalation moves the nag slot, never the
+      // promise. Drawing the block at the escalated time would render the
+      // app's own nagging as if it were Katie's commitment.
+      const due = it.originalDue ?? it.time;
+      const est = it.kind === "task" ? taskEstimate(it.raw) : null;
+      estimated = est != null;
+      endMs = due;
+      startMs = due - (est ?? defaultEstimate) * 60000;
+      if (it.expired && now > due) overdueTo = clamp(now);
+    }
+
+    blocks.push({
+      it,
+      kind: it.kind,
+      startMs: clamp(startMs),
+      endMs: clamp(endMs),
+      trueStartMs: startMs,                    // pre-clamp: a 00:15 deadline with
+      trueEndMs: endMs,                        // a 30-min runway starts yesterday
+      clippedStart: startMs < dayStart,
+      estimated,                               // false = we defaulted; UI must say so
+      estimateMinutes: it.kind === "task" ? taskEstimate(it.raw) : null,
+      overdueTo,
+      lane: 0, laneCount: 1
+    });
+  }
+
+  // Greedy lane packing over the block's FULL visual extent (a red overdue
+  // tail still occupies the column — pretending otherwise would let a blown
+  // deadline hide behind the next thing).
+  const extent = b => (b.overdueTo != null ? Math.max(b.endMs, b.overdueTo) : b.endMs);
+  blocks.sort((a, b) => a.startMs - b.startMs || extent(a) - extent(b));
+  const laneEnds = [];
+  for (const b of blocks) {
+    let lane = laneEnds.findIndex(end => end <= b.startMs);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(0); }
+    laneEnds[lane] = extent(b);
+    b.lane = lane;
+  }
+  // laneCount is per OVERLAP CLUSTER, not per day: one 3-way pileup at 9 AM
+  // must not shave every other block on the day to a third of the width.
+  let cluster = [], clusterEnd = -Infinity;
+  const closeCluster = () => {
+    const n = cluster.reduce((m, b) => Math.max(m, b.lane + 1), 1);
+    cluster.forEach(b => { b.laneCount = n; });
+    cluster = [];
+  };
+  for (const b of blocks) {
+    if (b.startMs >= clusterEnd && cluster.length) closeCluster();
+    cluster.push(b);
+    clusterEnd = Math.max(clusterEnd, extent(b));
+  }
+  if (cluster.length) closeCluster();
+
+  return blocks;
+}
+
+/**
+ * D100 — the shared vertical axis. Every column must use ONE window or the
+ * grid is seven unrelated charts and 9 AM isn't a row you can read across.
+ * Fits the week's real content, rounded out to whole hours, with a floor so
+ * a single 20-minute task doesn't become a wall.
+ */
+export function weekClockWindow(days = [], { now = Date.now(), minSpanHours = 6, defaultEstimate = DEFAULT_ESTIMATE_MINUTES } = {}) {
+  let lo = Infinity, hi = -Infinity;
+  for (const col of days) {
+    for (const b of clockBlocks({ items: col.items, dayStart: col.dayStart, now, defaultEstimate })) {
+      lo = Math.min(lo, (b.startMs - col.dayStart) / 60000);
+      hi = Math.max(hi, ((b.overdueTo != null ? Math.max(b.endMs, b.overdueTo) : b.endMs) - col.dayStart) / 60000);
+    }
+  }
+  if (!isFinite(lo)) { lo = 8 * 60; hi = 18 * 60; }       // an empty week: a working day
+  lo = Math.floor(lo / 60) * 60;
+  hi = Math.ceil(hi / 60) * 60;
+  if (hi - lo < minSpanHours * 60) hi = lo + minSpanHours * 60;
+  if (hi > 24 * 60) { hi = 24 * 60; lo = Math.min(lo, hi - minSpanHours * 60); }
+  return { startMin: Math.max(0, lo), endMin: Math.min(24 * 60, hi) };
+}
+
 /**
  * D95's read-side fallback, twinned from store.taskFirstDue(). NOT imported:
  * queue.js is pure logic (D26) and store.js drags Firebase in with it, which
