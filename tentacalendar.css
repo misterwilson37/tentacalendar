@@ -1,7 +1,10 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.32.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.33.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.33.0 (D107): burn-in care — #screen-rest night face (wandering clock,
+   near-black not pure #000), body.kiosk-idle chrome dim (opacity-only, no
+   layout shift).
    0.32.0 (D105, PHASE 4): THE DASHBOARD — pane geometry (#dashboard-view
    flex shells, --dash-cols/--dash-rows shares), .dash-split dividers
    (wv-split's two-axis siblings), 🗂 corner toggle, the ≥1200px gate on
@@ -122,7 +125,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.32.0";
+  --tc-version: "0.33.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -631,6 +634,29 @@ body.celebration-wave::after {
 @media (max-width: 1199px) {
   #view-switch button[data-view="dash"] { display: none; }
 }
+
+/* ---------- D107: burn-in care ---------- */
+/* The rest face: near-black (NOT pure #000 — some panels treat it as
+   signal loss), dim ink, and the clock wanders — updateScreenRest() moves
+   --rest-x/y every minute, this transition glides it there over 40s. */
+#screen-rest {
+  position: fixed; inset: 0; z-index: 98;
+  background: #030507; cursor: pointer;
+}
+#rest-face {
+  position: absolute; left: var(--rest-x, 40%); top: var(--rest-y, 40%);
+  transition: left 40s linear, top 40s linear;
+  color: #2b3a44; user-select: none;
+}
+#rest-clock { font-size: clamp(2.2rem, 3.4vw, 5rem); font-weight: 600; letter-spacing: .02em; }
+#rest-date  { font-size: clamp(.9rem, 1.1vw, 1.6rem); margin-top: .2rem; opacity: .8; }
+#rest-hint  { font-size: clamp(.7rem, .7vw, 1rem); margin-top: 1rem; opacity: .45; }
+/* Idle chrome dim: the header and dividers are the wall's most static
+   bright pixels. pokeIdle() adds/removes the class; opacity so layout
+   never moves. Anything hovering them still works — they're dim, not gone. */
+body.kiosk-idle header,
+body.kiosk-idle .dash-split { opacity: .35; }
+header, .dash-split { transition: opacity 1.2s ease; }
 
 #yv-grid { container-type: inline-size; }
 .yv-row {
