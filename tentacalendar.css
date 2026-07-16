@@ -1,7 +1,11 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.31.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.31.1  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.31.1 (D104): ONE control grammar — shared .view-nav/.view-ctls/
+   .ctl-group/.ctl-label family replaces the parallel .wv-modes/.wv-sizes
+   and .yv-layouts/.yv-modes/.yv-sizes sets. Two families doing one job
+   is the D98 parity-drift trap in CSS form; the dashboard is why now.
    0.27.0 (D95): .well-travelled — a quiet mark on a task that's been
    moved 3+ times. Not a scolding; a question.
    0.26.1 (D94): .wv-split (drag the projects/days boundary) + .wv-row
@@ -113,7 +117,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.31.0";
+  --tc-version: "0.31.1";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -572,12 +576,13 @@ body.celebration-wave::after {
 
 /* ---------- D65: Year view (Phase 2) ---------- */
 #year-view { padding: 1rem; max-width: 1500px; margin: 0 auto; }
-.yv-nav { display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem; flex-wrap: wrap; }
-.yv-nav h2 { margin: 0; font-size: 1.15rem; }
-.yv-layouts { margin-left: auto; display: flex; gap: .3rem; }
-.yv-modes, .yv-sizes { display: flex; gap: .3rem; align-items: center; }
-.yv-sizes-label { font-size: .7rem; color: var(--ink-dim); }
-.yv-modes .mini.active, .yv-layouts .mini.active, .yv-sizes .mini.active { border-color: var(--accent); color: var(--accent); }
+/* D104: the year's nav/control styling now comes from the SHARED
+   .view-nav/.view-ctls/.ctl-group family (defined with the week's,
+   next to .view-switch) — one dialect for both views. Only the
+   year-specific spacing survives here: #year-view is not a flex
+   column, so the nav needs its own bottom margin (the week's comes
+   from #week-view's gap). */
+#year-view .view-nav { margin-bottom: .8rem; }
 
 #yv-grid { container-type: inline-size; }
 .yv-row {
@@ -800,12 +805,6 @@ body.celebration-wave::after {
 }
 .wv-edit:hover { border-color: var(--accent); color: var(--accent); }
 
-.wv-sizes { display: flex; align-items: center; gap: .2rem; margin-left: .8rem; }
-.wv-sizes button { padding: .2rem .45rem; font-size: .72rem; opacity: .55; }
-.wv-sizes button.active {
-  opacity: 1; box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent);
-}
-
 /* Safety net: the strips may never eat the whole board. */
 /* D91 — the ladder does its best, but 🧵 is the floor: enough bars will
    still overflow it (50 hairs need 700px). So CSS is the BACKSTOP — the
@@ -845,13 +844,27 @@ body.celebration-wave::after {
   box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent);
 }
 
-.wv-modes { display: flex; align-items: center; gap: .25rem; }
-.wv-modes-label {
+/* D104 — ONE control grammar for every view (Jake: "they should be more
+   uniform before we combine them"). .view-nav is the header row (arrows ·
+   slots · label · ⛶ · .view-ctls); the h2's flex:1 is what pushes the
+   controls right. .view-ctls wraps the canonical groups in ONE order —
+   Layout · Window · Bars — each a .ctl-group with a visible .ctl-label.
+   Retires .wv-modes/.wv-sizes/.yv-layouts/.yv-modes/.yv-sizes: parallel
+   families doing one job is the D98 parity-drift trap in CSS form. */
+.view-nav { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.view-nav h2 {
+  margin: 0; flex: 1; text-align: center; min-width: 0;
+  font-size: clamp(1.05rem, 1.1vw, 2rem);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.view-ctls { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
+.ctl-group { display: flex; align-items: center; gap: .25rem; }
+.ctl-label {
   font-size: .7rem; color: var(--ink-dim); text-transform: uppercase;
   letter-spacing: .05em; margin-right: .25rem;
 }
-.wv-modes button { padding: .2rem .5rem; font-size: .72rem; opacity: .55; }
-.wv-modes button.active {
+.ctl-group button { padding: .2rem .5rem; font-size: .72rem; opacity: .55; }
+.ctl-group button.active {
   opacity: 1; box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent);
 }
 
@@ -863,13 +876,6 @@ body.celebration-wave::after {
   display: flex; flex-direction: column;
   gap: .6rem; padding: .8rem 1rem 1.2rem;
   min-height: 0; overflow: hidden;
-}
-
-.wv-nav { display: flex; align-items: center; gap: .5rem; }
-.wv-nav h2 {
-  margin: 0; flex: 1; text-align: center; min-width: 0;
-  font-size: clamp(1.05rem, 1.1vw, 2rem);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 /* --- the two spanning strips --- */
