@@ -1,6 +1,6 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.30.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.31.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
    0.27.0 (D95): .well-travelled — a quiet mark on a task that's been
    moved 3+ times. Not a scolding; a question.
@@ -113,7 +113,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.30.0";
+  --tc-version: "0.31.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -881,7 +881,7 @@ body.celebration-wave::after {
    backtracks and fills the hole. Two events, two rows. */
 .wv-strip {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: var(--wv-tracks, repeat(7, 1fr));   /* D103 — same var as #wv-grid: the heads cannot drift from their days */
   grid-auto-flow: row dense;
   gap: .3rem;
   align-items: start;
@@ -947,7 +947,11 @@ body.celebration-wave::after {
 /* --- seven columns --- */
 #wv-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* D103 — ONE source of truth for the week's tracks, shared with .wv-strip
+     below. JS sets --wv-tracks on #week-view when a layout wants unequal
+     columns (Tidal's compressed past days); everything else inherits plain 7.
+     A variable rather than an inline style, so the phone rule can still win. */
+  grid-template-columns: var(--wv-tracks, repeat(7, 1fr));
   gap: .3rem;
   flex: 1; min-height: 0;
 }
@@ -1302,6 +1306,16 @@ body.celebration-wave::after {
 .wv-row.k-stage .wv-title { font-weight: 700; }
 
 @media (max-width: 900px) {
+  /* The phone rule. Later than the var rule and equal specificity, so it
+     WINS — which is the point of using a variable instead of an inline
+     style, and why Tidal's compression correctly yields to it here. */
   #wv-grid, .wv-strip { grid-template-columns: repeat(3, 1fr); }
+  /* ...but NOT the clock. Wrapping 7 days into 3 rows of 3 makes three
+     unrelated time axes, and hour labels only render in column i===0, so
+     rows 2 and 3 would have no axis at all. A clock column is shapes, not
+     text — it reads fine narrow. Two ids + a class beats one id. */
+  #week-view.l-clock #wv-grid,
+  #week-view.l-clock .wv-strip { grid-template-columns: var(--wv-tracks, repeat(7, 1fr)); }
+  #week-view.l-clock .cb-title { font-size: .55rem; }
   .wv-span { grid-column: auto !important; }
 }
