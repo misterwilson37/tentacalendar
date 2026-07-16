@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.28.3 (banner and data-html-version move together, always)
+     Version 0.29.0 (banner and data-html-version move together, always)
+     0.29.0 (D105, PHASE 4): THE DASHBOARD — 🐙 fourth view-switch button
+     + the #dashboard-view pane shells (year left, week top-right, agenda
+     bottom-right, draggable dividers, 🗂 projects toggle). A Y for this
+     file: markup that didn't exist. The APP hits 1.0.0 with it (D67).
+     app ?v= → 1.0.0, css ?v= → 0.32.0.
      0.28.3 (D104): ONE control grammar — week's two control rows fold
      into its .view-nav; year's groups reorder to Layout · Window · Bars;
      both use .view-ctls/.ctl-group/.ctl-label and data-layout /
@@ -117,9 +122,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.31.1">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.32.0">
 </head>
-<body data-html-version="0.28.3">
+<body data-html-version="0.29.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -143,10 +148,11 @@
       <div class="brand">🐙 Tentacalendar <span id="version" class="version"></span></div>
       <div class="header-right">
         <span id="user-label" class="user"></span>
-        <div class="view-switch" id="view-switch" title="Today = the queue. Week = the planning board. Year = the whole map.">
+        <div class="view-switch" id="view-switch" title="Today = the queue. Week = the planning board. Year = the whole map. Dashboard = all of it on one wall (big screens only).">
           <button data-view="day" class="mini">📋 Today</button>
           <button data-view="week" class="mini">🗓️ Week</button>
           <button data-view="year" class="mini">📅 Year</button>
+          <button data-view="dash" class="mini">🐙 Dashboard</button>
         </div>
         <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
         <button id="jump-add" class="icon-btn" title="Jump to Add a task">＋</button>
@@ -347,6 +353,25 @@
       <div id="yv-legend"></div>
       <p class="hint">Drag a bar to move a project — across weeks, months, and rows · drag either end to stretch or shrink it · tap a bar for details · tap a month name to zoom in. Dates keep to the project tier's working days.</p>
       <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
+    </section>
+
+    <!-- ===== D105: THE DASHBOARD (Phase 4 — this is 1.0) =====
+         Empty shells ON PURPOSE: entering the dashboard REPARENTS the real
+         #year-view / #week-view / #queue-panel (and #projects-panel behind
+         the 🗂 toggle) into these panes — the D68 modal trick at kiosk
+         scale. Comment markers hold each panel's seat at home, so leaving
+         puts everything back exactly where it came from. Elements MOVE,
+         nothing is cloned, so nothing can drift (D98). -->
+    <section id="dashboard-view" hidden>
+      <div class="dash-pane" id="dash-left"></div>
+      <div class="dash-split dash-split-v" id="dash-vsplit" title="Drag to resize · double-click to reset"></div>
+      <div id="dash-right">
+        <div class="dash-pane" id="dash-week"></div>
+        <div class="dash-split dash-split-h" id="dash-hsplit" title="Drag to resize · double-click to reset"></div>
+        <div class="dash-pane" id="dash-bottom">
+          <button id="dash-projects-toggle" class="mini" title="Split this pane: agenda + project pipeline side by side. Adding projects lives on the other screens — this is the glance wall.">🗂 Projects</button>
+        </div>
+      </div>
     </section>
 
     <!-- D82: follow-up create/edit — retires the prompt() pair -->
@@ -565,6 +590,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.38.1"></script>
+  <script type="module" src="app.js?v=1.0.0"></script>
 </body>
 </html>
