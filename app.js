@@ -1,5 +1,15 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 0.38.1 — one grammar, and a splitter that answers (D104) — a Z.
+// The week and year controls said the same three things in two dialects
+// (labels/order/attributes all drifted); both now speak Layout · Window ·
+// Bars with data-layout / data-window / data-size, ahead of the dashboard
+// where the two headers must live side by side. localStorage keys are
+// UNCHANGED on purpose — renaming them would silently reset Jake's and
+// Katie's device choices, which reads as a bug. And the wv-split drag-DOWN
+// deadness is fixed: Auto re-picks the bar size DURING the drag, so the
+// boundary follows the pointer instead of teleporting on release.
+// ------------------------------------------------------------
 // Version 0.38.0 — the tracks fix (D103) — a Z. Two bugs, one wound: the
 // week's SEVEN columns were only ever declared in the stylesheet, so any JS
 // that set grid-template-columns on #wv-grid alone silently divorced the
@@ -374,7 +384,7 @@ import {
 } from "./queue.js?v=0.16.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.38.0";
+export const APP_VERSION = "0.38.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -445,13 +455,13 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#wv-next").addEventListener("click", () => weekPage(1));
   $("#wv-today").addEventListener("click", () => { S.weekOffset = 0; renderWeek(); });
   $("#wv-modes").addEventListener("click", e => {
-    const b = e.target.closest("button[data-wmode]");
-    if (b) setWeekMode(b.dataset.wmode);
+    const b = e.target.closest("button[data-window]");   // D104: one grammar — data-window in BOTH views
+    if (b) setWeekMode(b.dataset.window);
   });
   window.addEventListener("resize", () => { if (S.view === "week") renderWeek(); }); // D91
   $("#wv-layouts").addEventListener("click", e => {
-    const b = e.target.closest("button[data-wlayout]");
-    if (b) setWeekLayout(b.dataset.wlayout);
+    const b = e.target.closest("button[data-layout]");   // D104: matches the year's attribute
+    if (b) setWeekLayout(b.dataset.layout);
   });
   $("#wv-cards-toggle").addEventListener("click", () => {
     S.weekCards = !S.weekCards;
@@ -469,7 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#yv-unzoom").addEventListener("click", () => { S.yearZoom = null; renderYear(); });
   $("#yv-modes").querySelectorAll("button").forEach(b =>
     b.addEventListener("click", () => {
-      S.yearMode = b.dataset.mode;
+      S.yearMode = b.dataset.window;   // D104: the window group is data-window in BOTH views
       localStorage.setItem("tc-year-mode", S.yearMode);
       S.yearOffset = 0; S.yearZoom = null;
       renderYear();
@@ -1808,7 +1818,7 @@ function renderWeek() {
   $("#wv-label").textContent = `${lead}${fmtDay(w.days[0].dayStart)} → ${fmtDay(w.days[6].dayStart)}`;
   placeNowButton("wv", live ? 0 : (S.weekOffset > 0 ? 1 : -1)); // D90
   for (const b of document.querySelectorAll("#wv-modes button")) {
-    b.classList.toggle("active", b.dataset.wmode === S.weekMode);
+    b.classList.toggle("active", b.dataset.window === S.weekMode);
   }
   for (const b of document.querySelectorAll("#wv-sizes button")) {
     b.classList.toggle("active", b.dataset.size === S.weekSize);
@@ -1819,7 +1829,7 @@ function renderWeek() {
   renderWeekProjects(w);
 
   for (const b of document.querySelectorAll("#wv-layouts button")) {
-    b.classList.toggle("active", b.dataset.wlayout === S.weekLayout);
+    b.classList.toggle("active", b.dataset.layout === S.weekLayout);
   }
   const cardBtn = $("#wv-cards-toggle");
   cardBtn.classList.toggle("active", S.weekCards);
@@ -2521,6 +2531,28 @@ function wireWeekSplitter() {
   if (!bar || bar.dataset.wired) return;
   bar.dataset.wired = "1";
   let dragging = false;
+  // D104 — the drag-DOWN deadness. #wv-strips is sized by max-height, and a
+  // max-height can shrink a box below its content but can never GROW one
+  // past it: granting the strip more share changed nothing on screen until
+  // pointerup's renderWeek() picked a fatter bar size and the boundary
+  // teleported to the ladder's number, not the pointer's. Fix: Auto
+  // re-picks the bar size DURING the drag — one attribute flip; the bar
+  // DOM is identical across sizes, CSS does the rest — so the boundary
+  // follows the pointer down in honest bar-size steps and release has
+  // nothing left to jump to. A PINNED size still stops at the bars'
+  // natural height: truthful resistance, pinned bars won't grow.
+  let refitQueued = false;
+  const liveRefit = () => {
+    if (refitQueued) return;
+    refitQueued = true;
+    requestAnimationFrame(() => {
+      refitQueued = false;
+      const strip = $("#wv-projects");
+      if (!strip || strip.hidden) return;
+      const size = weekBarSize(strip.children.length);
+      if (strip.dataset.size !== size) strip.dataset.size = size;
+    });
+  };
   bar.addEventListener("pointerdown", e => {
     dragging = true; bar.setPointerCapture(e.pointerId); bar.classList.add("dragging");
     e.preventDefault();
@@ -2533,6 +2565,7 @@ function wireWeekSplitter() {
     const pct = Math.max(10, Math.min(75, ((e.clientY - top) / h) * 100));
     S.weekStripPct = pct;
     applyStripShare();
+    liveRefit();
   });
   const stop = () => {
     if (!dragging) return;
@@ -3075,7 +3108,7 @@ function renderYear() {
   placeNowButton("yv", (S.yearOffset === 0 && S.yearZoom == null) ? 0 : (S.yearOffset > 0 ? 1 : -1)); // D90
   $("#yv-unzoom").hidden = S.yearZoom == null;
   $("#yv-modes").querySelectorAll("button").forEach(b =>
-    b.classList.toggle("active", b.dataset.mode === S.yearMode));
+    b.classList.toggle("active", b.dataset.window === S.yearMode));
 
   // Visible projects — everything intersecting the window, finished
   // included (their bars read fully saturated; that IS the year story).
