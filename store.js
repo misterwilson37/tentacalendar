@@ -1,6 +1,16 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.10.0
+// Version 0.11.0
+// 0.11.0 (D100): tasks carry estimateMinutes. D93 promoted "estimated time to
+// complete" from nice-to-have to load-bearing: a task time is a DUE date, so
+// with an estimate a task is a real block [due − estimate, due] with a real
+// LENGTH, and that length is the whole answer to "can I fit dinner on
+// Tuesday?". addTask destructures explicitly, so a new field would have been
+// silently DROPPED — which is exactly the kind of nothing that looks like it
+// works. null = unestimated; the clock grid draws those at a default and says
+// so. updateTask already passes arbitrary fields through (D95 only special-
+// cases dueAt), so editing an estimate needed no change there.
+// 0.10.0
 // 0.10.0 (D95): tasks remember being moved — firstDueAt (the original
 // commitment) + rescheduleCount. Counted inside updateTask so EVERY path
 // that changes a due date is caught, including ones not written yet.
@@ -34,7 +44,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.10.0";
+export const STORE_VERSION = "0.11.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -163,10 +173,12 @@ export function subscribeConfig(cb) {
 
 // ---------- Task CRUD ----------
 
-export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null }) {
+export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null, estimateMinutes = null }) {
   return addDoc(col("tasks"), {
     title, tierId, dueAt, escalation, notes,
     projectId,
+    estimateMinutes,          // D100 — null = unestimated, NOT zero
+
     completedAt: null,
     parentTaskId: null,
     offsetDays: null,
