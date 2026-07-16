@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.29.0 (banner and data-html-version move together, always)
+     Version 0.30.1 (banner and data-html-version move together, always)
+     0.30.1 (D108): #hdr-fullscreen — the dashboard's ⛶, in the header,
+     dash-only. app ?v= → 1.1.1.
+     0.30.0 (D107): burn-in care — #screen-rest overlay (outside drift-wrap,
+     D37's rule) + two per-device Timing-tab toggles (🌙 rest / 🕯️ idle dim).
+     app ?v= → 1.1.0, css ?v= → 0.33.0.
      0.29.0 (D105, PHASE 4): THE DASHBOARD — 🐙 fourth view-switch button
      + the #dashboard-view pane shells (year left, week top-right, agenda
      bottom-right, draggable dividers, 🗂 projects toggle). A Y for this
@@ -122,9 +127,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.32.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.33.0">
 </head>
-<body data-html-version="0.29.0">
+<body data-html-version="0.30.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -154,6 +159,7 @@
           <button data-view="year" class="mini">📅 Year</button>
           <button data-view="dash" class="mini">🐙 Dashboard</button>
         </div>
+        <button id="hdr-fullscreen" class="icon-btn" title="Fullscreen — the wall without the browser" hidden>⛶</button><!-- D108: the dashboard's ⛶. It has no nav row of its own, so the header IS its chrome; hidden on every other view (they carry their own). -->
         <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
         <button id="jump-add" class="icon-btn" title="Jump to Add a task">＋</button>
         <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
@@ -412,6 +418,18 @@
 
   </div><!-- /drift-wrap -->
 
+  <!-- D107: the screen rest — OUTSIDE #drift-wrap on purpose (D37's rule:
+       a fixed overlay inside a transformed ancestor re-roots and shows the
+       drift as edge gaps). z-index 98: above everything but the confetti —
+       a midnight completion still gets its fireworks. -->
+  <div id="screen-rest" hidden>
+    <div id="rest-face">
+      <div id="rest-clock"></div>
+      <div id="rest-date"></div>
+      <div id="rest-hint">🐙 resting — tap to peek</div>
+    </div>
+  </div>
+
   <!-- ============ SETTINGS MODAL (tabbed, D52) ============ -->
   <div id="settings-modal" hidden>
     <div class="modal-card">
@@ -464,6 +482,15 @@
         <div class="form-row">
           <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
         </div>
+        <!-- D107: burn-in care. PER-DEVICE (localStorage, not workspace
+             config) — set these ON THE TV. Dashboard-only at runtime. -->
+        <div class="form-row">
+          <label><input id="cfg-rest" type="checkbox"> 🌙 Screen rest during sleep hours <span class="hint-inline">(dashboard · this device)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input id="cfg-idle-dim" type="checkbox"> 🕯️ Dim chrome when idle <span class="hint-inline">(dashboard · this device)</span></label>
+        </div>
+        <p class="hint">Burn-in care for a TV that lives on the dashboard: during sleep hours the screen goes near-black with a wandering clock (tap it to peek for 5 minutes), and after 5 idle minutes the header and dividers fade. The whole app already drifts a few pixels (D37); the dashboard rides a second, wider orbit. These two switches are per-device — flip them on the TV itself.</p>
         <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
         <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
         <p class="hint" id="poll-cost-hint"></p>
@@ -590,6 +617,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.0.0"></script>
+  <script type="module" src="app.js?v=1.1.1"></script>
 </body>
 </html>
