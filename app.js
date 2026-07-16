@@ -1,6 +1,11 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.35.0 — GANTESQUE IS DONE (D98). The 5a-bis victories/put-offs
+// Version 0.35.1 — dead-space fix (D99). A past column whose items are all
+// done/moved has an EMPTY .wv-list, and .wv-list is flex:1 — so the empty box
+// claimed the whole column and stranded the cards at the bottom under a field
+// of nothing. The bug only showed on exactly the columns reflection exists
+// for. Now: no items + cards → the cards ARE the column.
+// 0.35.0 — GANTESQUE IS DONE (D98). The 5a-bis victories/put-offs
 // cards now render in GANTESQUE, which is where they were always owed —
 // D97 built them and scoped them to Tidal, leaving the 12-turn-old Gantesque
 // debt still open AND making the two layouts un-comparable, which is the one
@@ -344,7 +349,7 @@ import {
 } from "./queue.js?v=0.15.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.35.0";
+export const APP_VERSION = "0.35.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1787,6 +1792,9 @@ function renderWeekColumns(w, now, grid) {
     if (S.weekCards && (col.isPast || col.isToday) && (col.victories.length || col.putOffs.length)) {
       const box = reflectionCards(col, now, col.isToday);
       box.classList.add("in-columns");
+      // D99 — if nothing is left ON the day, there's no list to sit under and
+      // no reason to hold a column of air above the cards. They take the room.
+      if (!col.items.length) c.classList.add("cards-fill");
       c.append(box);
       anything += col.victories.length + col.putOffs.length;
     }
