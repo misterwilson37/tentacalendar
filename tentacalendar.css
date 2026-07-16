@@ -1,6 +1,6 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.29.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.29.1  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
    0.27.0 (D95): .well-travelled — a quiet mark on a task that's been
    moved 3+ times. Not a scolding; a question.
@@ -113,7 +113,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.29.0";
+  --tc-version: "0.29.1";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -1082,6 +1082,19 @@ body.celebration-wave::after {
   overflow-y: auto;
   border-top: 1px dashed var(--line);
   padding-top: .3rem;
+}
+
+/* D99 — the day is empty and the cards are the whole story: let the list stop
+   claiming flex:1 (an invisible box was holding a column of air) and hand the
+   glass to the cards. No :has() — the class comes from JS, because the target
+   is still an old Android tablet (D96). */
+.wv-col.cards-fill .wv-list { flex: 0 0 auto; padding: 0; }
+.wv-col.cards-fill .refl-cards.in-columns {
+  flex: 1 1 auto;
+  max-height: none;
+  margin-top: .3rem;
+  border-top: none;
+  padding-top: 0;
 }
 
 /* Past day heads speak in past tense (D98). */
