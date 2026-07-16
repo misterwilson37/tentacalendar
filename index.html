@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.27.1 (banner and data-html-version move together, always)
+     Version 0.28.0 (banner and data-html-version move together, always)
      0.25.0 (D96): INSTALLABLE — manifest.json + real PNG icons + the
      mobile-web-app meta tags, so Add to Home Screen drops the address
      bar on the old tablet. ⛶ fullscreen added to the AGENDA nav (week
@@ -112,9 +112,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.29.1">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.30.0">
 </head>
-<body data-html-version="0.27.1">
+<body data-html-version="0.28.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -202,6 +202,7 @@
           <div class="form-row">
             <label>Due date <input id="task-date" type="date" required></label>
             <label>Time <input id="task-time" type="time" value="09:00"></label>
+            <label title="How long it takes — NOT when to start. The due time is a deadline, so this is the runway BEFORE it (D93). Leave blank if you don't know; the clock grid draws those dashed at 30 min and doesn't pretend otherwise. You can also just drag a block's top edge in the Clock layout.">Est. min <input id="task-estimate" type="number" min="5" max="720" step="5" placeholder="—"></label>
           </div>
           <label class="esc-label">If ignored, nag again every
             <span class="esc-inputs">
@@ -268,6 +269,7 @@
         <span class="wv-modes-label">Layout</span>
         <button data-wlayout="columns" class="mini">Gantesque</button>
         <button data-wlayout="tidal" class="mini">Tidal</button>
+        <button data-wlayout="clock" class="mini" title="The day as a clock. An event at 6 PM sits at 6 PM. A task DUE at 6 PM is the block ENDING at 6 — its runway trails backward, because you can do it any time before the deadline (Katie, D93). Drag a task's top edge to say how long it takes; that's the only way a week can answer 'can I fit this on Tuesday?'">Clock</button>
         <button id="wv-cards-toggle" class="mini" title="Show what each past day actually did: what got finished, and what got put off — and whether it was moved, shelved, or nobody touched it. Works in BOTH layouts: Gantesque hangs the cards under its day list, Tidal turns the whole past column into them. Off = just the headline numbers (and in Tidal, past days shrink to give the live days more room).">🏆 Reflection</button>
       </div>
       <div class="wv-modes" id="wv-modes" title="Where the week starts. Rolling wastes no columns on a kiosk; Sun–Sat / Mon–Sun keep the days you just had, because reflecting on them is how you plan the next ones.">
@@ -546,6 +548,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.35.1"></script>
+  <script type="module" src="app.js?v=0.36.0"></script>
 </body>
 </html>
