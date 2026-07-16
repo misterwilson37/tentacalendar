@@ -1,5 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.0.0 — THE DASHBOARD (D105, Phase 4) — the X. D67 defined it two
+// months ago: "1.0 ships when the big-screen dashboard layout exists." It
+// exists: a fourth view (🐙, ≥1200px glass only — Jake: "a 4K beast of a
+// screen") that shows year LEFT, week TOP-RIGHT, agenda BOTTOM-RIGHT, all
+// live at once, with draggable pane dividers (persisted per device,
+// dbl-click resets) and a 🗂 toggle that splits the agenda pane two-up with
+// the project pipeline. Architecture: the D68 reparenting trick at kiosk
+// scale — the panes are EMPTY SHELLS and entering the dashboard MOVES the
+// real #year-view/#week-view/#queue-panel into them (comment markers hold
+// their seats at home). Nothing is cloned, so nothing can drift (D98). One
+// new helper, fitAvail(), teaches all three height fits to answer against
+// the pane when inside one and the window otherwise — the solo views are
+// untouched by construction. Divider drags take the D101 gesture lock.
+// Per Jake: from here, fixes are 1.0.z; only a new idea makes 1.1.
+// ------------------------------------------------------------
 // Version 0.38.1 — one grammar, and a splitter that answers (D104) — a Z.
 // The week and year controls said the same three things in two dialects
 // (labels/order/attributes all drifted); both now speak Layout · Window ·
@@ -384,7 +399,7 @@ import {
 } from "./queue.js?v=0.16.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.38.1";
+export const APP_VERSION = "1.0.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -407,7 +422,10 @@ const S = {
   expandedProjects: new Set(JSON.parse(localStorage.getItem("tc-expanded-projects") || "[]")), // D56
   showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
   hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
-  view: ["year", "week", "day"].includes(localStorage.getItem("tc-view")) ? localStorage.getItem("tc-view") : "day", // D65/D88 (persists per device)
+  view: ["year", "week", "day", "dash"].includes(localStorage.getItem("tc-view")) ? localStorage.getItem("tc-view") : "day", // D65/D88/D105 (persists per device; setView bounces "dash" to "day" on small glass)
+  dashCols: Math.min(80, Math.max(20, parseFloat(localStorage.getItem("tc-dash-cols")) || 50)),  // D105: year pane's share of the wall
+  dashRows: Math.min(80, Math.max(20, parseFloat(localStorage.getItem("tc-dash-rows")) || 55)),  // D105: week pane's share of the right column
+  dashProjects: localStorage.getItem("tc-dash-projects") === "1",  // D105: 🗂 split the agenda pane two-up
   weekMode: ["rolling", "sunday", "monday"].includes(localStorage.getItem("tc-wmode")) ? localStorage.getItem("tc-wmode") : "rolling", // D89
   weekOffset: 0,      // D89: whole weeks from the anchor; 0 = the live week
   weekSize: ["auto", "full", "half", "quarter", "hair"].includes(localStorage.getItem("tc-wsize")) ? localStorage.getItem("tc-wsize") : "auto", // D90
@@ -497,8 +515,9 @@ document.addEventListener("DOMContentLoaded", () => {
       renderYear();
     }));
   $("#yv-fullscreen").addEventListener("click", toggleFullscreen);  // D71/D96
-  document.addEventListener("fullscreenchange", () => { if (S.view === "year") renderYear(); });
+  document.addEventListener("fullscreenchange", () => { if (S.view === "year") renderYear(); else if (S.view === "dash") render(); });   // D105: panes refit the new glass
   $("#yv-add-project").addEventListener("click", openYvProjectModal);
+  wireDashboard();   // D105 — static chrome, wired once
   $("#yv-project-close").addEventListener("click", closeYvProjectModal);
   window.addEventListener("resize", () => {           // D68: timeline resizes with the window
     clearTimeout(yvResizeT);
@@ -811,8 +830,9 @@ function render() {
   renderDone(q.doneToday);
   renderProjects(now);
   renderDecision(); // D57: modal rows track live state while open
-  if (S.view === "year") renderYear(); // D65: live updates flow into the grid
-  if (S.view === "week") renderWeek(); // D88: same deal for the week
+  if (S.view === "dash") fitDashHeight();                    // D105: the frame first, then the panes fill it
+  if (S.view === "year" || S.view === "dash") renderYear(); // D65: live updates flow into the grid
+  if (S.view === "week" || S.view === "dash") renderWeek(); // D88: same deal for the week (D105: the dashboard is all views at once)
 }
 
 function tierChip(tier) {
@@ -1761,16 +1781,152 @@ function toggleFullscreen() {
 function startOfDayTs(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
 function setView(v) {
+  // D105 — the dashboard is a big-glass creature (Jake: "a 4K beast of a
+  // screen"; his tablet: "unlikely"). A device that persisted "dash" and
+  // wakes up narrow falls back to Today rather than rendering a postage-
+  // stamp kiosk. 1200 matches the CSS that hides the button.
+  if (v === "dash" && window.innerWidth < 1200) v = "day";
+  const wasDash = S.view === "dash";
   S.view = v;
   localStorage.setItem("tc-view", v);
+  if (wasDash && v !== "dash") exitDash();   // every panel goes HOME before the flags flip
   $("main").hidden = v !== "day";            // D35's [hidden]!important beats main's display:grid
-  $("#week-view").hidden = v !== "week";     // D88
-  $("#year-view").hidden = v !== "year";
+  $("#week-view").hidden = v !== "week" && v !== "dash";     // D88 · D105: visible inside its pane
+  $("#year-view").hidden = v !== "year" && v !== "dash";
+  $("#dashboard-view").hidden = v !== "dash";                // D105
   for (const b of document.querySelectorAll("#view-switch button")) {
     b.classList.toggle("active", b.dataset.view === v);   // D89
   }
+  if (v === "dash" && !wasDash) enterDash();
   if (v === "year") renderYear();
   if (v === "week") renderWeek();
+  if (v === "dash") render();   // render()'s tail fans out to the week and the year
+}
+
+// ---------- D105: THE DASHBOARD (Phase 4 — this is 1.0) ----------
+// One wall, all of it: year LEFT, week TOP-RIGHT, agenda BOTTOM-RIGHT
+// (with a 🗂 toggle that splits it agenda + project pipeline two-up;
+// adding projects stays on the other screens — Jake's call, this is the
+// glance wall). NOTHING here is a copy: entering the dashboard REPARENTS
+// the real #year-view / #week-view / #queue-panel into the panes — the
+// D68 modal trick at kiosk scale. Elements MOVE, listeners ride along,
+// and a comment marker holds each one's seat at home, so leaving puts
+// every panel back exactly where it came from. Clone nothing and there
+// is no second copy to drift (D98).
+const dashHomes = [];
+function dashMove(el, pane) {
+  const marker = document.createComment("dash-home");
+  el.parentNode.insertBefore(marker, el);
+  dashHomes.push({ el, marker });
+  pane.appendChild(el);
+}
+function dashRestoreAll() {
+  while (dashHomes.length) {
+    const h = dashHomes.pop();
+    h.marker.parentNode.insertBefore(h.el, h.marker);   // markers never moved — exact seats, any order
+    h.marker.remove();
+  }
+}
+let dashProjHome = null;
+function dashProjectsIn() {
+  if (dashProjHome) return;
+  const el = $("#projects-panel");
+  const marker = document.createComment("dash-home-proj");
+  el.parentNode.insertBefore(marker, el);
+  dashProjHome = { el, marker };
+  $("#dash-bottom").appendChild(el);
+}
+function dashProjectsOut() {
+  if (!dashProjHome) return;
+  dashProjHome.marker.parentNode.insertBefore(dashProjHome.el, dashProjHome.marker);
+  dashProjHome.marker.remove();
+  dashProjHome = null;
+}
+function enterDash() {
+  dashMove($("#year-view"), $("#dash-left"));
+  dashMove($("#week-view"), $("#dash-week"));
+  dashMove($("#queue-panel"), $("#dash-bottom"));
+  if (S.dashProjects) dashProjectsIn();
+  $("#dash-projects-toggle").classList.toggle("active", S.dashProjects);
+  applyDashShares();
+  fitDashHeight();
+}
+function exitDash() {
+  dashProjectsOut();
+  dashRestoreAll();
+}
+function applyDashShares() {
+  const d = $("#dashboard-view");
+  d.style.setProperty("--dash-cols", S.dashCols + "%");
+  d.style.setProperty("--dash-rows", S.dashRows + "%");
+}
+/** D91's fitWeekHeight, for the whole wall: the dashboard must FIT the
+ *  glass, because its panes divide whatever it has. */
+function fitDashHeight() {
+  const sec = $("#dashboard-view");
+  if (!sec || sec.hidden) return;
+  const top = sec.getBoundingClientRect().top + window.scrollY;
+  sec.style.height = Math.max(400, window.innerHeight - top - 8) + "px";
+}
+function wireDashboard() {
+  const dash = $("#dashboard-view");
+  if (!dash || dash.dataset.wired) return;
+  dash.dataset.wired = "1";
+  // The pane BOUNDARY follows the pointer live (a CSS-var flip per move —
+  // flex-basis can both grow and shrink, so the wv-split deadness cannot
+  // happen here); the pane CONTENTS refit on release, because re-solving
+  // three views per pointermove is not a 60fps job. Divider drags take
+  // the D101 gesture lock: a snapshot mid-drag defers, never drops.
+  function wireSplit(bar, axis) {
+    let dragging = false;
+    bar.addEventListener("pointerdown", e => {
+      dragging = true; bar.setPointerCapture(e.pointerId); bar.classList.add("dragging");
+      beginGesture();   // D101
+      e.preventDefault();
+    });
+    bar.addEventListener("pointermove", e => {
+      if (!dragging) return;
+      if (axis === "x") {
+        const r = dash.getBoundingClientRect();
+        S.dashCols = Math.max(20, Math.min(80, ((e.clientX - r.left) / (r.width || 1)) * 100));
+      } else {
+        const r = $("#dash-right").getBoundingClientRect();
+        S.dashRows = Math.max(20, Math.min(80, ((e.clientY - r.top) / (r.height || 1)) * 100));
+      }
+      applyDashShares();
+    });
+    const stop = () => {
+      if (!dragging) return;
+      dragging = false; bar.classList.remove("dragging");
+      localStorage.setItem("tc-dash-cols", String(Math.round(S.dashCols)));
+      localStorage.setItem("tc-dash-rows", String(Math.round(S.dashRows)));
+      endGesture();     // D101 — LAST of the drag; flushes any deferred snapshot
+      render();         // every pane refits its new share
+    };
+    bar.addEventListener("pointerup", stop);
+    bar.addEventListener("pointercancel", stop);
+    bar.addEventListener("dblclick", () => {
+      S.dashCols = 50; S.dashRows = 55;
+      localStorage.setItem("tc-dash-cols", "50");
+      localStorage.setItem("tc-dash-rows", "55");
+      applyDashShares(); render();
+    });
+  }
+  wireSplit($("#dash-vsplit"), "x");
+  wireSplit($("#dash-hsplit"), "y");
+  $("#dash-projects-toggle").addEventListener("click", () => {
+    S.dashProjects = !S.dashProjects;
+    localStorage.setItem("tc-dash-projects", S.dashProjects ? "1" : "0");
+    $("#dash-projects-toggle").classList.toggle("active", S.dashProjects);
+    if (S.view === "dash") { if (S.dashProjects) dashProjectsIn(); else dashProjectsOut(); render(); }
+  });
+  let dashResizeT = null;
+  window.addEventListener("resize", () => {
+    if (S.view !== "dash") return;
+    if (window.innerWidth < 1200) { setView("day"); return; }   // the tablet rule, live
+    clearTimeout(dashResizeT);
+    dashResizeT = setTimeout(() => { if (S.view === "dash") render(); }, 150);
+  });
 }
 
 // ---------- D88: THE WEEK ----------
@@ -2578,11 +2734,23 @@ function wireWeekSplitter() {
   bar.addEventListener("dblclick", () => { S.weekStripPct = 34; applyStripShare(); localStorage.setItem("tc-wstrip", "34"); renderWeek(); });
 }
 
+/** D105 — every view used to fit itself against the WINDOW; in the
+ *  dashboard it must fit its PANE. One question, one answer: "how far
+ *  down may I grow?" Outside a pane this is EXACTLY the old arithmetic
+ *  (innerHeight minus document-space top), so the three solo views are
+ *  untouched by construction. */
+function fitAvail(el) {
+  const pane = el.closest(".dash-pane");
+  if (pane) return pane.getBoundingClientRect().bottom - el.getBoundingClientRect().top;
+  return window.innerHeight - (el.getBoundingClientRect().top + window.scrollY);
+}
+
 function fitWeekHeight() {
   const sec = $("#week-view");
   if (!sec || sec.hidden) return;
-  const top = sec.getBoundingClientRect().top + window.scrollY;
-  sec.style.height = Math.max(320, window.innerHeight - top - 8) + "px";
+  // Floor 240 (was 320): a dashboard pane can be legitimately short, and
+  // the old floor only ever guarded against absurdly small windows.
+  sec.style.height = Math.max(240, fitAvail(sec) - 8) + "px";
 }
 
 function renderWeekProjects(w) {
@@ -2964,8 +3132,7 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
     }
     if (pin) { GL = pin.LANE; GB = pin.BAR; }
     else {
-      const docTop = rect.top + window.scrollY;               // D71: document-space
-      const avail = Math.max(240, window.innerHeight - docTop - 110);
+      const avail = Math.max(240, fitAvail(grid) - 110);      // D71 arithmetic · D105: window OR pane, fitAvail knows
       const denom = Math.max(1, stats.reduce((a, st) => a + st.weeks * st.lanes, 0));
       GL = Math.floor((avail - stats.length * 26 - (stats.length - 1) * 10) / denom);
       GL = Math.max(3, Math.min(14, GL));   // floor = 2px hairline bars
@@ -3158,8 +3325,7 @@ function renderYear() {
   }, 1));
   const totalLanes = rowLanes.reduce((a, b) => a + b, 0);
   const pin = yvPinnedSize();                               // D69: pins beat the window fit
-  const docTop = grid.getBoundingClientRect().top + window.scrollY; // D71: document-space
-  const avail = Math.max(220, window.innerHeight - docTop - 150);
+  const avail = Math.max(220, fitAvail(grid) - 150);          // D71 arithmetic · D105: window OR pane, fitAvail knows
   const LANE_H = pin ? pin.LANE
     : Math.max(9, Math.min(34, Math.floor((avail - rows.length * 46) / totalLanes)));
   const BAR_H = LANE_H - 4;
