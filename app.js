@@ -1,5 +1,25 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.1.1 — the dashboard's ⛶ (D108) — a Z. Every view carried its
+// own fullscreen button except the one that lives on a TV. The dashboard
+// has no nav row, so the header IS its chrome: #hdr-fullscreen sits by ⚙️,
+// dash-only, wired to the shared D96 toggle. (The pane ⛶ buttons always
+// fullscreened the whole wall — but that shouldn't be a thing you have to
+// know.)
+// ------------------------------------------------------------
+// Version 1.1.0 — BURN-IN CARE (D107, a Y) + the strip-overflow fix (D106,
+// riding along). D107, three per-device layers for a wall that runs 15h/day:
+// screen REST during the sleep hours the app already knows (near-black +
+// wandering clock, dashboard only, tap to peek 5 min); idle CHROME DIM
+// (header + dividers fade to 35% after 5 quiet minutes); and a second,
+// wider, ~26-minute drift orbit on top of D37's fast ±2px. D106: BAR_PX
+// modeled bars as fixed pixels, but real height is rem padding + vw-clamped
+// fonts, and vw measures the GLASS, not the pane — on the 4K dashboard the
+// model undershot ~50% and Auto hid two bars behind a scrollbar at every
+// split position. D103 made the budget measured; settleWeekBars() finishes
+// the cost side: the model proposes a size, the layout disposes — overflow
+// steps down a rung until it fits (pins stay honest clipping).
+// ------------------------------------------------------------
 // Version 1.0.0 — THE DASHBOARD (D105, Phase 4) — the X. D67 defined it two
 // months ago: "1.0 ships when the big-screen dashboard layout exists." It
 // exists: a fourth view (🐙, ≥1200px glass only — Jake: "a 4K beast of a
@@ -399,7 +419,7 @@ import {
 } from "./queue.js?v=0.16.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.1.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -456,6 +476,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => $("#task-title").focus({ preventScroll: true }), 350);
   });
   $("#settings-btn").addEventListener("click", openSettings);
+  $("#hdr-fullscreen").addEventListener("click", toggleFullscreen);   // D108
   $("#settings-close").addEventListener("click", closeSettings);
   $("#day-prev").addEventListener("click", () => shiftDay(-1));
   $("#day-next").addEventListener("click", () => shiftDay(1));
@@ -518,6 +539,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("fullscreenchange", () => { if (S.view === "year") renderYear(); else if (S.view === "dash") render(); });   // D105: panes refit the new glass
   $("#yv-add-project").addEventListener("click", openYvProjectModal);
   wireDashboard();   // D105 — static chrome, wired once
+  wireBurnInCare();  // D107 — ditto
   $("#yv-project-close").addEventListener("click", closeYvProjectModal);
   window.addEventListener("resize", () => {           // D68: timeline resizes with the window
     clearTimeout(yvResizeT);
@@ -669,15 +691,80 @@ function tick() {
     maybeDecisionTime();
   }
   render();
+  updateScreenRest();   // D107 — sleep hours are checked on the minute
 }
 
 // D37: drift transforms #drift-wrap, NEVER <body>.
+// D107: in the dashboard a second, wider, much slower orbit rides on top
+// (±6px over ~26 min) — the wall shows the same pixels 15 hours a day,
+// and the fast ±2px alone parks bright edges in nearly the same place.
 let driftT = 0;
 function drift() {
   driftT += 0.03;
   const wrap = $("#drift-wrap");
-  if (wrap) wrap.style.transform =
-    `translate(${(Math.sin(driftT) * 2).toFixed(2)}px, ${(Math.cos(driftT * 0.7) * 2).toFixed(2)}px)`;
+  if (!wrap) return;
+  let x = Math.sin(driftT) * 2, y = Math.cos(driftT * 0.7) * 2;
+  if (S.view === "dash") {
+    x += Math.sin(driftT * 0.02) * 6;
+    y += Math.cos(driftT * 0.016) * 6;
+  }
+  wrap.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+}
+
+// ---------- D107: BURN-IN CARE (the wall runs 15h/day) ----------
+// Three layers, all per-device (the TV is a device, the phone is not):
+//  · Screen rest: during the sleep hours the app ALREADY knows (the same
+//    setting that gates the Cloud Function), the dashboard goes near-black
+//    with a wandering dim clock. ~9 h/day of almost nothing on the panel
+//    is the single biggest burn-in win available. Tap to peek for 5 min.
+//  · Idle chrome dim: after 5 idle minutes the header and dividers — the
+//    most static bright pixels on the wall — fade to 35%.
+//  · The wider drift orbit above.
+// Rest and dim are dashboard-only: a phone open at 11 PM must NOT black out.
+function inSleepHours() {
+  const c = S.config || {};
+  const s = c.sleepStart ?? 22, e = c.sleepEnd ?? 6;
+  if (s === e) return false;
+  const h = new Date().getHours();
+  return s < e ? (h >= s && h < e) : (h >= s || h < e);
+}
+let restSnoozeUntil = 0;
+function updateScreenRest() {
+  const el = $("#screen-rest");
+  if (!el) return;
+  const want = S.view === "dash"
+    && localStorage.getItem("tc-rest") !== "0"
+    && inSleepHours()
+    && Date.now() >= restSnoozeUntil;
+  if (want) {
+    const now = new Date();
+    $("#rest-clock").textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    $("#rest-date").textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    // wander a little every minute; CSS glides it over ~40s
+    el.style.setProperty("--rest-x", (12 + Math.random() * 56) + "%");
+    el.style.setProperty("--rest-y", (18 + Math.random() * 50) + "%");
+  }
+  el.hidden = !want;
+}
+let idleT = null;
+function pokeIdle() {
+  document.body.classList.remove("kiosk-idle");
+  clearTimeout(idleT);
+  if (S.view === "dash" && localStorage.getItem("tc-idle-dim") !== "0") {
+    idleT = setTimeout(() => document.body.classList.add("kiosk-idle"), 5 * 60 * 1000);
+  }
+}
+function wireBurnInCare() {
+  const rest = $("#screen-rest");
+  if (!rest || rest.dataset.wired) return;
+  rest.dataset.wired = "1";
+  rest.addEventListener("pointerdown", () => {   // peek: 5 minutes of normal wall
+    restSnoozeUntil = Date.now() + 5 * 60 * 1000;
+    updateScreenRest();
+  });
+  for (const ev of ["pointermove", "pointerdown", "keydown"]) {
+    window.addEventListener(ev, pokeIdle, { passive: true });
+  }
 }
 
 function shiftDay(n) { S.viewDay += n * DAY_MS; render(); }
@@ -1794,6 +1881,7 @@ function setView(v) {
   $("#week-view").hidden = v !== "week" && v !== "dash";     // D88 · D105: visible inside its pane
   $("#year-view").hidden = v !== "year" && v !== "dash";
   $("#dashboard-view").hidden = v !== "dash";                // D105
+  $("#hdr-fullscreen").hidden = v !== "dash";                // D108: the header carries the dashboard's ⛶
   for (const b of document.querySelectorAll("#view-switch button")) {
     b.classList.toggle("active", b.dataset.view === v);   // D89
   }
@@ -1801,6 +1889,8 @@ function setView(v) {
   if (v === "year") renderYear();
   if (v === "week") renderWeek();
   if (v === "dash") render();   // render()'s tail fans out to the week and the year
+  pokeIdle();           // D107 — the idle timer and the rest overlay are
+  updateScreenRest();   // dashboard-only; leaving the view clears both
 }
 
 // ---------- D105: THE DASHBOARD (Phase 4 — this is 1.0) ----------
@@ -2629,7 +2719,31 @@ function renderWeekBanners(w) {
  * them ~60%. (Jake: "auto is not reducing the height to the same level as
  * it does in the annual view.")
  */
+// D106 — these are now a FIRST GUESS, not the truth. A bar's real height
+// is rem padding + a vw-clamped font, and vw measures the GLASS, not the
+// pane: on the 4K dashboard the fixed-px model undershot by ~50% and Auto
+// overflowed the strip by two bars at every split position ("it seems to
+// assume those two should be hidden" — Jake, and yes, that's exactly what
+// the arithmetic assumed). D103 made the BUDGET measured; settleWeekBars()
+// finishes the thought on the COST side: the model proposes, the layout
+// disposes.
 const BAR_PX = { full: 34, half: 24, quarter: 17, hair: 9 };
+
+/** Auto's pick must SURVIVE MEASUREMENT: if the strip box actually
+ *  overflows, step down a rung and look again. Max 3 passes, each one
+ *  attribute flip + one layout read, and only when the model guessed
+ *  wrong. A PIN is honest clipping — the user chose that size, the
+ *  scrollbar is the truthful cost, we don't override it. */
+function settleWeekBars() {
+  if (S.weekSize !== "auto") return;
+  const box = $("#wv-strips"), proj = $("#wv-projects");
+  if (!box || !proj || proj.hidden) return;
+  const ladder = ["full", "half", "quarter", "hair"];
+  let i = ladder.indexOf(proj.dataset.size); if (i < 0) i = 0;
+  while (i < ladder.length - 1 && box.scrollHeight > box.clientHeight + 1) {
+    proj.dataset.size = ladder[++i];
+  }
+}
 
 function weekBarSize(n) {
   if (S.weekSize !== "auto") return S.weekSize;
@@ -2707,6 +2821,7 @@ function wireWeekSplitter() {
       if (!strip || strip.hidden) return;
       const size = weekBarSize(strip.children.length);
       if (strip.dataset.size !== size) strip.dataset.size = size;
+      settleWeekBars();   // D106 — mid-drag guesses get verified too
     });
   };
   bar.addEventListener("pointerdown", e => {
@@ -2840,6 +2955,7 @@ function renderWeekProjects(w) {
     }
     strip.append(el);
   }
+  settleWeekBars();   // D106 — the model proposed; now the layout disposes
 }
 
 function weekPage(n) { S.weekOffset += n; renderWeek(); }
@@ -3613,6 +3729,8 @@ function openSettings() {
   $("#cfg-sleep-end").value = c.sleepEnd ?? 6;
   $("#cfg-poll").value = c.pollIntervalMinutes ?? 60;
   $("#cfg-mirror-cal").value = c.mirrorCalendarId ?? "";  // D81
+  $("#cfg-rest").checked = localStorage.getItem("tc-rest") !== "0";          // D107 (per-device)
+  $("#cfg-idle-dim").checked = localStorage.getItem("tc-idle-dim") !== "0";  // D107 (per-device)
   $("#cfg-deadline-hour").value = c.deadlineHour ?? 16;   // D51
   $("#cfg-decision-days").value = c.decisionThresholdDays ?? 2; // D52
   $("#cfg-cleardeck").value = Math.round((c.clearDeckThreshold ?? 0.6) * 100); // D85
@@ -3738,6 +3856,12 @@ function stageTemplateRow(st, isNew) {
 }
 
 function onSaveSettings() {
+  // D107 — the two screen-care toggles are PER-DEVICE (the TV is a device):
+  // localStorage, not workspace config, and they apply immediately.
+  localStorage.setItem("tc-rest", $("#cfg-rest").checked ? "1" : "0");
+  localStorage.setItem("tc-idle-dim", $("#cfg-idle-dim").checked ? "1" : "0");
+  pokeIdle();
+  updateScreenRest();
   saveConfig({
     carryoverWriteHour: clampInt($("#cfg-carryover").value, 0, 23, 9),
     pollIntervalMinutes: clampInt($("#cfg-poll").value, 5, 1440, 60),
