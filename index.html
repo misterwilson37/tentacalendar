@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.28.2 (banner and data-html-version move together, always)
+     Version 0.28.3 (banner and data-html-version move together, always)
+     0.28.3 (D104): ONE control grammar — week's two control rows fold
+     into its .view-nav; year's groups reorder to Layout · Window · Bars;
+     both use .view-ctls/.ctl-group/.ctl-label and data-layout /
+     data-window / data-size. Same controls, one dialect, ahead of the
+     dashboard. app ?v= → 0.38.1, css ?v= → 0.31.1.
      0.25.0 (D96): INSTALLABLE — manifest.json + real PNG icons + the
      mobile-web-app meta tags, so Add to Home Screen drops the address
      bar on the old tablet. ⛶ fullscreen added to the AGENDA nav (week
@@ -112,9 +117,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.31.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.31.1">
 </head>
-<body data-html-version="0.28.2">
+<body data-html-version="0.28.3">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -257,34 +262,42 @@
          edge-drag to stretch (D32), month-tap zoom (D18), legend +
          tap-for-details (D27). -->
     <section id="week-view" hidden>
-      <div class="wv-nav">
+      <!-- D104: ONE control grammar for week and year — a .view-nav row
+           (arrows · slots · label · ⛶) followed by .view-ctls holding the
+           canonical groups in ONE order: Layout · Window · Bars. Same
+           labels grammar, same data attributes (data-layout / data-window /
+           data-size), same CSS family. View-specific extras (🏆 Reflection
+           here, ◱ whole year there) stay with their views. -->
+      <div class="view-nav">
         <button id="wv-prev" class="icon-btn" title="Back one week">◀</button>
         <span class="nav-slot" id="wv-slot-back"></span>
         <h2 id="wv-label">Week</h2>
         <span class="nav-slot" id="wv-slot-fwd"><button id="wv-today" class="mini" hidden>back to now</button></span>
         <button id="wv-next" class="icon-btn" title="Forward one week">▶</button>
         <button id="wv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
-      </div>
-      <div class="wv-modes" id="wv-layouts" title="Two ways to read the same week. Gantesque: one honest queue per day, everything interleaved in time order. Tidal: fixed time (events) shelved above the work that's yours to move, and past days become a reflection on what actually happened.">
-        <span class="wv-modes-label">Layout</span>
-        <button data-wlayout="columns" class="mini">Gantesque</button>
-        <button data-wlayout="tidal" class="mini">Tidal</button>
-        <button data-wlayout="clock" class="mini" title="The day as a clock. An event at 6 PM sits at 6 PM. A task DUE at 6 PM is the block ENDING at 6 — its runway trails backward, because you can do it any time before the deadline (Katie, D93). Drag a task's top edge to say how long it takes; that's the only way a week can answer 'can I fit this on Tuesday?'">Clock</button>
-        <button id="wv-cards-toggle" class="mini" title="Show what each past day actually did: what got finished, and what got put off — and whether it was moved, shelved, or nobody touched it. Works in BOTH layouts: Gantesque hangs the cards under its day list, Tidal turns the whole past column into them. Off = just the headline numbers (and in Tidal, past days shrink to give the live days more room).">🏆 Reflection</button>
-      </div>
-      <div class="wv-modes" id="wv-modes" title="Where the week starts. Rolling wastes no columns on a kiosk; Sun–Sat / Mon–Sun keep the days you just had, because reflecting on them is how you plan the next ones.">
-        <span class="wv-modes-label">Week</span>
-        <button data-wmode="rolling" class="mini">Today +6</button>
-        <button data-wmode="sunday" class="mini">Sun–Sat</button>
-        <button data-wmode="monday" class="mini">Mon–Sun</button>
-        <span class="wv-sizes" id="wv-sizes" title="Project bar height. Auto thins them out as the list grows so the day columns always get room; ▮ full (name + next step + %), ▪ medium, ▁ thin, 🧵 colour threads only (hover for names).">
-          <span class="wv-modes-label">Bars</span>
-          <button data-size="auto" class="mini">Auto</button>
-          <button data-size="full" class="mini">▮</button>
-          <button data-size="half" class="mini">▪</button>
-          <button data-size="quarter" class="mini">▁</button>
-          <button data-size="hair" class="mini">🧵</button>
-        </span>
+        <div class="view-ctls">
+          <div class="ctl-group" id="wv-layouts" title="Three ways to read the same week. Gantesque: one honest queue per day, everything interleaved in time order. Tidal: fixed time (events) shelved above the work that's yours to move, and past days become a reflection on what actually happened. Clock: the day as time.">
+            <span class="ctl-label">Layout</span>
+            <button data-layout="columns" class="mini">Gantesque</button>
+            <button data-layout="tidal" class="mini">Tidal</button>
+            <button data-layout="clock" class="mini" title="The day as a clock. An event at 6 PM sits at 6 PM. A task DUE at 6 PM is the block ENDING at 6 — its runway trails backward, because you can do it any time before the deadline (Katie, D93). Drag a task's top edge to say how long it takes; that's the only way a week can answer 'can I fit this on Tuesday?'">Clock</button>
+            <button id="wv-cards-toggle" class="mini" title="Show what each past day actually did: what got finished, and what got put off — and whether it was moved, shelved, or nobody touched it. Works in BOTH layouts: Gantesque hangs the cards under its day list, Tidal turns the whole past column into them. Off = just the headline numbers (and in Tidal, past days shrink to give the live days more room).">🏆 Reflection</button>
+          </div>
+          <div class="ctl-group" id="wv-modes" title="Where the week's window anchors. Rolling wastes no columns on a kiosk; Sun–Sat / Mon–Sun keep the days you just had, because reflecting on them is how you plan the next ones.">
+            <span class="ctl-label">Week</span>
+            <button data-window="rolling" class="mini">Today +6</button>
+            <button data-window="sunday" class="mini">Sun–Sat</button>
+            <button data-window="monday" class="mini">Mon–Sun</button>
+          </div>
+          <div class="ctl-group" id="wv-sizes" title="Project bar height. Auto thins them out as the list grows so the day columns always get room; ▮ full (name + next step + %), ▪ medium, ▁ thin, 🧵 colour threads only (hover for names).">
+            <span class="ctl-label">Bars</span>
+            <button data-size="auto" class="mini">Auto</button>
+            <button data-size="full" class="mini">▮</button>
+            <button data-size="half" class="mini">▪</button>
+            <button data-size="quarter" class="mini">▁</button>
+            <button data-size="hair" class="mini">🧵</button>
+          </div>
+        </div>
       </div>
       <div class="wv-strip" id="wv-days"></div>
       <div id="wv-strips">
@@ -298,7 +311,7 @@
     </section>
 
     <section id="year-view" hidden>
-      <div class="yv-nav">
+      <div class="view-nav">
         <button id="yv-prev" class="icon-btn" title="Back one year (one month while zoomed)">◀</button>
         <span class="nav-slot" id="yv-slot-back"></span>
         <h2 id="yv-label">Year</h2>
@@ -306,23 +319,27 @@
         <button id="yv-next" class="icon-btn" title="Forward one year (one month while zoomed)">▶</button>
         <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
         <button id="yv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
-        <div class="yv-layouts" id="yv-layouts" title="Month grid: weeks as rows, Sun–Sat — the wall-calendar look. Timeline: days in one long row per quarter (a Gantt chart).">
-          <button data-layout="wall" class="mini">▦▦ Annual</button>
-          <button data-layout="grid" class="mini">▦ Months</button>
-          <button data-layout="timeline" class="mini">▬ Timeline</button>
-        </div>
-        <div class="yv-sizes" id="yv-sizes" title="Bar thickness: Auto fits the layout (and your window); ▮ pins thick 20px, ▪ medium 10px, ▁ thin 5px.">
-          <span class="yv-sizes-label">Bars</span>
-          <button data-size="auto" class="mini">Auto</button>
-          <button data-size="full" class="mini">▮</button>
-          <button data-size="half" class="mini">▪</button>
-          <button data-size="quarter" class="mini">▁</button>
-          <button data-size="hair" class="mini" title="Hairline: 2px color threads — see the year, tap for details, edit elsewhere">🧵</button>
-        </div>
-        <div class="yv-modes" id="yv-modes" title="What sits top-left: January, the current quarter, or the current month (rolling 12 months either way)">
-          <button data-mode="calendar" class="mini">Jan–Dec</button>
-          <button data-mode="quarter" class="mini">Quarter first</button>
-          <button data-mode="month" class="mini">Month first</button>
+        <div class="view-ctls">
+          <div class="ctl-group" id="yv-layouts" title="Three ways to read the same year. Annual: the whole year as a wall of month calendars. Months: they stack, weeks as rows, Sun–Sat. Timeline: days in one long row per quarter (a Gantt chart).">
+            <span class="ctl-label">Layout</span>
+            <button data-layout="wall" class="mini">▦▦ Annual</button>
+            <button data-layout="grid" class="mini">▦ Months</button>
+            <button data-layout="timeline" class="mini">▬ Timeline</button>
+          </div>
+          <div class="ctl-group" id="yv-modes" title="Where the year's window anchors: January, the current quarter, or the current month top-left (rolling 12 months either way)">
+            <span class="ctl-label">Year</span>
+            <button data-window="calendar" class="mini">Jan–Dec</button>
+            <button data-window="quarter" class="mini">Quarter first</button>
+            <button data-window="month" class="mini">Month first</button>
+          </div>
+          <div class="ctl-group" id="yv-sizes" title="Bar thickness: Auto fits the layout (and your window); ▮ pins thick 20px, ▪ medium 10px, ▁ thin 5px.">
+            <span class="ctl-label">Bars</span>
+            <button data-size="auto" class="mini">Auto</button>
+            <button data-size="full" class="mini">▮</button>
+            <button data-size="half" class="mini">▪</button>
+            <button data-size="quarter" class="mini">▁</button>
+            <button data-size="hair" class="mini" title="Hairline: 2px color threads — see the year, tap for details, edit elsewhere">🧵</button>
+          </div>
         </div>
       </div>
       <div id="yv-grid"></div>
@@ -548,6 +565,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=0.38.0"></script>
+  <script type="module" src="app.js?v=0.38.1"></script>
 </body>
 </html>
