@@ -1,6 +1,12 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.11.0
+// Version 0.11.1
+// 0.11.1 (D102): the sign-in allowlist compares LOWERCASE, matching
+// firestore.rules 0.2.0's .lower(). This list is NOT security — the rules
+// are — but if the two disagree the app breaks in a way that looks like a
+// login bug: client stricter = "bounced back to the sign-in screen", rules
+// stricter = "Missing or insufficient permissions". Keep them symmetrical.
+// 0.11.0
 // 0.11.0 (D100): tasks carry estimateMinutes. D93 promoted "estimated time to
 // complete" from nice-to-have to load-bearing: a task time is a DUE date, so
 // with an estimate a task is a real block [due − estimate, due] with a real
@@ -44,7 +50,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.11.0";
+export const STORE_VERSION = "0.11.1";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -57,7 +63,7 @@ const col = name => collection(db, "workspaces", WORKSPACE_ID, name);
 
 export function watchAuth(onIn, onOut) {
   onAuthStateChanged(auth, async user => {
-    if (user && ALLOWED_EMAILS.includes(user.email)) {
+    if (user && ALLOWED_EMAILS.includes((user.email || "").toLowerCase())) {   // D102
       await ensureSeed(user);
       onIn(user);
     } else {
