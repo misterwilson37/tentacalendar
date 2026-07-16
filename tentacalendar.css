@@ -1,6 +1,6 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.29.1  (banner and --tc-version move together, ALWAYS —
+   Version 0.30.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
    0.27.0 (D95): .well-travelled — a quiet mark on a task that's been
    moved 3+ times. Not a scolding; a question.
@@ -113,7 +113,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.29.1";
+  --tc-version: "0.30.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -1106,6 +1106,88 @@ body.celebration-wave::after {
   font-size: .62rem; font-weight: 700;
   color: var(--warn, #ffa94d); font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+   D100 — THE CLOCK GRID (layout #3 under Week)
+   Time is the vertical axis. Events own [start,end]; a task owns a
+   DEADLINE, so its block ENDS there and its runway trails UP (D93).
+   Only the overdue tail runs down.
+   ============================================================ */
+
+.clock-col { padding: 0; }
+.clock-face {
+  position: relative; flex: 1; min-height: 0;
+  overflow: hidden;
+}
+.clock-hour {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 1px solid var(--line);
+  opacity: .5; pointer-events: none;
+}
+.clock-hour.noon { opacity: .9; border-top-style: dashed; }
+.clock-hour-label {
+  position: absolute; left: 2px; top: 1px;
+  font-size: .55rem; color: var(--muted); opacity: .75;
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  background: var(--panel); padding: 0 2px; border-radius: 2px;
+}
+.clock-now {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 2px solid var(--accent);
+  z-index: 4; pointer-events: none;
+  box-shadow: 0 0 6px -1px var(--accent);
+}
+
+.clock-block {
+  position: absolute; z-index: 2;
+  border-left: 3px solid var(--muted);
+  border-radius: 3px;
+  overflow: visible;
+  padding: 1px 3px;
+  min-height: 8px;
+  box-sizing: border-box;
+}
+.clock-block.clickable { cursor: pointer; }
+.clock-block.clickable:hover { z-index: 5; box-shadow: 0 0 0 1px var(--accent); }
+.cb-title {
+  display: block; font-size: .62rem; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* An EVENT is given, not guessed — solid, no grip, no dashes. */
+.clock-block.k-event { border-left-style: solid; }
+/* A task with no estimate is being DRAWN at a default, not measured.
+   The dashed edge is the app admitting it. */
+.clock-block.unestimated { border: 1px dashed var(--line); border-left-width: 3px; }
+.clock-block.expired { box-shadow: inset 0 0 0 1px var(--danger); }
+/* Its runway began yesterday — the block is clipped, and says so. */
+.clock-block.clipped { border-top: 2px dotted var(--warn, #ffa94d); border-top-left-radius: 0; border-top-right-radius: 0; }
+.clock-block.dragging { z-index: 6; box-shadow: 0 0 0 2px var(--accent); }
+
+/* The red tail: deadline → now. Hangs BELOW the block, because overdue is
+   the only direction that actually travels forward. */
+.clock-tail {
+  position: absolute; left: -3px; right: 0; top: 100%;
+  background: repeating-linear-gradient(
+    45deg, var(--danger), var(--danger) 3px,
+    transparent 3px, transparent 6px);
+  opacity: .55; border-left: 3px solid var(--danger);
+  pointer-events: none;
+}
+
+/* The grip: drag UP for more room. This is the estimate. */
+.clock-grip {
+  position: absolute; top: -3px; left: 0; right: 0; height: 7px;
+  cursor: ns-resize; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .5rem; color: var(--accent); font-weight: 700;
+  z-index: 3;
+}
+.clock-grip::before {
+  content: ""; position: absolute; left: 25%; right: 25%; top: 3px;
+  height: 2px; border-radius: 2px; background: var(--muted); opacity: 0;
+}
+.clock-block:hover .clock-grip::before { opacity: .8; }
+.clock-block.dragging .clock-grip::before { opacity: 0; }
 
 /* THE HORIZON — undated inventory, spanning the week. */
 #tidal-horizon {
