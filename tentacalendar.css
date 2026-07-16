@@ -1,7 +1,12 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.31.1  (banner and --tc-version move together, ALWAYS —
+   Version 0.32.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.32.0 (D105, PHASE 4): THE DASHBOARD — pane geometry (#dashboard-view
+   flex shells, --dash-cols/--dash-rows shares), .dash-split dividers
+   (wv-split's two-axis siblings), 🗂 corner toggle, the ≥1200px gate on
+   the 🐙 button, and in-pane overrides (#year-view sheds its 1500px solo
+   cap; the FAB hides — adding projects lives on the other screens).
    0.31.1 (D104): ONE control grammar — shared .view-nav/.view-ctls/
    .ctl-group/.ctl-label family replaces the parallel .wv-modes/.wv-sizes
    and .yv-layouts/.yv-modes/.yv-sizes sets. Two families doing one job
@@ -117,7 +122,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.31.1";
+  --tc-version: "0.32.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -583,6 +588,49 @@ body.celebration-wave::after {
    column, so the nav needs its own bottom margin (the week's comes
    from #week-view's gap). */
 #year-view .view-nav { margin-bottom: .8rem; }
+
+/* ---------- D105: The Dashboard (Phase 4 — this is 1.0) ---------- */
+/* The panes are empty shells; JS reparents the REAL views into them.
+   Geometry only here — every panel keeps its own skin. The dividers are
+   wv-split's siblings: same grip, same hover, two axes. Boundaries move
+   LIVE on a CSS-var flip (flex-basis grows AND shrinks — the max-height
+   deadness of D104 cannot happen here); contents refit on release. */
+#dashboard-view {
+  display: flex; min-height: 0; overflow: hidden;
+  padding: .5rem .8rem .8rem;
+}
+.dash-pane {
+  position: relative; display: flex; flex-direction: column;
+  min-width: 0; min-height: 0; overflow: hidden;
+}
+#dash-left  { flex: 0 0 var(--dash-cols, 50%); overflow-y: auto; }  /* pinned bar sizes may outgrow the pane — the pane scrolls, the wall stays */
+#dash-right { flex: 1 1 0; display: flex; flex-direction: column; min-width: 0; }
+#dash-week  { flex: 0 0 var(--dash-rows, 55%); }
+#dash-bottom { flex: 1 1 0; flex-direction: row; gap: .8rem; }
+#dash-bottom > section { flex: 1 1 0; min-width: 0; overflow-y: auto; }  /* agenda — and the pipeline when 🗂 splits it two-up */
+.dash-pane > #year-view { max-width: none; margin: 0; padding: .6rem; } /* the 1500px solo cap would waste half a 4K pane */
+#dashboard-view #yv-add-project { display: none; }  /* Jake: adding projects lives on the other screens — this is the glance wall */
+#dash-projects-toggle {
+  position: absolute; right: .6rem; bottom: .6rem; z-index: 6; opacity: .55;
+}
+#dash-projects-toggle:hover, #dash-projects-toggle.active { opacity: 1; }
+.dash-split { flex: 0 0 auto; position: relative; touch-action: none; z-index: 5; }
+.dash-split-v { width: 11px; margin: 0 -2px; cursor: col-resize; }
+.dash-split-h { height: 11px; margin: -2px 0; cursor: row-resize; }
+.dash-split::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--line); border-radius: 2px; transition: background .12s;
+}
+.dash-split-v::before { width: 3px; height: 62px; }
+.dash-split-h::before { width: 62px; height: 3px; }
+.dash-split:hover::before, .dash-split.dragging::before { background: var(--accent); }
+/* The dashboard is a big-glass creature (D105/Jake). Below 1200px the
+   button vanishes; setView bounces a persisted "dash" to Today at the
+   same threshold — CSS and JS agree on the number. */
+@media (max-width: 1199px) {
+  #view-switch button[data-view="dash"] { display: none; }
+}
 
 #yv-grid { container-type: inline-size; }
 .yv-row {
