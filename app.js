@@ -1,6 +1,22 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.36.0 — THE CLOCK GRID (D100), layout #3 under Week. Built on D93,
+// Version 0.38.0 — the tracks fix (D103) — a Z. Two bugs, one wound: the
+// week's SEVEN columns were only ever declared in the stylesheet, so any JS
+// that set grid-template-columns on #wv-grid alone silently divorced the
+// day heads (.wv-strip) from the days. Tidal's past-column compression did
+// exactly that. Tracks are now ONE CSS variable that #wv-grid and every
+// strip read together — they cannot disagree, because there's one number.
+// Also: Auto's budget was fiction. It modelled the strip box as 34% of the
+// board, but my own #tidal-horizon (flex: 0 0 auto — it will NOT shrink)
+// squeezes #wv-strips (flex: 0 1 auto — it will), and the banner rows share
+// that box and were never counted. Auto now measures what's actually left.
+// 0.37.0 — the gesture lock (D101) — a Y: deferred rendering is a
+// thing that didn't exist before. render() is a SNAPSHOT handler, so a drag
+// must DEFER renders, never drop them: skipping would silently discard
+// Katie's live updates. Defer + flush on release, with a 30s safety valve
+// that fails OPEN, because a stuck lock would freeze live sync while looking
+// perfectly healthy — the worst failure this app can have.
+// 0.36.0 — THE CLOCK GRID (D100), layout #3 under Week. Built on D93,
 // NOT D91: a task time is a DUE date, so a task is the block
 // [due - estimate, due] — the runway ENDS at the promise and trails BACKWARD.
 // Only overdue runs forward. Events own [start, end] outright.
@@ -348,7 +364,7 @@ import {
   addProject, addProjectWithStages, deleteProject, updateProject,
   setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js?v=0.11.0";
+} from "./store.js?v=0.11.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -358,7 +374,7 @@ import {
 } from "./queue.js?v=0.16.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.36.0";
+export const APP_VERSION = "0.38.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -616,6 +632,7 @@ function onSignedOut() {
 let lastTickDay = new Date().getDate();
 
 function tick() {
+  if (unstickGesture()) return;   // D101 — a lock that outlives a minute is a bug
   const d = new Date();
   if (d.getDate() !== lastTickDay) {
     lastTickDay = d.getDate();
@@ -669,8 +686,58 @@ function renderFilters() {
 
 // ---------- Rendering ----------
 
+// ============================================================
+// D101 — THE GESTURE LOCK.
+//
+// render() is a Firestore SNAPSHOT HANDLER (subscribeTasks/Projects/... all
+// call it), not just a timer target. So a drag CANNOT simply skip renders:
+// "if (dragging) return" would DISCARD a live update from Katie's phone, not
+// postpone it, and silent-loss in a live-sync accountability app is a worse
+// bug than the one being fixed. It defers and flushes instead.
+//
+// Scope check first: the drags already SURVIVE a mid-drag re-render by
+// design — listeners are on document (D73) and the ghosts are body-level
+// fixed precisely so the minute tick can't hide them (D74). What actually
+// breaks is cosmetic: the .dragging dim resets and the preview snaps. So
+// this is a polish fix with a correctness trap inside it, which is exactly
+// why it gets a real mechanism instead of a one-liner.
+//
+// THE SAFETY VALVE: if a pointerup is ever lost (browser quirk, a tab
+// backgrounded mid-drag, a pointercancel that never lands), a stuck lock
+// would silently freeze live sync FOREVER — the app would look fine and
+// quietly stop being true. That is unacceptable in this app specifically, so
+// tick() force-clears any gesture older than 30s. No real drag lasts 30
+// seconds; a lock that does is a bug, and it fails OPEN.
+// ============================================================
+let gestureDepth = 0, gestureStartedAt = 0, renderPending = false;
+
+function beginGesture() {
+  if (gestureDepth === 0) gestureStartedAt = Date.now();
+  gestureDepth++;
+}
+
+function endGesture() {
+  gestureDepth = Math.max(0, gestureDepth - 1);
+  if (gestureDepth > 0) return;
+  if (renderPending) { renderPending = false; render(); }
+}
+
+/** Called by tick(). Fails OPEN: a stuck lock must never outlive a minute. */
+function unstickGesture() {
+  if (gestureDepth && Date.now() - gestureStartedAt > 30000) {
+    console.warn("[tentacalendar] gesture lock held >30s — releasing. A pointerup was probably lost.");
+    gestureDepth = 0;
+    renderPending = false;
+    render();
+    return true;
+  }
+  return false;
+}
+
 function render() {
   if (!S.user) return;
+  // D101 — defer, never drop. A snapshot that lands mid-drag is real data.
+  if (gestureDepth) { renderPending = true; return; }
   const now = Date.now();
   const q = buildQueue({
     tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
@@ -1768,6 +1835,10 @@ function renderWeek() {
   const grid = $("#wv-grid");
   grid.innerHTML = "";                       // full teardown every render, as
   grid.className = "wv-grid l-" + S.weekLayout;  // it always has — no listeners
+  // D103 — the strips are OUTSIDE #wv-grid, so the layout class has to live
+  // on a shared ancestor or CSS can't reach them.
+  $("#week-view").classList.remove("l-columns", "l-tidal", "l-clock");
+  $("#week-view").classList.add("l-" + S.weekLayout);
                                              // survive it, so there is nothing
                                              // to leak and nothing to unmount.
   const anything = S.weekLayout === "tidal" ? renderWeekTidal(w, now, grid)
@@ -1789,7 +1860,7 @@ function renderWeek() {
  * column for."
  */
 function renderWeekColumns(w, now, grid) {
-  grid.style.gridTemplateColumns = "";   // hand the tracks back to the stylesheet
+  setWeekTracks(null);                   // D103 — plain 7, from the stylesheet
   let anything = 0;
   for (const col of w.days) {
     const c = document.createElement("div");
@@ -1850,9 +1921,9 @@ function renderWeekTidal(w, now, grid) {
   // work on next week"). Cards OFF → past days shrink to a summary and hand
   // their glass to the live days. Cards ON → they get it back. Two controls
   // that compose, the D94.1 split/Auto pattern.
-  grid.style.gridTemplateColumns = w.days
-    .map(col => (col.isPast && !S.weekCards) ? "0.55fr" : "1fr")
-    .join(" ");
+  // D103 — via the shared variable, so the DAY HEADS compress with their
+  // columns. Setting this on #wv-grid alone is what broke the alignment.
+  setWeekTracks(w.days.map(col => (col.isPast && !S.weekCards) ? "0.55fr" : "1fr").join(" "));
   let anything = 0;
   for (const col of w.days) {
     const c = document.createElement("div");
@@ -2079,7 +2150,7 @@ function renderTidalHorizon(w) {
  * the days. The hour labels ride inside the first column instead.
  */
 function renderWeekClock(w, now, grid) {
-  grid.style.gridTemplateColumns = "";
+  setWeekTracks(null);
   const win = weekClockWindow(w.days, { now });
   const span = win.endMin - win.startMin;
   S.clockWin = win;                  // the estimate drag needs the same axis
@@ -2219,6 +2290,7 @@ function wireEstimateDrag(grip, el, b, col, win, span) {
     const endMin = (b.endMs - col.dayStart) / 60000;
     let next = orig;
     el.classList.add("dragging");
+    beginGesture();               // D101 — my own drag had the same exposure
 
     const onMove = e => {
       const dMin = (startY - e.clientY) / pxPerMin;          // up = longer
@@ -2237,10 +2309,34 @@ function wireEstimateDrag(grip, el, b, col, win, span) {
       el.classList.remove("dragging");
       grip.textContent = "";
       if (next !== orig) updateTask(b.it.id, { estimateMinutes: next });
+      endGesture(); // D101
     };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
   });
+}
+
+/**
+ * D103 — the week's column tracks, in ONE place.
+ *
+ * #wv-grid and the three .wv-strip rows (days, banners, projects) MUST use
+ * identical tracks or the heads stop pointing at their days and projectSpans
+ * point at the wrong columns. Before this they were declared separately —
+ * stylesheet for the strips, inline JS for the grid — which is not a shared
+ * number, it's two numbers that happen to agree until one of them doesn't.
+ *
+ * Setting a VARIABLE instead of an inline style also lets the phone rule keep
+ * winning: @media (max-width:900px) forces 3 columns and, being a later rule
+ * of equal specificity, beats the var — where an inline style would have
+ * bulldozed it. The clock opts out of that rule (see the stylesheet): three
+ * rows of three days is three separate time axes, and only the first would
+ * carry hour labels.
+ */
+function setWeekTracks(tracks) {
+  const view = $("#week-view");
+  if (!view) return;
+  if (tracks) view.style.setProperty("--wv-tracks", tracks);
+  else view.style.removeProperty("--wv-tracks");
 }
 
 function setWeekLayout(v) {
@@ -2373,7 +2469,23 @@ function weekBarSize(n) {
   if (S.weekSize !== "auto") return S.weekSize;
   if (!n) return "full";
   const board = $("#week-view").clientHeight || window.innerHeight || 800;
-  const budget = board * (S.weekStripPct / 100);   // D94: Jake owns the split; Auto refits into it
+
+  // D103 — the budget was a MODEL of the strip box (34% of the board) and the
+  // model had drifted from the box. Two leaks:
+  //  · #tidal-horizon is flex:0 0 auto (never shrinks) while #wv-strips is
+  //    flex:0 1 auto (always shrinks) — so the horizon takes its height off
+  //    the top and the strips silently get less than their share.
+  //  · The BANNER rows (SAVY, DnD) live in the same box and were never in n,
+  //    which counts projectSpans only. Predates D97; the horizon just made it
+  //    visible. Banners render BEFORE projects, so by the time we're asked
+  //    they have real layout and can simply be measured.
+  const hz = $("#tidal-horizon");
+  const horizonH = (hz && !hz.hidden) ? hz.offsetHeight : 0;
+  const bn = $("#wv-banners");
+  const bannersH = (bn && !bn.hidden) ? bn.offsetHeight : 0;
+
+  const budget = Math.max(BAR_PX.hair + 5,
+    (board - horizonH) * (S.weekStripPct / 100) - bannersH);   // D94: Jake owns the split; Auto refits into what's LEFT
   for (const k of ["full", "half", "quarter"]) {
     if (n * (BAR_PX[k] + 5) <= budget) return k;
   }
@@ -2666,6 +2778,7 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
     const grabDate = yvDateAt(ev.clientX, ev.clientY, rowMap) ?? s0;
     let moved = false, ns = s0, ne = e0;
     yvDragging = true;
+    beginGesture();               // D101
     const onMove = e => {
       const dx = e.clientX - originX, dy = e.clientY - originY;
       if (!moved && Math.hypot(dx, dy) < 4) return;
@@ -2693,6 +2806,7 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
         commitBarDrag(p, ns, ne);
       }
       renderYear(); // restores label + geometry; the snapshot re-renders saved truth
+      endGesture(); // D101 — LAST: flushes any snapshot that landed mid-drag
     };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", finish);
