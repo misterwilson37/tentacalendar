@@ -1,17 +1,42 @@
 rules_version = '2';
 // ============================================================
 // Tentacalendar — firestore.rules
-// Version 0.1.0
+// Version 0.2.0 (D102)
 // Allowlist security: only the two emails below may touch data.
-// KEEP IN SYNC with ALLOWED_EMAILS in config.js.
+// KEEP IN SYNC with ALLOWED_EMAILS in config.js — and note that the client
+// list is NOT security. It decides who sees a UI; THIS file decides who
+// touches bytes. If the two ever disagree, the symptoms are the two lines in
+// SETUP.md's troubleshooting: "bounced back to the sign-in screen" (client
+// stricter) or "Missing or insufficient permissions" (rules stricter).
+//
+// 0.2.0 changes two things, for one reason each:
+//
+//  · email_verified — THE ACTUAL HOLE. Today only the Google provider is
+//    enabled, so every token's email is Google-vouched and this is a no-op.
+//    But request.auth.token.email is just a CLAIM. The day anyone enables
+//    Email/Password sign-in in the console — a two-click decision that looks
+//    completely unrelated to security — a stranger could register Katie's
+//    address, never verify it, and this file would hand them the workspace.
+//    The lid is one line and closes a trapdoor that opens by accident.
+//    Google sign-in always sets this true, so it locks nobody out today.
+//
+//  · .lower() — belt and braces, NOT a live bug. The claim that Google
+//    returns "unpredictable casing" is not true for @gmail.com accounts: it
+//    returns the canonical lowercase address, and months of Katie writing
+//    daily is the proof. But custom domains carry whatever casing an admin
+//    provisioned, and this app will not always be two gmail accounts (§8.4).
+//    Free insurance, taken while we're already in the file.
+//    NOTE: the literals below MUST stay lowercase or this means nothing.
+//
 // Paste into: Firebase Console → Firestore Database → Rules → Publish
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function isFamily() {
-      return request.auth != null &&
-        request.auth.token.email in [
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
           "jacob.v.wilson@gmail.com",
           "katie.wilson.bynac@gmail.com"
         ];
@@ -20,6 +45,10 @@ service cloud.firestore {
     match /workspaces/{wsId} {
       allow read, write: if isFamily();
 
+      // One level deep, which is exactly the schema: every collection under a
+      // workspace (tasks, tiers, projects, eventsCache, eventMeta, settings)
+      // holds flat docs. If a sub-subcollection is ever added, this stops
+      // covering it and the wildcard must become {path=**}.
       match /{subcollection}/{docId} {
         allow read, write: if isFamily();
       }
