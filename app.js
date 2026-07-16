@@ -1,6 +1,13 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 0.35.1 — dead-space fix (D99). A past column whose items are all
+// Version 0.36.0 — THE CLOCK GRID (D100), layout #3 under Week. Built on D93,
+// NOT D91: a task time is a DUE date, so a task is the block
+// [due - estimate, due] — the runway ENDS at the promise and trails BACKWARD.
+// Only overdue runs forward. Events own [start, end] outright.
+// Dragging a task's TOP edge IS estimating (D93), and that gesture is the
+// point of the layout: "can I fit dinner on Tuesday?" is a question about
+// LENGTH, and until now a task could only ever be a line at a deadline.
+// 0.35.1 — dead-space fix (D99). A past column whose items are all
 // done/moved has an EMPTY .wv-list, and .wv-list is flex:1 — so the empty box
 // claimed the whole column and stranded the cards at the bottom under a field
 // of nothing. The bug only showed on exactly the columns reflection exists
@@ -341,15 +348,17 @@ import {
   addProject, addProjectWithStages, deleteProject, updateProject,
   setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js?v=0.10.0";
+} from "./store.js?v=0.11.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
-  setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION
-} from "./queue.js?v=0.15.0";
+  setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION,
+  clockBlocks, weekClockWindow, taskEstimate,
+  DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES
+} from "./queue.js?v=0.16.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "0.35.1";
+export const APP_VERSION = "0.36.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -376,7 +385,7 @@ const S = {
   weekMode: ["rolling", "sunday", "monday"].includes(localStorage.getItem("tc-wmode")) ? localStorage.getItem("tc-wmode") : "rolling", // D89
   weekOffset: 0,      // D89: whole weeks from the anchor; 0 = the live week
   weekSize: ["auto", "full", "half", "quarter", "hair"].includes(localStorage.getItem("tc-wsize")) ? localStorage.getItem("tc-wsize") : "auto", // D90
-  weekLayout: ["columns", "tidal"].includes(localStorage.getItem("tc-week-layout")) ? localStorage.getItem("tc-week-layout") : "tidal", // D97 — sibling layouts under Week (D90: Gantesque is the LAYOUT, the view stays "Week")
+  weekLayout: ["columns", "tidal", "clock"].includes(localStorage.getItem("tc-week-layout")) ? localStorage.getItem("tc-week-layout") : "tidal", // D97 — sibling layouts under Week (D90: Gantesque is the LAYOUT, the view stays "Week")
   weekCards: localStorage.getItem("tc-wcards") !== "0", // D97 — reflection cards on past days
   weekExpanded: new Set(),   // D91: bars clicked open for a read at compact sizes
   weekStripPct: Math.min(75, Math.max(10, parseFloat(localStorage.getItem("tc-wstrip")) || 34)), // D94
@@ -1493,6 +1502,7 @@ function startTaskEdit(task) {
   $("#task-time").value = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   $("#task-esc-n").value = task.escalation?.every ?? 1;
   $("#task-esc-unit").value = task.escalation?.unit ?? "hours";
+  $("#task-estimate").value = taskEstimate(task) ?? "";   // D100 — blank stays blank
   $("#task-title").focus();
 }
 
@@ -1504,6 +1514,7 @@ function cancelTaskEdit() {
   $("#task-form").reset();
   $("#task-time").value = "09:00";
   $("#task-esc-n").value = 1;
+  $("#task-estimate").value = "";
 }
 
 function onTaskFormSubmit(ev) {
@@ -1516,9 +1527,13 @@ function onTaskFormSubmit(ev) {
   const unit = $("#task-esc-unit").value;
   if (!title || !tierId || !date) return;
   const dueAt = new Date(`${date}T${time}`).getTime();
-  const payload = { title, tierId, dueAt, escalation: { every, unit }, notes: $("#task-notes").value.trim() };
+  // D100 — blank means "she never said". Don't turn silence into a number.
+  const estRaw = $("#task-estimate").value.trim();
+  const estimateMinutes = estRaw === "" ? null
+    : Math.min(MAX_ESTIMATE_MINUTES, Math.max(MIN_ESTIMATE_MINUTES, parseInt(estRaw, 10) || 0)) || null;
+  const payload = { title, tierId, dueAt, escalation: { every, unit }, notes: $("#task-notes").value.trim(), estimateMinutes };
   if (S.editingTaskId) updateTask(S.editingTaskId, payload).then(cancelTaskEdit);
-  else addTask(payload).then(() => { $("#task-title").value = ""; $("#task-notes").value = ""; });
+  else addTask(payload).then(() => { $("#task-title").value = ""; $("#task-notes").value = ""; $("#task-estimate").value = ""; });
 }
 
 // ---------- Project form (create + edit) + weekend interception (D45) ----------
@@ -1741,6 +1756,9 @@ function renderWeek() {
   }
   const cardBtn = $("#wv-cards-toggle");
   cardBtn.classList.toggle("active", S.weekCards);
+  // The clock draws TIME. Reflection is about days whose work no longer has
+  // any — a finished task has no runway — so there's nothing to position.
+  cardBtn.hidden = S.weekLayout === "clock";
   // D98 — reflection is not a Tidal feature. It's the week's feature (5a-bis,
   // decided round 7, owed since). Both layouts get the toggle.
 
@@ -1752,9 +1770,9 @@ function renderWeek() {
   grid.className = "wv-grid l-" + S.weekLayout;  // it always has — no listeners
                                              // survive it, so there is nothing
                                              // to leak and nothing to unmount.
-  const anything = S.weekLayout === "tidal"
-    ? renderWeekTidal(w, now, grid)
-    : renderWeekColumns(w, now, grid);
+  const anything = S.weekLayout === "tidal" ? renderWeekTidal(w, now, grid)
+    : S.weekLayout === "clock" ? renderWeekClock(w, now, grid)
+      : renderWeekColumns(w, now, grid);
 
   renderTidalHorizon(w);
   $("#wv-empty").hidden = anything > 0 || w.projectSpans.length > 0 || w.bannerSpans.length > 0;
@@ -2049,6 +2067,180 @@ function renderTidalHorizon(w) {
     chip.title = `${t.title}\nWaiting on its parent task — it gets a date automatically when the parent is checked off${t.offsetDays != null ? ` (+${t.offsetDays}d)` : ""}.\n\nNot yours to schedule.`;
     box.append(chip);
   }
+}
+
+/**
+ * D100 — THE CLOCK GRID (layout #3). "If an event is scheduled for 6 PM
+ * today, it should show up at 6 PM today" (§5a) — and, per D93, if a task is
+ * DUE at 6 PM it should show up as the hour BEFORE it, not the hour after.
+ *
+ * No gutter column: .wv-strip is a 7-track grid and projectSpans position by
+ * grid-column, so a rail here would knock every strip out of alignment with
+ * the days. The hour labels ride inside the first column instead.
+ */
+function renderWeekClock(w, now, grid) {
+  grid.style.gridTemplateColumns = "";
+  const win = weekClockWindow(w.days, { now });
+  const span = win.endMin - win.startMin;
+  S.clockWin = win;                  // the estimate drag needs the same axis
+  let anything = 0;
+
+  w.days.forEach((col, i) => {
+    const c = document.createElement("div");
+    c.className = "wv-col clock-col" + (col.isToday ? " is-today" : "") + (col.isPast ? " is-past" : "");
+
+    const face = document.createElement("div");
+    face.className = "clock-face";
+
+    // Hour rules across every column; labels only in the first, so the axis
+    // reads once and the other six stay clean.
+    for (let m = win.startMin; m <= win.endMin; m += 60) {
+      const line = document.createElement("div");
+      line.className = "clock-hour" + (m === 720 ? " noon" : "");
+      line.style.top = ((m - win.startMin) / span * 100) + "%";
+      if (i === 0) {
+        const lab = document.createElement("span");
+        lab.className = "clock-hour-label";
+        lab.textContent = fmtTime(new Date(2000, 0, 1, Math.floor(m / 60), m % 60).getTime());
+        line.append(lab);
+      }
+      face.append(line);
+    }
+
+    if (col.isToday) {
+      const mins = (now - col.dayStart) / 60000;
+      if (mins >= win.startMin && mins <= win.endMin) {
+        const nl = document.createElement("div");
+        nl.className = "clock-now";
+        nl.style.top = ((mins - win.startMin) / span * 100) + "%";
+        nl.title = "Now";
+        face.append(nl);
+      }
+    }
+
+    for (const b of clockBlocks({ items: col.items, dayStart: col.dayStart, now })) {
+      face.append(clockBlockEl(b, col, win, span));
+      anything++;
+    }
+    c.append(face);
+    grid.append(c);
+  });
+  return anything;
+}
+
+function clockBlockEl(b, col, win, span) {
+  const el = document.createElement("div");
+  const it = b.it;
+  el.className = "clock-block k-" + b.kind +
+    (b.estimated ? "" : " unestimated") +
+    (b.clippedStart ? " clipped" : "") +
+    (it.expired ? " expired" : "");
+
+  const topMin = (b.startMs - col.dayStart) / 60000;
+  const endMin = (b.endMs - col.dayStart) / 60000;
+  el.style.top = ((topMin - win.startMin) / span * 100) + "%";
+  el.style.height = Math.max(0.7, (endMin - topMin) / span * 100) + "%";
+  el.style.left = (b.lane / b.laneCount * 100) + "%";
+  el.style.width = (100 / b.laneCount) + "%";
+
+  const color = b.kind === "stage" ? (it.projectColor || "#888") : (it.tier?.color || "#4dd0c4");
+  el.style.borderLeftColor = color;
+  el.style.background = hexToRgba(color, it.expired ? 0.28 : 0.16);
+
+  const title = b.kind === "stage" ? it.projectName : it.title;
+  el.innerHTML = '<span class="cb-title">' + esc(title) + '</span>';
+
+  // The RED TAIL: deadline → now. The only thing on this grid that grows.
+  if (b.overdueTo != null) {
+    const tail = document.createElement("div");
+    tail.className = "clock-tail";
+    tail.style.height = ((b.overdueTo - b.endMs) / 60000 / span * 100) + "%";
+    tail.title = "Past due — this is how far it has run over.";
+    el.append(tail);
+  }
+
+  const due = it.originalDue ?? it.time;
+  if (b.kind === "event") {
+    el.title = title + "\n" + fmtTime(it.time) + (it.end ? "–" + fmtTime(it.end) : "") +
+      "\n\n(from Google Calendar — edit it there)";
+    return el;
+  }
+
+  const mins = b.estimateMinutes;
+  el.title = title + (it.expired ? "  ❗MISSED" : "") +
+    "\nDue " + fmtDay(due) + " " + fmtTime(due) +
+    (mins
+      ? "\nEstimated " + humanSpan(mins * 60000) + " — runway " + fmtTime(b.trueStartMs) + " → " + fmtTime(due)
+      : "\nNo estimate — drawn at " + DEFAULT_ESTIMATE_MINUTES + " min (dashed edge).") +
+    (b.clippedStart ? "\n⌃ its runway starts " + fmtTime(b.trueStartMs) + ", the day before" : "") +
+    (b.kind === "task" ? "\n\nDrag the TOP edge to estimate how long it takes.\nClick to reschedule." : "\n\nClick to change this stage's due date.");
+
+  // D93 — dragging the top edge IS estimating. This gesture is the layout's
+  // reason to exist: it turns "when is it due" into "how long is it", which is
+  // the only version of the question a week view can actually answer.
+  if (b.kind === "task") {
+    const grip = document.createElement("div");
+    grip.className = "clock-grip";
+    grip.title = "Drag up for more room, down for less.";
+    wireEstimateDrag(grip, el, b, col, win, span);
+    el.append(grip);
+  }
+
+  el.classList.add("clickable");
+  el.addEventListener("click", ev => {
+    if (el.dataset.dragged === "1") { el.dataset.dragged = ""; return; }
+    if (ev.target.closest(".clock-grip")) return;
+    if (b.kind === "task") openDueDialog({ kind: "task", taskId: it.id }, "Reschedule — " + it.title, due);
+    else openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex },
+      "Hard due date — " + it.title, it.dueAt ?? null);
+  });
+  return el;
+}
+
+/**
+ * D100 — drag the top edge to set estimateMinutes.
+ *
+ * Document-level listeners so a re-render mid-gesture can't orphan the drag
+ * (the minute tick fires every 60s — the D65/D73 lesson, learned the hard way
+ * on the year view). The preview is the block ITSELF resizing: a separate
+ * ghost would be a second, less truthful preview, which is exactly what D77
+ * deleted. The commit is one updateTask; D95 leaves the reschedule count alone
+ * because no dueAt is in the payload.
+ */
+function wireEstimateDrag(grip, el, b, col, win, span) {
+  grip.addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const faceH = el.parentElement.getBoundingClientRect().height;
+    if (!faceH) return;
+    const pxPerMin = faceH / span;
+    const startY = ev.clientY;
+    const orig = b.estimateMinutes ?? DEFAULT_ESTIMATE_MINUTES;
+    const endMin = (b.endMs - col.dayStart) / 60000;
+    let next = orig;
+    el.classList.add("dragging");
+
+    const onMove = e => {
+      const dMin = (startY - e.clientY) / pxPerMin;          // up = longer
+      const raw = Math.min(MAX_ESTIMATE_MINUTES, Math.max(MIN_ESTIMATE_MINUTES, orig + dMin));
+      next = Math.round(raw / 5) * 5;
+      // Re-derive from the SHARED axis, never from the element's own current
+      // pixels — reading back what you just wrote makes the drag drift.
+      el.style.top = (((endMin - next) - win.startMin) / span * 100) + "%";
+      el.style.height = (next / span * 100) + "%";
+      el.dataset.dragged = "1";
+      grip.textContent = humanSpan(next * 60000);
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      el.classList.remove("dragging");
+      grip.textContent = "";
+      if (next !== orig) updateTask(b.it.id, { estimateMinutes: next });
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  });
 }
 
 function setWeekLayout(v) {
