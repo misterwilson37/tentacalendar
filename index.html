@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.32.0 (banner and data-html-version move together, always)
+     Version 0.32.2 (banner and data-html-version move together, always)
+     0.32.2 (D116): ?v= bumps only — app → 1.6.0 (store → 0.15.0 rides
+     inside app.js's import).
+     0.32.1 (D113): the clock dialog inputs become datetime-local — the
+     dialog asks WHEN including the day (all-nighter support).
+     app ?v= → 1.5.0, css ?v= → 0.35.1.
      0.32.0 (D112): the clock — #clock-modal (shared by clock-out and 🕰
      manual log). The card clock rows are JS-built. app ?v= → 1.4.0,
      css ?v= → 0.35.0.
@@ -136,9 +141,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.35.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.35.1">
 </head>
-<body data-html-version="0.32.0">
+<body data-html-version="0.32.2">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -419,8 +424,10 @@
       <div class="modal-card">
         <h3 id="clock-heading">Clock out</h3>
         <p id="clock-sub" class="hint"></p>
-        <label id="clock-start-row" hidden>Started at <input id="clock-start" type="time"></label>
-        <label id="clock-end-row">Ended at <input id="clock-end" type="time"></label>
+        <!-- D113: datetime-local, not time — the dialog ASKS which day.
+             All-nighters and multi-day forgets are one honest field. -->
+        <label id="clock-start-row" hidden>Started at <input id="clock-start" type="datetime-local"></label>
+        <label id="clock-end-row">Ended at <input id="clock-end" type="datetime-local"></label>
         <div class="modal-actions">
           <button id="clock-save" class="primary">Save</button>
           <button id="clock-cancel" class="mini">Cancel</button>
@@ -669,6 +676,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.4.0"></script>
+  <script type="module" src="app.js?v=1.6.0"></script>
 </body>
 </html>
