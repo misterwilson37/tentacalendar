@@ -1,7 +1,8 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.35.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.35.1  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.35.1 (D115): .yv-bar::after — the invisible ±5px tap hitbox.
    0.35.0 (D112): .clock-row/.clock-btn(.running)/.clock-total — the
    billable clock on project cards.
    0.34.1 (D111): .rec-badge — the quiet ↻ on recurring queue rows.
@@ -129,7 +130,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.35.0";
+  --tc-version: "0.35.1";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -638,6 +639,13 @@ body.celebration-wave::after {
 @media (max-width: 1199px) {
   #view-switch button[data-view="dash"] { display: none; }
 }
+
+/* D115 — a 2px hairline is a statement, not a tap target. Every year bar
+   carries an invisible ±5px vertical hitbox so "tap for details" (and the
+   drag grips) are true at every Auto size. Pointer-area only; nothing
+   visual moves. Overlapping lanes: the topmost bar wins the 5px strip —
+   acceptable, and far better than missing entirely. */
+.yv-bar::after { content: ""; position: absolute; left: 0; right: 0; top: -5px; bottom: -5px; }
 
 /* D112 — the clock row on project cards. Visible collapsed (Katie clocks
    dozens of times a day; no chevron tax). The running button glows accent;
