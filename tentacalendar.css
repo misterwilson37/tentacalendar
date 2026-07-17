@@ -1,7 +1,11 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.33.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.35.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.35.0 (D112): .clock-row/.clock-btn(.running)/.clock-total — the
+   billable clock on project cards.
+   0.34.1 (D111): .rec-badge — the quiet ↻ on recurring queue rows.
+   0.34.0 (D109): .st-hurrah — the 🎆 stage toggle, ember/gold.
    0.33.0 (D107): burn-in care — #screen-rest night face (wandering clock,
    near-black not pure #000), body.kiosk-idle chrome dim (opacity-only, no
    layout shift).
@@ -125,7 +129,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.33.0";
+  --tc-version: "0.35.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -633,6 +637,31 @@ body.celebration-wave::after {
    same threshold — CSS and JS agree on the number. */
 @media (max-width: 1199px) {
   #view-switch button[data-view="dash"] { display: none; }
+}
+
+/* D112 — the clock row on project cards. Visible collapsed (Katie clocks
+   dozens of times a day; no chevron tax). The running button glows accent;
+   the Σ is quiet — it's the answer, not the interface. */
+.clock-row { display: flex; align-items: center; gap: .5rem; margin: .25rem 0 .35rem; }
+.clock-btn { padding: .15rem .55rem; }
+.clock-btn.running {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 6px rgba(77, 208, 196, .3);
+  opacity: 1;
+}
+.clock-total { font-size: .78rem; color: var(--ink-dim); cursor: default; }
+
+/* D111 — the ↻ recurrence badge on queue rows. Quiet by design: the row
+   is about the task, the badge just answers "will this come back?" */
+.rec-badge { opacity: .55; font-size: .85em; cursor: default; }
+
+/* D109 — the 🎆 toggle in both stage editors. Dim ember until it's THE
+   one; gold ring when it is. Opacity + shadow only: rows never reflow. */
+.st-hurrah { opacity: .35; filter: grayscale(.6); }
+.st-hurrah:hover { opacity: .8; filter: none; }
+.st-hurrah.active {
+  opacity: 1; filter: none;
+  box-shadow: inset 0 0 0 1px #ffd700, 0 0 6px rgba(255, 215, 0, .35);
 }
 
 /* ---------- D107: burn-in care ---------- */
