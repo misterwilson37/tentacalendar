@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.30.1 (banner and data-html-version move together, always)
+     Version 0.32.0 (banner and data-html-version move together, always)
+     0.32.0 (D112): the clock — #clock-modal (shared by clock-out and 🕰
+     manual log). The card clock rows are JS-built. app ?v= → 1.4.0,
+     css ?v= → 0.35.0.
+     0.31.0 (D111): the Christmas cactus — ↻ recurrence row in the task
+     form (blank = off), harmonized unit ladders in the escalation and
+     follow-up selects (…years, decades, centuries). app ?v= → 1.3.0.
+     0.30.3 (D110): ?v= bump only — app → 1.2.1.
+     0.30.2 (D109): ?v= bumps only — app → 1.2.0, css → 0.34.0. The 🎆
+     rows are JS-built; no markup here changed.
      0.30.1 (D108): #hdr-fullscreen — the dashboard's ⛶, in the header,
      dash-only. app ?v= → 1.1.1.
      0.30.0 (D107): burn-in care — #screen-rest overlay (outside drift-wrap,
@@ -127,9 +136,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.33.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.35.0">
 </head>
-<body data-html-version="0.30.1">
+<body data-html-version="0.32.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -230,6 +239,30 @@
                 <option value="days">days</option>
                 <option value="weeks">weeks</option>
                 <option value="months">months</option>
+                <option value="years">years</option>
+                <option value="decades">decades</option>
+                <option value="centuries">centuries</option>
+              </select>
+            </span>
+          </label>
+          <!-- D111: the Christmas cactus. Blank = not recurring (silence
+               isn't a number, D100). Anchor default = completion. -->
+          <label class="esc-label">↻ Repeats every
+            <span class="esc-inputs">
+              <input id="task-rec-n" type="number" min="1" max="999" placeholder="—">
+              <select id="task-rec-unit">
+                <option value="minutes">minutes</option>
+                <option value="hours">hours</option>
+                <option value="days">days</option>
+                <option value="weeks" selected>weeks</option>
+                <option value="months">months</option>
+                <option value="years">years</option>
+                <option value="decades">decades</option>
+                <option value="centuries">centuries</option>
+              </select>
+              <select id="task-rec-anchor" title="When does the next one count from? 'after completion' = you just watered it, so the clock starts now. 'after scheduled due' = the schedule is the schedule, even if you were late — the next one can be born already overdue, which is honesty, not a bug.">
+                <option value="done" selected>after completion</option>
+                <option value="due">after scheduled due</option>
               </select>
             </span>
           </label>
@@ -380,6 +413,21 @@
       </div>
     </section>
 
+    <!-- D112: the clock dialog — clock-out (editable end + cancel = Jake's
+         "transition time or cancel the click") and 🕰 manual log share it. -->
+    <div id="clock-modal" class="modal-shell" hidden>
+      <div class="modal-card">
+        <h3 id="clock-heading">Clock out</h3>
+        <p id="clock-sub" class="hint"></p>
+        <label id="clock-start-row" hidden>Started at <input id="clock-start" type="time"></label>
+        <label id="clock-end-row">Ended at <input id="clock-end" type="time"></label>
+        <div class="modal-actions">
+          <button id="clock-save" class="primary">Save</button>
+          <button id="clock-cancel" class="mini">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- D82: follow-up create/edit — retires the prompt() pair -->
     <div id="followup-modal" class="modal-shell" hidden>
       <div class="modal-card">
@@ -392,6 +440,10 @@
             <option value="hours">hours</option>
             <option value="days" selected>days</option>
             <option value="weeks">weeks</option>
+            <option value="months">months</option>
+            <option value="years">years</option>
+            <option value="decades">decades</option>
+            <option value="centuries">centuries</option>
           </select>
           after completion</label>
         <div class="modal-actions">
@@ -617,6 +669,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.1.1"></script>
+  <script type="module" src="app.js?v=1.4.0"></script>
 </body>
 </html>
