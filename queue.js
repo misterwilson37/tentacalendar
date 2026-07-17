@@ -1,6 +1,8 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.16.0
+// Version 0.17.0 — D111: nextNag speaks the harmonized unit ladder
+// (months/years/decades/centuries step calendar-correct via addMonths).
+// (prev) Version 0.16.0
 // 0.16.0 (D100): THE CLOCK GRID's geometry — clockBlocks() + weekClockWindow().
 // Built on D93, NOT on D91's diagram, and the difference is the whole point:
 // a task time is a DUE date, so a task's block ENDS at its deadline and its
@@ -76,7 +78,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.16.0";
+export const QUEUE_VERSION = "0.17.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -301,9 +303,15 @@ export function effectiveDue(task, now) {
   if (now <= base) return base;
   const esc = task.escalation || { every: 1, unit: "hours" };
   const every = Math.max(1, esc.every || 1);
-  if (esc.unit === "months") {
+  // D111 — the harmonized unit ladder (Jake: "a century-later follow-up
+  // feels amusing"). Calendar units step via addMonths in month quanta —
+  // months=1, years=12, decades=120, centuries=1200 — so Jan-31 clamps
+  // and leap years behave, exactly as the months branch always did.
+  const MONTH_QUANTA = { months: 1, years: 12, decades: 120, centuries: 1200 };
+  if (MONTH_QUANTA[esc.unit]) {
+    const step = MONTH_QUANTA[esc.unit] * every;
     let t = base, guard = 0;
-    while (t < now && guard < 1200) { t = addMonths(t, every); guard++; }
+    while (t < now && guard < 1200) { t = addMonths(t, step); guard++; }
     return t;
   }
   const stepMs = (UNIT_MS[esc.unit] || UNIT_MS.hours) * every;
