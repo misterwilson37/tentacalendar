@@ -1,5 +1,60 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.4.0 — THE CLOCK (D112) — a Y. Katie's billable-hours paper,
+// replaced. Fixed-price projects billed on assumed hours; the ledger's job
+// is next year's ask. Every project card (Today view AND the dashboard's
+// 🗂 pane — same reparented DOM, zero extra work) wears a clock row that
+// survives collapse: ⏱ Clock in / ⏹ elapsed, a lifetime Σ, and 🕰 manual
+// log. Jake's three sentences, implemented as written: clock-in on B while
+// A runs is a SILENT switch (one batched commit closes A and opens B at
+// the same instant — one open session max, by construction); clock-out
+// opens a dialog with an editable end time (the "actually I stopped at
+// 2:30" guesstimate) and Cancel (the misclick eraser); 🕰 logs a backdated
+// session and truncates an overlapping running timer where it starts.
+// Cross-midnight times mean yesterday; ends clamp to now and to their own
+// starts. The rules wildcard already covers the sessions collection — no
+// console re-paste.
+// ------------------------------------------------------------
+// Version 1.3.0 — THE CHRISTMAS CACTUS (D111) — a Y. Recurring, checkable
+// tasks, exactly as specced in §5c with every decision already captured:
+// a task may carry recurrence {every, unit, anchor}; checking it off lands
+// it in Done-today AND materializes the next occurrence (a full new task,
+// recurrence included — the cactus keeps needing water). Anchor default =
+// completion ("you just watered it → 3 weeks from now"), per-task toggle
+// for schedule-anchored. spawnedNextAt guards against double-planting on
+// re-checks; un-checking leaves the spawn (simplest honest, follow-ups'
+// own words). Escalation still nags the CURRENT instance only. The unit
+// ladder is harmonized everywhere per Jake's aside ("a century-later
+// follow-up feels amusing"): recurrence + escalation get calendar-correct
+// months/years/decades/centuries; follow-up offsets get day-average
+// equivalents. Queue rows wear ↻. Amends D20 narrowly — this is a task
+// that re-plants itself, not a GCal-style engine.
+// ------------------------------------------------------------
+// Version 1.2.1 — TWO D105 WOUNDS (D110) — a Z. (1) Boot with "dash"
+// persisted skipped enterDash(): S.view already read "dash" from
+// localStorage, so the flag-based wasDash was true and the panes never
+// assembled — flags flipped, week-view showed under a lit 🐙. setView now
+// derives assembly from the DOM (dashHomes.length): boot-safe, idempotent,
+// self-healing. (2) renderYear()'s pre-dashboard guard (S.view !== "year")
+// silently refused every repaint of the year PANE — buttons fired, state
+// changed, nothing drew; the pane was a frozen snapshot of the last solo
+// render. Guard now admits "dash". Lesson for the ship-check: verifying
+// the fan-out CALLS renderYear is not verifying the callee AGREES —
+// called ≠ willing. Plus: a divider pointerdown mid-drag no longer
+// double-increments the gesture lock.
+// ------------------------------------------------------------
+// Version 1.2.0 — THE BIG HURRAH GOES WHERE IT BELONGS (D109) — a Y. Katie
+// finished the REAL climax of a project today (publishing) and the app
+// saved the fireworks for the follow-up stage, because "last stage = the
+// end" was a wrong model of what a project's end IS. Stages can now carry
+// 🎆 (one per project, set in either stage editor; radio behavior; carried
+// into next-year duplicates with checkmarks reset — the honor persists).
+// A 🎆 stage completing = full level 3, fireworks + the wave, even with
+// follow-ups open; the actual last stage then gets an ordinary level 2.
+// No 🎆 marked = the old last-stage rule, unchanged. The Duplicate-next-
+// year offer still waits for the WHOLE pipeline (that part really is
+// about being done). Firestore never sees hurrah:false — true or absent.
+// ------------------------------------------------------------
 // Version 1.1.1 — the dashboard's ⛶ (D108) — a Z. Every view carried its
 // own fullscreen button except the one that lives on a TV. The dashboard
 // has no nav row, so the header IS its chrome: #hdr-fullscreen sits by ⚙️,
@@ -408,18 +463,19 @@ import {
   addTask, addFollowUp, setTaskDone, deleteTask, updateTask, rewindFollowUps, taskFirstDue,
   addProject, addProjectWithStages, deleteProject, updateProject,
   setStageDone, setStageDue, setProjectStages,
-  saveTier, deleteTier, saveConfig, saveStageTemplate
-} from "./store.js?v=0.11.1";
+  saveTier, deleteTier, saveConfig, saveStageTemplate,
+  subscribeSessions, clockIn, clockOut, logSession, deleteSession
+} from "./store.js?v=0.14.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION,
   clockBlocks, weekClockWindow, taskEstimate,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES
-} from "./queue.js?v=0.16.0";
+} from "./queue.js?v=0.17.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "1.1.1";
+export const APP_VERSION = "1.4.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -459,6 +515,7 @@ const S = {
   yearLayout: localStorage.getItem("tc-year-layout") || "wall",  // D68/D69: "wall" | "grid" | "timeline"
   yearBarSize: localStorage.getItem("tc-year-barsize") || "auto", // D69: "auto" | "full" | "half" | "quarter"
   lastSuggestedColor: "#4dabf7",
+  sessions: [],            // D112 — billable sessions ledger
   unsubs: []
 };
 
@@ -540,6 +597,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#yv-add-project").addEventListener("click", openYvProjectModal);
   wireDashboard();   // D105 — static chrome, wired once
   wireBurnInCare();  // D107 — ditto
+  $("#clock-save").addEventListener("click", saveClockDialog);            // D112
+  $("#clock-cancel").addEventListener("click", () => { $("#clock-modal").hidden = true; clockMode = null; });
   $("#yv-project-close").addEventListener("click", closeYvProjectModal);
   window.addEventListener("resize", () => {           // D68: timeline resizes with the window
     clearTimeout(yvResizeT);
@@ -662,6 +721,7 @@ function onSignedIn(user) {
   S.unsubs.push(subscribeTasks(t => { S.tasks = t; render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeEvents(e => { S.events = e; render(); }));
   S.unsubs.push(subscribeProjects(p => { S.projects = p; suggestProjectColor(); render(); maybeDecisionTime(); }));
+  S.unsubs.push(subscribeSessions(s => { S.sessions = s; render(); }));   // D112
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
   S.unsubs.push(subscribeConfig(c => {
     S.config = c;
@@ -1071,7 +1131,7 @@ function renderQueue(items, now) {
     ] : [];
     rowScaffold(row, {
       lead, tier: it.tier,
-      mainHTML: `<strong>${stagePrefix}${esc(it.title)}</strong><span class="sub">${sub}</span>`,
+      mainHTML: `<strong>${stagePrefix}${esc(it.title)}</strong>${it.kind === "task" && it.raw?.recurrence ? ` <span class="rec-badge" title="Repeats every ${it.raw.recurrence.every} ${it.raw.recurrence.unit} (${it.raw.recurrence.anchor === "due" ? "from the scheduled due" : "from completion"})">↻</span>` : ""}<span class="sub">${sub}</span>`,
       buttons,
       notes: it.kind === "task" ? (it.raw?.notes || "") : "",
       noteKey: it.kind === "task" ? it.id : null
@@ -1138,6 +1198,74 @@ function persistExpanded() {
   localStorage.setItem("tc-expanded-projects", JSON.stringify([...S.expandedProjects]));
 }
 
+// ---------- D112: the clock (Katie's paper replacement) ----------
+// Fixed-price projects, billed on assumed hours; the ledger answers next
+// year's "do I ask for more?" — so the card shows a running timer and a
+// lifetime Σ, and everything is correctable after the fact.
+function openSessionNow() { return S.sessions.find(s => s.end == null) || null; }
+function projName(id) { return S.projects.find(x => x.id === id)?.name || "another project"; }
+function projectClockedMs(pid, now) {
+  let t = 0;
+  for (const s of S.sessions) if (s.projectId === pid) t += (s.end ?? now) - s.start;
+  return Math.max(0, t);
+}
+function fmtHoursTotal(ms) {
+  const h = ms / 3600000;
+  return h >= 10 ? Math.round(h) + "h" : h >= 1 ? h.toFixed(1) + "h" : Math.round(ms / 60000) + "m";
+}
+function fmtElapsed(ms) {
+  const m = Math.max(0, Math.floor(ms / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
+}
+/** "14:30" as a timestamp today — unless that's in the future relative to
+ *  `ref`, in which case it means yesterday (logging 23:40 at 00:15). */
+function timeToTs(v, ref = Date.now()) {
+  if (!v) return ref;
+  const [h, mm] = v.split(":").map(Number);
+  const d = new Date(ref); d.setHours(h, mm, 0, 0);
+  let ts = d.getTime();
+  if (ts > ref + 60000) ts -= 24 * 3600000;
+  return ts;
+}
+function tsToTimeInput(ts) {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+let clockMode = null;   // {kind:"out", session} | {kind:"log", project}
+function openClockOutDialog(os) {
+  clockMode = { kind: "out", session: os };
+  $("#clock-heading").textContent = `⏹ Clock out — ${projName(os.projectId)}`;
+  $("#clock-sub").textContent = `Running since ${fmtTime(os.start)} (${fmtElapsed(Date.now() - os.start)}). Adjust the time if you actually stopped earlier — or Cancel if this was a misclick.`;
+  $("#clock-start-row").hidden = true;
+  $("#clock-end").value = tsToTimeInput(Date.now());
+  $("#clock-modal").hidden = false;
+  $("#clock-end").focus();
+}
+function openLogDialog(p) {
+  clockMode = { kind: "log", project: p };
+  $("#clock-heading").textContent = `🕰 Log time — ${p.name}`;
+  $("#clock-sub").textContent = "The forgot-to-clock-in eraser. If the running timer overlaps this window, it ends where this starts — honest boundaries.";
+  $("#clock-start-row").hidden = false;
+  $("#clock-start").value = tsToTimeInput(Date.now() - 3600000);
+  $("#clock-end").value = tsToTimeInput(Date.now());
+  $("#clock-modal").hidden = false;
+  $("#clock-start").focus();
+}
+function saveClockDialog() {
+  const now = Date.now();
+  if (clockMode?.kind === "out") {
+    const os = clockMode.session;
+    const end = Math.min(now, Math.max(os.start, timeToTs($("#clock-end").value, now)));
+    clockOut(end);
+  } else if (clockMode?.kind === "log") {
+    const start = timeToTs($("#clock-start").value, now);
+    const end = Math.min(now + 60000, timeToTs($("#clock-end").value, now));
+    if (end > start) logSession(clockMode.project.id, start, end);
+  }
+  $("#clock-modal").hidden = true;
+  clockMode = null;
+}
+
 function renderProjects(now) {
   const box = $("#projects-list");
   box.innerHTML = "";
@@ -1202,6 +1330,36 @@ function projectCard(p) {
     render();
   });
   card.append(head);
+  // D112 — the clock row lives OUTSIDE the expand/collapse: Katie clocks
+  // in and out dozens of times a day; that can't cost a chevron click.
+  {
+    const os = openSessionNow();
+    const runningHere = os && os.projectId === p.id;
+    const clockRow = document.createElement("div");
+    clockRow.className = "clock-row";
+    const cbtn = document.createElement("button");
+    cbtn.className = "mini clock-btn" + (runningHere ? " running" : "");
+    cbtn.textContent = runningHere ? `⏹ ${fmtElapsed(Date.now() - os.start)}` : "⏱ Clock in";
+    cbtn.title = runningHere
+      ? `Clock out — running since ${fmtTime(os.start)}. You'll get to adjust the end time (or cancel a misclick).`
+      : os ? `Clock in — the ${projName(os.projectId)} timer ends at this same moment. One tap, no double-running.`
+           : "Clock in — start the timer for this project";
+    cbtn.addEventListener("click", e => {
+      e.stopPropagation();
+      if (runningHere) openClockOutDialog(os);
+      else clockIn(p.id);          // Jake's letter: the switch is silent — she has 9 of these
+    });
+    const tot = document.createElement("span");
+    tot.className = "clock-total";
+    const ms = projectClockedMs(p.id, Date.now());
+    if (ms > 0) {
+      tot.textContent = `Σ ${fmtHoursTotal(ms)}`;
+      tot.title = `${S.sessions.filter(s => s.projectId === p.id).length} session(s) logged — next year's ask, off the paper`;
+    }
+    const fix = iconBtn("🕰", "Log time by hand — forgot to clock in? Pick start and end; an overlapping running timer gets truncated where this starts.", () => openLogDialog(p));
+    clockRow.append(cbtn, tot, fix);
+    card.append(clockRow);
+  }
 
   const wl = p.workload === 3 ? " · heavy" : p.workload === 1 ? " · light" : "";
   const dates = document.createElement("div");
@@ -1270,7 +1428,15 @@ function projectCard(p) {
 async function onStageToggle(projectId, stageIndex, done, ev) {
   const result = await setStageDone(projectId, stageIndex, done);
   if (done && result) {
-    celebrate(result.allDone ? 3 : 2, clickPoint(ev));
+    // D109 — the big hurrah belongs to the stage Katie says it does.
+    // Publishing is the party; follow-up is paperwork. A 🎆-marked stage
+    // gets level 3 the moment IT completes; the true last stage then gets
+    // an ordinary level 2 (the party already happened). A project with no
+    // 🎆 anywhere keeps the old rule: finishing everything = level 3.
+    const level = result.hurrah ? 3
+      : (result.allDone && !result.projectHasHurrah) ? 3
+      : 2;
+    celebrate(level, clickPoint(ev));
     // D59: once the fireworks land, offer next year's run.
     if (result.allDone) {
       const p = S.projects.find(x => x.id === projectId);
@@ -1508,6 +1674,7 @@ function projStageRow(st, origIndex, isNew) {
     <input class="st-name" type="text" value="${esc(st.name || "")}" placeholder="Stage name">
     ${timingSelects(st)}
     <span class="st-flags">${st.completedAt ? "✓" : ""}${st.dueAt ? " ⏰" : ""}</span>
+    <button type="button" class="st-hurrah${st.hurrah ? " active" : ""}" title="The big hurrah 🎆 — the full fireworks land when THIS stage completes, even if follow-ups remain. One per project; if none is marked, finishing the last stage keeps the honor.">🎆</button>
     <button type="button" class="st-del" title="Remove stage from this project">✕</button>`;
   wireTmplRow(row, box);
   box.append(row);
@@ -1525,7 +1692,8 @@ function stagesSave() {
         anchor: row.querySelector(".st-anchor").value,
         offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
         completedAt: null,
-        dueAt: null
+        dueAt: null,
+        ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})  // D109: checkmarks reset, the honor doesn't
       }));
       $("#dup-text").textContent = $("#dup-text").textContent.replace(/The \d+-stage pipeline/, `The ${S.dupTarget.stages.length}-stage pipeline`);
     }
@@ -1547,7 +1715,8 @@ function stagesSave() {
       anchor: row.querySelector(".st-anchor").value,
       offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
       completedAt: carried.completedAt ?? null,
-      dueAt: carried.dueAt ?? null
+      dueAt: carried.dueAt ?? null,
+      ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})  // D109: the editor OWNS this flag (button state, not carried)
     };
   });
   setProjectStages(S.stagesTarget, stages);
@@ -1687,6 +1856,9 @@ function startTaskEdit(task) {
   $("#task-esc-n").value = task.escalation?.every ?? 1;
   $("#task-esc-unit").value = task.escalation?.unit ?? "hours";
   $("#task-estimate").value = taskEstimate(task) ?? "";   // D100 — blank stays blank
+  $("#task-rec-n").value = task.recurrence?.every ?? "";               // D111 — blank stays blank here too
+  $("#task-rec-unit").value = task.recurrence?.unit ?? "weeks";
+  $("#task-rec-anchor").value = task.recurrence?.anchor ?? "done";
   $("#task-title").focus();
 }
 
@@ -1715,7 +1887,12 @@ function onTaskFormSubmit(ev) {
   const estRaw = $("#task-estimate").value.trim();
   const estimateMinutes = estRaw === "" ? null
     : Math.min(MAX_ESTIMATE_MINUTES, Math.max(MIN_ESTIMATE_MINUTES, parseInt(estRaw, 10) || 0)) || null;
-  const payload = { title, tierId, dueAt, escalation: { every, unit }, notes: $("#task-notes").value.trim(), estimateMinutes };
+  // D111 — blank repeat-N means "not recurring". Silence isn't a number.
+  const recN = parseInt($("#task-rec-n").value, 10);
+  const recurrence = recN >= 1
+    ? { every: Math.min(999, recN), unit: $("#task-rec-unit").value, anchor: $("#task-rec-anchor").value }
+    : null;
+  const payload = { title, tierId, dueAt, escalation: { every, unit }, notes: $("#task-notes").value.trim(), estimateMinutes, recurrence };
   if (S.editingTaskId) updateTask(S.editingTaskId, payload).then(cancelTaskEdit);
   else addTask(payload).then(() => { $("#task-title").value = ""; $("#task-notes").value = ""; $("#task-estimate").value = ""; });
 }
@@ -1873,10 +2050,15 @@ function setView(v) {
   // wakes up narrow falls back to Today rather than rendering a postage-
   // stamp kiosk. 1200 matches the CSS that hides the button.
   if (v === "dash" && window.innerWidth < 1200) v = "day";
-  const wasDash = S.view === "dash";
+  // D110 — assembly state comes from the DOM (dashHomes), NOT from S.view.
+  // At boot S.view is ALREADY "dash" from localStorage, so a flag-based
+  // wasDash skipped enterDash(): flags flipped, panes stayed empty, and
+  // the unhidden week-view (first in flow) showed under a lit 🐙 button.
+  // Measurement beats model — the codebase's own maxim, applied to itself.
+  const assembled = dashHomes.length > 0;
   S.view = v;
   localStorage.setItem("tc-view", v);
-  if (wasDash && v !== "dash") exitDash();   // every panel goes HOME before the flags flip
+  if (assembled && v !== "dash") exitDash();   // every panel goes HOME before the flags flip
   $("main").hidden = v !== "day";            // D35's [hidden]!important beats main's display:grid
   $("#week-view").hidden = v !== "week" && v !== "dash";     // D88 · D105: visible inside its pane
   $("#year-view").hidden = v !== "year" && v !== "dash";
@@ -1885,7 +2067,7 @@ function setView(v) {
   for (const b of document.querySelectorAll("#view-switch button")) {
     b.classList.toggle("active", b.dataset.view === v);   // D89
   }
-  if (v === "dash" && !wasDash) enterDash();
+  if (v === "dash" && !assembled) enterDash();   // D110: idempotent by construction
   if (v === "year") renderYear();
   if (v === "week") renderWeek();
   if (v === "dash") render();   // render()'s tail fans out to the week and the year
@@ -1970,6 +2152,7 @@ function wireDashboard() {
   function wireSplit(bar, axis) {
     let dragging = false;
     bar.addEventListener("pointerdown", e => {
+      if (dragging) return;   // D110: a second pointer mid-drag must not double beginGesture (stop() only ends once)
       dragging = true; bar.setPointerCapture(e.pointerId); bar.classList.add("dragging");
       beginGesture();   // D101
       e.preventDefault();
@@ -3358,7 +3541,11 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
 }
 
 function renderYear() {
-  if (S.view !== "year" || !S.user) return;
+  // D110 — this guard predates the dashboard and silently refused to
+  // repaint the year PANE: buttons fired, state changed, nothing drew,
+  // and the pane sat there as a frozen snapshot of the last solo render.
+  // (renderWeek never had a view guard, which is why the week pane lived.)
+  if ((S.view !== "year" && S.view !== "dash") || !S.user) return;
   const grid = $("#yv-grid");
   grid.innerHTML = "";
   const now = Date.now();
@@ -3679,7 +3866,12 @@ function splitOffset(days) {
   return { n: Math.max(1, m), unit: "minutes" };
 }
 
-const OFFSET_UNIT_DAYS = { minutes: 1 / 1440, hours: 1 / 24, days: 1, weeks: 7 };
+// D111 — harmonized ladder. Follow-ups store offsetDays, so the calendar
+// units are day-averages here (30.44 / 365.25 / ×10 / ×100) — a follow-up
+// a century out can tolerate leap drift ("amusing" was the design goal).
+// Recurrence, which owns real schedules, uses calendar-correct addInterval
+// in store.js instead.
+const OFFSET_UNIT_DAYS = { minutes: 1 / 1440, hours: 1 / 24, days: 1, weeks: 7, months: 30.44, years: 365.25, decades: 3652.5, centuries: 36525 };
 let fuTarget = null; // {mode:"create", item} | {mode:"edit", task}
 
 function openFollowUpModal(target) {
@@ -3839,6 +4031,14 @@ function wireTmplRow(row, box) {
     if (row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
   });
   row.querySelector(".st-del").addEventListener("click", () => row.remove());
+  // D109 — 🎆 is a radio across the editor: marking one un-marks the rest;
+  // clicking the marked one clears it (back to last-stage-wins default).
+  const hb = row.querySelector(".st-hurrah");
+  if (hb) hb.addEventListener("click", () => {
+    const was = hb.classList.contains("active");
+    box.querySelectorAll(".st-hurrah").forEach(b => b.classList.remove("active"));
+    if (!was) hb.classList.add("active");
+  });
 }
 
 function stageTemplateRow(st, isNew) {
@@ -3849,6 +4049,7 @@ function stageTemplateRow(st, isNew) {
     <span class="st-move"><button class="st-up" title="Move up">▲</button><button class="st-down" title="Move down">▼</button></span>
     <input class="st-name" type="text" value="${esc(st.name || "")}" placeholder="Stage name">
     ${timingSelects(st)}
+    <button class="st-hurrah${st.hurrah ? " active" : ""}" title="The big hurrah 🎆 — every project built from this template celebrates big when THIS stage completes. One per template.">🎆</button>
     <button class="st-del" title="Remove stage">✕</button>`;
   wireTmplRow(row, box);
   box.append(row);
@@ -3896,7 +4097,8 @@ function onSaveSettings() {
     name: row.querySelector(".st-name").value.trim() || "Untitled stage",
     direction: row.querySelector(".st-dir").value,
     anchor: row.querySelector(".st-anchor").value,
-    offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0)
+    offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
+    ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})  // D109
   }));
   saveStageTemplate(stages);
   closeSettings();
