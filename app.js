@@ -1,5 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.7.0 — THE YEAR EXPANDS ON CLICK (D117, a Y) + the clock slims
+// down (D119) + three modals escape drift-wrap (D118). D117: Jake's actual
+// ask, decoded — the hover title was always fine; he wanted the WEEK
+// strip's answer in the year: click a tight bar → it opens to readable
+// height WITH its name (several at once, unlike hover), click again →
+// back. Same session-only Set discipline as weekExpanded, cleared on size
+// change; D115's click-popover AND its ±5px hitbox are retired at Jake's
+// call ("I can see how those overlapping fields would complicate things").
+// D118: clock/followup/yv-project modals lived INSIDE #drift-wrap, whose
+// transform re-roots position:fixed to the PAGE box — scrolled down, a
+// "centered" modal floated above the viewport (Jake's clock-out bug).
+// They join the other six outside, where D37's rule always said overlays
+// live. D119: the clock controls ride the dates/weight line now — ⏱ in /
+// ⏹ elapsed, Σ, 🕰 — a whole row of vertical space returned to the cards.
+// ------------------------------------------------------------
 // Version 1.6.0 — UNDO EVERYWHERE IT'S WELL-DEFINED, PLUS REDO (D116) — a Y.
 // Jake: "undo is always good, as is redo." Two stacks now; every entry
 // carries both directions, captured at commit time; Ctrl/Cmd-Z undoes,
@@ -501,7 +516,7 @@ import {
 } from "./queue.js?v=0.17.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "1.6.0";
+export const APP_VERSION = "1.7.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -534,6 +549,7 @@ const S = {
   weekLayout: ["columns", "tidal", "clock"].includes(localStorage.getItem("tc-week-layout")) ? localStorage.getItem("tc-week-layout") : "tidal", // D97 — sibling layouts under Week (D90: Gantesque is the LAYOUT, the view stays "Week")
   weekCards: localStorage.getItem("tc-wcards") !== "0", // D97 — reflection cards on past days
   weekExpanded: new Set(),   // D91: bars clicked open for a read at compact sizes
+  yearExpanded: new Set(),   // D117: the same answer for the year — session-only, cleared on size change
   weekStripPct: Math.min(75, Math.max(10, parseFloat(localStorage.getItem("tc-wstrip")) || 34)), // D94
   yearMode: localStorage.getItem("tc-year-mode") || "calendar",        // D31 anchor mode
   yearOffset: 0,           // months shifted from the mode's anchor (±12 per arrow)
@@ -615,6 +631,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#yv-sizes").querySelectorAll("button").forEach(b =>
     b.addEventListener("click", () => {
       S.yearBarSize = b.dataset.size;
+      S.yearExpanded.clear();   // D117: a size change re-answers the question the expand asked (week's own words)
       localStorage.setItem("tc-year-barsize", S.yearBarSize);
       renderYear();
     }));
@@ -1413,16 +1430,20 @@ function projectCard(p) {
     render();
   });
   card.append(head);
-  // D112 — the clock row lives OUTSIDE the expand/collapse: Katie clocks
-  // in and out dozens of times a day; that can't cost a chevron click.
+  const wl = p.workload === 3 ? " · heavy" : p.workload === 1 ? " · light" : "";
+  const dates = document.createElement("div");
+  dates.className = "project-dates sub";
+  dates.append(document.createTextNode(
+    `${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}${wl}` +
+    (p.completedAt ? ` · finished ${fmtDay(p.completedAt)}` : "")));
   {
+    // D119 — Jake: the clock row "adds a ton of vertical space." The
+    // controls now ride the dates/weight line: icon + in/out, no "Clock".
     const os = openSessionNow();
     const runningHere = os && os.projectId === p.id;
-    const clockRow = document.createElement("div");
-    clockRow.className = "clock-row";
     const cbtn = document.createElement("button");
     cbtn.className = "mini clock-btn" + (runningHere ? " running" : "");
-    cbtn.textContent = runningHere ? `⏹ ${fmtElapsed(Date.now() - os.start)}` : "⏱ Clock in";
+    cbtn.textContent = runningHere ? `⏹ ${fmtElapsed(Date.now() - os.start)}` : "⏱ in";
     cbtn.title = runningHere
       ? `Clock out — running since ${fmtTime(os.start)}. You'll get to adjust the end time (or cancel a misclick).`
       : os ? `Clock in — the ${projName(os.projectId)} timer ends at this same moment. One tap, no double-running.`
@@ -1444,15 +1465,8 @@ function projectCard(p) {
       tot.title = `${S.sessions.filter(s => s.projectId === p.id).length} session(s) logged — next year's ask, off the paper`;
     }
     const fix = iconBtn("🕰", "Log time by hand — forgot to clock in? Pick start and end; an overlapping running timer gets truncated where this starts.", () => openLogDialog(p));
-    clockRow.append(cbtn, tot, fix);
-    card.append(clockRow);
+    dates.append(cbtn, tot, fix);
   }
-
-  const wl = p.workload === 3 ? " · heavy" : p.workload === 1 ? " · light" : "";
-  const dates = document.createElement("div");
-  dates.className = "project-dates sub";
-  dates.textContent = `${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}${wl}` +
-    (p.completedAt ? ` · finished ${fmtDay(p.completedAt)}` : "");
   card.append(dates);
 
   const barWrap = document.createElement("div");
@@ -3317,17 +3331,10 @@ function yvDetails(p, prog) {
   return out;
 }
 
-let yvPopBar = null;   // D115 — which bar owns the open popover
-function yvShowDetails(bar, p) {
-  const pop = $("#popover");
-  if (!pop.hidden && yvPopBar === bar) { pop.hidden = true; yvPopBar = null; return; }   // D115: second tap collapses
-  yvPopBar = bar;
-  pop.textContent = yvDetails(p, projectProgress(p));
-  pop.hidden = false;
-  const r = bar.getBoundingClientRect();
-  pop.style.top = `${r.bottom + 6}px`;
-  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8))}px`;
-}
+// (D115's click-popover lived here; retired by D117 — the hover title
+// carries the details, the click now expands. yvDetails survives as the
+// tooltip and legend text.)
+
 
 /** Commit a drag: snap to the tier's working days exactly like the
  *  form save does (start forward, end back, order-guarded — D59/D60). */
@@ -3459,9 +3466,16 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
     document.addEventListener("pointercancel", finish);
   });
   bar.addEventListener("click", ev => {
-    ev.stopPropagation(); // keep the global popover-closer out of it
+    ev.stopPropagation();
     if (yvTapSquelch || yvDragging) return;
-    yvShowDetails(bar, p);
+    // D117 — the week's answer, transplanted (Jake: "expand like it does in
+    // the week view so that I can see multiple projects at once even when
+    // it's tight — I can only hover over one line at a time"). Click
+    // toggles this bar open at readable height with its name; hover keeps
+    // the details tooltip; the D115 click-popover is retired with it.
+    if (S.yearExpanded.has(p.id)) S.yearExpanded.delete(p.id);
+    else S.yearExpanded.add(p.id);
+    renderYear();
   });
 }
 
@@ -3655,15 +3669,18 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
         bar.style.left = `${((g.segS - wk.ws) / span) * 100}%`;
         bar.style.width = `${((g.segE - g.segS) / span) * 100}%`;
         bar.style.top = `${g.lane * GL}px`;
-        bar.style.height = `${GB}px`;
-        bar.style.setProperty("--bar-r", GB >= 14 ? "5px" : GB >= 5 ? "3px" : "2px");
-        if (GB <= 4) bar.classList.add("thin");             // D70: hairlines drop the border
+        const yvExp = S.yearExpanded.has(g.p.id);           // D117
+        const gbH = yvExp ? Math.max(GB, 18) : GB;
+        if (yvExp) bar.classList.add("forced-full");
+        bar.style.height = `${gbH}px`;
+        bar.style.setProperty("--bar-r", gbH >= 14 ? "5px" : gbH >= 5 ? "3px" : "2px");
+        if (gbH <= 4) bar.classList.add("thin");            // D70: hairlines drop the border
         const prog = projectProgress(g.p);
         const fillT = g.ps + prog.pct * (g.pe - g.ps);
         const fillPct = Math.max(0, Math.min(1, (fillT - g.segS) / (g.segE - g.segS))) * 100;
         const col = g.p.color || "#4dd0c4";
         bar.style.background = `linear-gradient(90deg, ${hexToRgba(col, 0.95)} ${fillPct}%, ${hexToRgba(col, 0.28)} ${fillPct}%)`;
-        if (gLabels && (g.segE - g.segS) >= 3 * DAY_MS) {
+        if ((gLabels && (g.segE - g.segS) >= 3 * DAY_MS) || yvExp) {   // D117: expanded bars ALWAYS get their name
           const lbl = document.createElement("span");
           lbl.className = "yv-bar-label";
           lbl.textContent = g.p.name;
@@ -3877,8 +3894,11 @@ function renderYear() {
       bar.style.left = `${((segS - rs) / span) * 100}%`;
       bar.style.width = `${((segE - segS) / span) * 100}%`;
       bar.style.top = `${laneOf.get(p.id) * LANE_H + 2}px`;
-      bar.style.height = `${BAR_H}px`;
-      bar.style.setProperty("--bar-r", BAR_H >= 16 ? "6px" : "3px");
+      const yvExpT = S.yearExpanded.has(p.id);              // D117
+      const tlH = yvExpT ? Math.max(BAR_H, 18) : BAR_H;
+      if (yvExpT) bar.classList.add("forced-full");
+      bar.style.height = `${tlH}px`;
+      bar.style.setProperty("--bar-r", tlH >= 16 ? "6px" : "3px");
 
       // D30a: pale ghost of the project color, saturating left-to-right
       // by pipeline % — computed against the WHOLE bar, clipped to this
@@ -3889,7 +3909,7 @@ function renderYear() {
       const c = p.color || "#4dd0c4";
       bar.style.background = `linear-gradient(90deg, ${hexToRgba(c, 0.95)} ${fillPct}%, ${hexToRgba(c, 0.28)} ${fillPct}%)`;
 
-      if (showLabels) { // thin bars speak through hover/tap/legend (D66)
+      if (showLabels || yvExpT) { // thin bars speak through hover/tap/legend (D66) — D117: expanded bars ALWAYS get their name
         const lbl = document.createElement("span");
         lbl.className = "yv-bar-label";
         lbl.textContent = p.name;
