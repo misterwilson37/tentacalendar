@@ -1,7 +1,11 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.32.2 (banner and data-html-version move together, always)
+     Version 0.32.3 (banner and data-html-version move together, always)
+     0.32.3 (D118): clock/followup/yv-project modals relocated OUTSIDE
+     #drift-wrap — its transform re-rooted their fixed centering to the
+     page, so scrolled-down users got off-screen modals.
+     app ?v= → 1.7.0, css ?v= → 0.36.0.
      0.32.2 (D116): ?v= bumps only — app → 1.6.0 (store → 0.15.0 rides
      inside app.js's import).
      0.32.1 (D113): the clock dialog inputs become datetime-local — the
@@ -141,9 +145,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.35.1">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.36.0">
 </head>
-<body data-html-version="0.32.2">
+<body data-html-version="0.32.3">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -418,63 +422,12 @@
       </div>
     </section>
 
-    <!-- D112: the clock dialog — clock-out (editable end + cancel = Jake's
-         "transition time or cancel the click") and 🕰 manual log share it. -->
-    <div id="clock-modal" class="modal-shell" hidden>
-      <div class="modal-card">
-        <h3 id="clock-heading">Clock out</h3>
-        <p id="clock-sub" class="hint"></p>
-        <!-- D113: datetime-local, not time — the dialog ASKS which day.
-             All-nighters and multi-day forgets are one honest field. -->
-        <label id="clock-start-row" hidden>Started at <input id="clock-start" type="datetime-local"></label>
-        <label id="clock-end-row">Ended at <input id="clock-end" type="datetime-local"></label>
-        <div class="modal-actions">
-          <button id="clock-save" class="primary">Save</button>
-          <button id="clock-cancel" class="mini">Cancel</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- D82: follow-up create/edit — retires the prompt() pair -->
-    <div id="followup-modal" class="modal-shell" hidden>
-      <div class="modal-card">
-        <h3 id="fu-heading">Follow-up</h3>
-        <label>Title <input id="fu-title" type="text"></label>
-        <label>Materializes
-          <input id="fu-n" type="number" min="1" step="1" value="3" style="width:4.5rem">
-          <select id="fu-unit">
-            <option value="minutes">minutes</option>
-            <option value="hours">hours</option>
-            <option value="days" selected>days</option>
-            <option value="weeks">weeks</option>
-            <option value="months">months</option>
-            <option value="years">years</option>
-            <option value="decades">decades</option>
-            <option value="centuries">centuries</option>
-          </select>
-          after completion</label>
-        <div class="modal-actions">
-          <button id="fu-save" class="primary">Save</button>
-          <button id="fu-cancel">Cancel</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- D78: phone-only, in words, at the very bottom — where a
-         logout belongs on a device you rarely log out of. -->
-    <button id="signout-bottom">Log out</button>
-
-    <!-- D68: the REAL project form is reparented in here from the form
-         panel while this is open — listeners, color assistant, and the
-         working-day interception all come along for free. -->
-    <div id="yv-project-modal" class="modal-shell" hidden>
-      <div class="modal-card yv-project-card">
-        <button id="yv-project-close" class="icon-btn yv-modal-close" title="Close">✕</button>
-        <div id="yv-project-slot"></div>
-      </div>
-    </div>
-  </div>
-
+    <!-- D118: the clock/followup/yv-project modals used to live HERE,
+         inside #drift-wrap — whose transform re-roots position:fixed to
+         the page box, so a "centered" modal floated above the viewport
+         when scrolled (Jake's clock-out bug). They now live with the
+         other six modals below, outside the wrap, where D37's rule
+         always said overlays belong. -->
   </div><!-- /drift-wrap -->
 
   <!-- D107: the screen rest — OUTSIDE #drift-wrap on purpose (D37's rule:
@@ -563,6 +516,65 @@
   </div>
 
   <!-- ============ DUE-DATE DIALOG ============ -->
+  <!-- D118: relocated from inside #drift-wrap (see the note there). -->
+    <!-- D112: the clock dialog — clock-out (editable end + cancel = Jake's
+       "transition time or cancel the click") and 🕰 manual log share it. -->
+  <div id="clock-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <h3 id="clock-heading">Clock out</h3>
+      <p id="clock-sub" class="hint"></p>
+      <!-- D113: datetime-local, not time — the dialog ASKS which day.
+           All-nighters and multi-day forgets are one honest field. -->
+      <label id="clock-start-row" hidden>Started at <input id="clock-start" type="datetime-local"></label>
+      <label id="clock-end-row">Ended at <input id="clock-end" type="datetime-local"></label>
+      <div class="modal-actions">
+        <button id="clock-save" class="primary">Save</button>
+        <button id="clock-cancel" class="mini">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- D82: follow-up create/edit — retires the prompt() pair -->
+  <div id="followup-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <h3 id="fu-heading">Follow-up</h3>
+      <label>Title <input id="fu-title" type="text"></label>
+      <label>Materializes
+        <input id="fu-n" type="number" min="1" step="1" value="3" style="width:4.5rem">
+        <select id="fu-unit">
+          <option value="minutes">minutes</option>
+          <option value="hours">hours</option>
+          <option value="days" selected>days</option>
+          <option value="weeks">weeks</option>
+          <option value="months">months</option>
+          <option value="years">years</option>
+          <option value="decades">decades</option>
+          <option value="centuries">centuries</option>
+        </select>
+        after completion</label>
+      <div class="modal-actions">
+        <button id="fu-save" class="primary">Save</button>
+        <button id="fu-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- D78: phone-only, in words, at the very bottom — where a
+       logout belongs on a device you rarely log out of. -->
+  <button id="signout-bottom">Log out</button>
+
+  <!-- D68: the REAL project form is reparented in here from the form
+       panel while this is open — listeners, color assistant, and the
+       working-day interception all come along for free. -->
+  <div id="yv-project-modal" class="modal-shell" hidden>
+    <div class="modal-card yv-project-card">
+      <button id="yv-project-close" class="icon-btn yv-modal-close" title="Close">✕</button>
+    <div id="yv-project-slot"></div>
+    </div>
+  </div>
+  </div>
+
+
   <div id="due-modal" class="modal-shell" hidden>
     <div class="modal-card modal-sm">
       <h3 id="due-title">Hard due date</h3>
@@ -676,6 +688,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.6.0"></script>
+  <script type="module" src="app.js?v=1.7.0"></script>
 </body>
 </html>
