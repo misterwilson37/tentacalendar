@@ -1,6 +1,16 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.11.1
+// Version 0.14.0 — D112: billable sessions (clockIn/clockOut/logSession/
+// deleteSession + subscribeSessions). One open session max, enforced by
+// the clockIn batch. The rules wildcard already covers the collection.
+// (prev) Version 0.13.0
+// Task schema gains recurrence {every, unit, anchor} + spawnedNextAt;
+// setTaskDone materializes the next occurrence once, spawn-guarded;
+// addInterval does the calendar-correct stepping.
+// (prev) Version 0.12.0
+// climax). setStageDone now reports hurrah + projectHasHurrah so the UI can
+// aim the big celebration at the stage Katie says it belongs to.
+// (prev) Version 0.11.1
 // 0.11.1 (D102): the sign-in allowlist compares LOWERCASE, matching
 // firestore.rules 0.2.0's .lower(). This list is NOT security — the rules
 // are — but if the two disagree the app breaks in a way that looks like a
@@ -50,7 +60,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.11.1";
+export const STORE_VERSION = "0.14.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -179,11 +189,13 @@ export function subscribeConfig(cb) {
 
 // ---------- Task CRUD ----------
 
-export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null, estimateMinutes = null }) {
+export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null, estimateMinutes = null, recurrence = null }) {
   return addDoc(col("tasks"), {
     title, tierId, dueAt, escalation, notes,
     projectId,
     estimateMinutes,          // D100 — null = unestimated, NOT zero
+    recurrence,               // D111 — {every, unit, anchor:"done"|"due"} or null; the Christmas cactus
+    spawnedNextAt: null,      // D111 — set once the next occurrence exists; makes re-checks spawn-safe
 
     completedAt: null,
     parentTaskId: null,
@@ -230,6 +242,64 @@ export async function setTaskDone(taskId, done) {
     }
   });
   if (any) await batch.commit();
+
+  // D111 — the Christmas cactus. A checked-off recurring task materializes
+  // its NEXT occurrence: a brand-new independent task (same title, tier,
+  // escalation, notes, project, estimate — and the recurrence itself; the
+  // cactus keeps needing water). Anchor "done" (the default) = you just
+  // watered it, so the interval starts NOW; anchor "due" = the schedule is
+  // the schedule, interval starts from the printed due time (which can
+  // land the next one already overdue — that's honesty, not a bug).
+  // spawnedNextAt is the double-spawn guard: check → spawn → un-check →
+  // re-check must NOT plant a second cactus. Un-checking does NOT delete
+  // the spawn — simplest honest behavior, same words as follow-ups above;
+  // revisit if it ever bites. Escalation (D3) is untouched: it nags THIS
+  // instance; recurrence only sets the next one's due.
+  const snap = await getDoc(doc(col("tasks"), taskId));
+  const t = snap.exists() ? snap.data() : null;
+  if (t?.recurrence?.every && !t.spawnedNextAt) {
+    const r = t.recurrence;
+    const base = (r.anchor === "due" && t.dueAt != null) ? t.dueAt : now;
+    await addDoc(col("tasks"), {
+      title: t.title, tierId: t.tierId,
+      dueAt: addInterval(base, r.every, r.unit),
+      escalation: t.escalation || { every: 1, unit: "hours" },
+      notes: t.notes || "",
+      projectId: t.projectId ?? null,
+      estimateMinutes: t.estimateMinutes ?? null,
+      recurrence: r,
+      spawnedNextAt: null,
+      completedAt: null, parentTaskId: null, offsetDays: null,
+      mirroredGcalEventId: null,
+      createdBy: auth.currentUser?.email || "recurrence",
+      createdAt: now
+    });
+    await updateDoc(doc(col("tasks"), taskId), { spawnedNextAt: now });
+  }
+}
+
+// D111 — interval math for recurrence. Fixed units are plain milliseconds;
+// calendar units step via addMonthsStore in month quanta (months=1,
+// years=12, decades=120, centuries=1200) so Jan-31 + 1 month = Feb-28/29,
+// never Mar-3. addMonthsStore is a VERBATIM copy of queue.js's addMonths —
+// duplicated on purpose to keep this module free of app-layer imports; the
+// ship-check asserts the two bodies are character-identical (D98's parity
+// answer, mechanized).
+const REC_FIXED_MS = { minutes: 60000, hours: 3600000, days: 86400000, weeks: 7 * 86400000 };
+const REC_MONTH_QUANTA = { months: 1, years: 12, decades: 120, centuries: 1200 };
+function addMonthsStore(ts, n) {
+  const d = new Date(ts);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, maxDay));
+  return d.getTime();
+}
+export function addInterval(ts, every, unit) {
+  const e = Math.max(1, every || 1);
+  if (REC_MONTH_QUANTA[unit]) return addMonthsStore(ts, REC_MONTH_QUANTA[unit] * e);
+  return ts + (REC_FIXED_MS[unit] || REC_FIXED_MS.days) * e;
 }
 
 /**
@@ -303,6 +373,60 @@ export async function updateTask(taskId, fields) {
 export function taskFirstDue(t) { return t?.firstDueAt ?? t?.dueAt ?? null; }
 
 // ---------- Projects & pipeline stages ----------
+
+// ---------- D112: billable sessions (the paper replacement) ----------
+// Katie's projects are FIXED-PRICE against assumed hours; the point of this
+// ledger is next year's ask, not payroll. Sessions are {projectId, start,
+// end|null}; at most one open (end:null) session exists at a time — the
+// clockIn batch closes whatever is open in the same commit that opens the
+// new one, so the 9-project shuffle is one tap and can never double-run.
+export function subscribeSessions(cb) {
+  return onSnapshot(col("sessions"), snap => {
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+}
+
+/** Close whatever is open at `at`, open projectId at `at` — one commit. */
+export async function clockIn(projectId, at = Date.now()) {
+  const open = await getDocs(query(col("sessions"), where("end", "==", null)));
+  const batch = writeBatch(db);
+  open.forEach(s => batch.update(s.ref, { end: Math.max(at, s.data().start) }));
+  batch.set(doc(col("sessions")), {
+    projectId, start: at, end: null,
+    createdBy: auth.currentUser?.email || "unknown", createdAt: Date.now()
+  });
+  await batch.commit();
+}
+
+/** End the open session (whichever project holds it) at `at`, clamped so a
+ *  backdated end can never precede its own start. */
+export async function clockOut(at = Date.now()) {
+  const open = await getDocs(query(col("sessions"), where("end", "==", null)));
+  const batch = writeBatch(db);
+  let any = false;
+  open.forEach(s => { batch.update(s.ref, { end: Math.max(at, s.data().start) }); any = true; });
+  if (any) await batch.commit();
+}
+
+/** D112 — the forgot-to-clock-in eraser: a manual, backdated session. If
+ *  the OPEN session started before this one, it truncates where this one
+ *  starts (honest boundaries: she stopped that work when she started this).
+ *  A session that began INSIDE the manual window is left alone — v1 keeps
+ *  overlap surgery simple; revisit if it ever bites. */
+export async function logSession(projectId, start, end) {
+  const open = await getDocs(query(col("sessions"), where("end", "==", null)));
+  const batch = writeBatch(db);
+  open.forEach(s => { if (s.data().start < start) batch.update(s.ref, { end: start }); });
+  batch.set(doc(col("sessions")), {
+    projectId, start, end,
+    createdBy: auth.currentUser?.email || "unknown", createdAt: Date.now()
+  });
+  await batch.commit();
+}
+
+export function deleteSession(sessionId) {
+  return deleteDoc(doc(col("sessions"), sessionId));
+}
 
 export function subscribeProjects(cb) {
   return onSnapshot(col("projects"), snap => {
@@ -378,7 +502,15 @@ export async function setStageDone(projectId, stageIndex, done) {
   stages[stageIndex].completedAt = done ? Date.now() : null;
   const allDone = stages.length > 0 && stages.every(s => s.completedAt);
   await updateDoc(ref, { stages, completedAt: allDone ? Date.now() : null });
-  return { stages, allDone };
+  // D109 — a stage may carry `hurrah: true` (the designated climax; at most
+  // one per project by editor convention, absent on stages that aren't it).
+  // The caller decides the celebration level from these two facts:
+  // publishing is the party, follow-up is paperwork.
+  return {
+    stages, allDone,
+    hurrah: !!stages[stageIndex].hurrah,
+    projectHasHurrah: stages.some(s => s.hurrah)
+  };
 }
 
 /** Replace a project's entire stage array (rename/reorder/add/remove,
