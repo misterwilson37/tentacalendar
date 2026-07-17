@@ -1,5 +1,30 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.6.0 — UNDO EVERYWHERE IT'S WELL-DEFINED, PLUS REDO (D116) — a Y.
+// Jake: "undo is always good, as is redo." Two stacks now; every entry
+// carries both directions, captured at commit time; Ctrl/Cmd-Z undoes,
+// Ctrl/Cmd-Shift-Z or Ctrl-Y redoes; a new action kills the redo stack
+// (the old future is gone). Covered: task edits, task deletes (SAME-ID
+// resurrection via restoreDoc so parentTaskId chains survive), due-date
+// saves AND clears (task + stage), stage-editor saves (whole-array swap),
+// project edits, year-bar drags, estimate drags, and all three clock ops
+// (in / out / manual log — store returns what it touched). EXCLUDED on
+// principle, argued and accepted: completion toggles — celebrations,
+// follow-up materialization, and cactus spawns hang off them, and the
+// D53 uncheck modal is already the better undo. Multi-user honesty: undo
+// restores YOUR before-state; a mid-flight edit by the other person loses.
+// ------------------------------------------------------------
+// Version 1.5.0 — UNDO + the all-nighter + the tap toggle (D113/D114/D115).
+// D114 (the Y): Ctrl/Cmd-Z undoes drag commits — year-bar moves/stretches
+// and clock-estimate grips capture their before-state and restore through
+// normal store writes (both screens see it); native undo in text fields
+// untouched; stack of 30. D113: the clock dialogs ask WHEN with a full
+// datetime-local — Katie's all-nighters and multi-day forgets are one
+// honest field; the yesterday-guessing helper is deleted. D115: tapping a
+// year bar a second time closes its popover, and every bar carries an
+// invisible ±5px vertical hitbox — a 2px hairline is a statement, not a
+// tap target; "tap for details" is now true at every size.
+// ------------------------------------------------------------
 // Version 1.4.0 — THE CLOCK (D112) — a Y. Katie's billable-hours paper,
 // replaced. Fixed-price projects billed on assumed hours; the ledger's job
 // is next year's ask. Every project card (Today view AND the dashboard's
@@ -464,8 +489,9 @@ import {
   addProject, addProjectWithStages, deleteProject, updateProject,
   setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate,
-  subscribeSessions, clockIn, clockOut, logSession, deleteSession
-} from "./store.js?v=0.14.0";
+  subscribeSessions, clockIn, clockOut, logSession, deleteSession,
+  setSessionEnd, restoreDoc
+} from "./store.js?v=0.15.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -475,7 +501,7 @@ import {
 } from "./queue.js?v=0.17.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
 
-export const APP_VERSION = "1.4.0";
+export const APP_VERSION = "1.6.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1124,7 +1150,12 @@ function renderQueue(items, now) {
     const buttons = it.kind === "task" ? [
       iconBtn("✎", "Edit this task", () => startTaskEdit(it.raw)),
       iconBtn("↳", "Add follow-up", () => followUpPrompt(it)),
-      iconBtn("✕", "Delete", () => { if (confirm(`Delete "${it.title}"?`)) deleteTask(it.id); })
+      iconBtn("✕", "Delete", () => {
+        if (!confirm(`Delete "${it.title}"?`)) return;
+        const { id, ...data } = structuredClone(it.raw);   // D116: full body, id stripped
+        pushUndo("task delete", () => restoreDoc("tasks", it.id, data), () => deleteTask(it.id));
+        deleteTask(it.id);
+      })
     ] : it.kind === "stage" ? [
       iconBtn("⏰", "Set/change this stage's hard due date", () =>
         openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex }, `Hard due date — ${it.title}`, it.dueAt))
@@ -1198,6 +1229,48 @@ function persistExpanded() {
   localStorage.setItem("tc-expanded-projects", JSON.stringify([...S.expandedProjects]));
 }
 
+// ---------- D114: UNDO (Ctrl/Cmd-Z) for drags ----------
+// Jake, demoing on the wall: "I move dates around and stress out that my
+// memory is not perfect." Every drag COMMIT captures its before-state onto
+// a stack; Ctrl/Cmd-Z pops and restores through the normal store writes,
+// so both screens see the undo like any other change. Scope: the drags —
+// year-bar moves/stretches and clock-estimate grips. Native undo inside
+// text fields is untouched (the handler steps aside for inputs).
+// D116 — two stacks, full redo. Every entry carries BOTH directions,
+// captured at commit time when before and after are both in hand. A new
+// action forks history: the redo stack dies (the old future is gone).
+// EXCLUDED on principle, argued to Jake and accepted: completion toggles —
+// checking a task fires celebrations, materializes follow-ups, spawns
+// cacti, and UN-checking already owns a richer undo (the D53 oops/rewind/
+// keep modal). A silent Ctrl-Z bypassing those semantics would be worse.
+// Multi-user honesty: undo restores YOUR captured before-state — if the
+// other person edited the same thing in between, your undo wins over
+// their edit. Acceptable for a two-person app; said out loud here.
+const undoStack = [], redoStack = [];
+function pushUndo(label, undo, redo) {
+  undoStack.push({ label, undo, redo });
+  if (undoStack.length > 30) undoStack.shift();
+  redoStack.length = 0;
+}
+/** One step of history. redoing=false → undo, true → redo. Returns
+ *  whether a step happened (pure-ish core, unit-tested). */
+function historyStep(redoing) {
+  const from = redoing ? redoStack : undoStack;
+  const to = redoing ? undoStack : redoStack;
+  const u = from.pop();
+  if (!u) return false;
+  (redoing ? u.redo : u.undo)();
+  to.push(u);
+  return true;
+}
+window.addEventListener("keydown", ev => {
+  const z = ev.key === "z" || ev.key === "Z", y = ev.key === "y" || ev.key === "Y";
+  if (!(ev.ctrlKey || ev.metaKey) || (!z && !y)) return;
+  const t = ev.target;
+  if (t && (t.matches?.("input, textarea, select") || t.isContentEditable)) return;
+  if (historyStep(y || ev.shiftKey)) ev.preventDefault();
+});
+
 // ---------- D112: the clock (Katie's paper replacement) ----------
 // Fixed-price projects, billed on assumed hours; the ledger answers next
 // year's "do I ask for more?" — so the card shows a running timer and a
@@ -1217,27 +1290,28 @@ function fmtElapsed(ms) {
   const m = Math.max(0, Math.floor(ms / 60000));
   return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
 }
-/** "14:30" as a timestamp today — unless that's in the future relative to
- *  `ref`, in which case it means yesterday (logging 23:40 at 00:15). */
-function timeToTs(v, ref = Date.now()) {
-  if (!v) return ref;
-  const [h, mm] = v.split(":").map(Number);
-  const d = new Date(ref); d.setHours(h, mm, 0, 0);
-  let ts = d.getTime();
-  if (ts > ref + 60000) ts -= 24 * 3600000;
-  return ts;
+// D113 — Jake, on the midnight-honesty guess: "the next day, it should
+// probably ask when the session ended. Katie pulls the occasional
+// all-nighter." He's right: a time-only field can only reach back 24h and
+// GUESSES the day. These dialogs now ASK — datetime-local carries the date
+// explicitly, so an all-nighter, a forgot-for-two-days session, anything,
+// is one honest field. Explicit beats clever; the yesterday-guessing
+// helper is gone.
+function toDTLocal(ts) {
+  const d = new Date(ts), p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
-function tsToTimeInput(ts) {
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+function fromDTLocal(v, fallback) {
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : fallback;
 }
 let clockMode = null;   // {kind:"out", session} | {kind:"log", project}
 function openClockOutDialog(os) {
   clockMode = { kind: "out", session: os };
   $("#clock-heading").textContent = `⏹ Clock out — ${projName(os.projectId)}`;
-  $("#clock-sub").textContent = `Running since ${fmtTime(os.start)} (${fmtElapsed(Date.now() - os.start)}). Adjust the time if you actually stopped earlier — or Cancel if this was a misclick.`;
+  $("#clock-sub").textContent = `Running since ${fmtTime(os.start)} (${fmtElapsed(Date.now() - os.start)}). Adjust the time — and the DATE, all-nighters welcome — if you actually stopped earlier. Cancel if this was a misclick.`;
   $("#clock-start-row").hidden = true;
-  $("#clock-end").value = tsToTimeInput(Date.now());
+  $("#clock-end").value = toDTLocal(Date.now());
   $("#clock-modal").hidden = false;
   $("#clock-end").focus();
 }
@@ -1246,8 +1320,8 @@ function openLogDialog(p) {
   $("#clock-heading").textContent = `🕰 Log time — ${p.name}`;
   $("#clock-sub").textContent = "The forgot-to-clock-in eraser. If the running timer overlaps this window, it ends where this starts — honest boundaries.";
   $("#clock-start-row").hidden = false;
-  $("#clock-start").value = tsToTimeInput(Date.now() - 3600000);
-  $("#clock-end").value = tsToTimeInput(Date.now());
+  $("#clock-start").value = toDTLocal(Date.now() - 3600000);
+  $("#clock-end").value = toDTLocal(Date.now());
   $("#clock-modal").hidden = false;
   $("#clock-start").focus();
 }
@@ -1255,12 +1329,21 @@ function saveClockDialog() {
   const now = Date.now();
   if (clockMode?.kind === "out") {
     const os = clockMode.session;
-    const end = Math.min(now, Math.max(os.start, timeToTs($("#clock-end").value, now)));
-    clockOut(end);
+    const end = Math.min(now, Math.max(os.start, fromDTLocal($("#clock-end").value, now)));
+    clockOut(end).then(closed => {   // D116
+      if (!closed.length) return;
+      pushUndo("clock out",
+        async () => { for (const c of closed) await setSessionEnd(c.id, null); },
+        async () => { for (const c of closed) await setSessionEnd(c.id, c.end); });
+    });
   } else if (clockMode?.kind === "log") {
-    const start = timeToTs($("#clock-start").value, now);
-    const end = Math.min(now + 60000, timeToTs($("#clock-end").value, now));
-    if (end > start) logSession(clockMode.project.id, start, end);
+    const start = fromDTLocal($("#clock-start").value, now - 3600000);
+    const end = Math.min(now + 60000, fromDTLocal($("#clock-end").value, now));
+    if (end > start) logSession(clockMode.project.id, start, end).then(info => {   // D116
+      pushUndo("log time",
+        async () => { await deleteSession(info.newId); for (const id of info.truncatedIds) await setSessionEnd(id, null); },
+        async () => { for (const id of info.truncatedIds) await setSessionEnd(id, info.start); await restoreDoc("sessions", info.newId, info.body); });
+    });
   }
   $("#clock-modal").hidden = true;
   clockMode = null;
@@ -1347,7 +1430,11 @@ function projectCard(p) {
     cbtn.addEventListener("click", e => {
       e.stopPropagation();
       if (runningHere) openClockOutDialog(os);
-      else clockIn(p.id);          // Jake's letter: the switch is silent — she has 9 of these
+      else clockIn(p.id).then(info => {   // D116: silent switch, fully reversible
+        pushUndo("clock in",
+          async () => { await deleteSession(info.newId); for (const id of info.closedIds) await setSessionEnd(id, null); },
+          async () => { for (const id of info.closedIds) await setSessionEnd(id, info.at); await restoreDoc("sessions", info.newId, info.body); });
+      });
     });
     const tot = document.createElement("span");
     tot.className = "clock-total";
@@ -1618,12 +1705,31 @@ function dueSave() {
   if (!date || !S.dueTarget) { $("#due-modal").hidden = true; return; }
   const time = $("#due-time").value || "17:00";
   const ts = new Date(`${date}T${time}`).getTime();
+  pushDueUndo(ts);   // D116
   if (S.dueTarget.kind === "task") updateTask(S.dueTarget.taskId, { dueAt: ts });
   else setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, ts);
   $("#due-modal").hidden = true;
 }
 
+/** D116 — one capture for save AND clear: both are "the due changed". */
+function pushDueUndo(after) {
+  const tgt = S.dueTarget;
+  if (!tgt) return;
+  if (tgt.kind === "task") {
+    const before = S.tasks.find(t => t.id === tgt.taskId)?.dueAt ?? null;
+    if (before === after) return;
+    pushUndo("due change", () => updateTask(tgt.taskId, { dueAt: before }), () => updateTask(tgt.taskId, { dueAt: after }));
+  } else {
+    const before = S.projects.find(p => p.id === tgt.projectId)?.stages?.[tgt.stageIndex]?.dueAt ?? null;
+    if (before === after) return;
+    pushUndo("stage due change",
+      () => setStageDue(tgt.projectId, tgt.stageIndex, before),
+      () => setStageDue(tgt.projectId, tgt.stageIndex, after));
+  }
+}
+
 function dueClear() {
+  pushDueUndo(null);   // D116
   if (S.dueTarget?.kind === "task") updateTask(S.dueTarget.taskId, { dueAt: null }); // → Waiting
   else if (S.dueTarget) setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, null);
   $("#due-modal").hidden = true;
@@ -1719,6 +1825,13 @@ function stagesSave() {
       ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})  // D109: the editor OWNS this flag (button state, not carried)
     };
   });
+  {
+    // D116 — the whole array swaps; before/after are both in hand
+    const pid = S.stagesTarget;
+    const before = structuredClone(S.projects.find(p => p.id === pid)?.stages || []);
+    const after = structuredClone(stages);
+    pushUndo("stages edit", () => setProjectStages(pid, before), () => setProjectStages(pid, after));
+  }
   setProjectStages(S.stagesTarget, stages);
   $("#stages-modal").hidden = true;
 }
@@ -1893,7 +2006,17 @@ function onTaskFormSubmit(ev) {
     ? { every: Math.min(999, recN), unit: $("#task-rec-unit").value, anchor: $("#task-rec-anchor").value }
     : null;
   const payload = { title, tierId, dueAt, escalation: { every, unit }, notes: $("#task-notes").value.trim(), estimateMinutes, recurrence };
-  if (S.editingTaskId) updateTask(S.editingTaskId, payload).then(cancelTaskEdit);
+  if (S.editingTaskId) {
+    // D116 — capture before/after over exactly the payload's keys
+    const id = S.editingTaskId;
+    const cur = S.tasks.find(t => t.id === id);
+    if (cur) {
+      const before = structuredClone(Object.fromEntries(Object.keys(payload).map(k => [k, cur[k] ?? null])));
+      const after = structuredClone(payload);
+      pushUndo("task edit", () => updateTask(id, before), () => updateTask(id, after));
+    }
+    updateTask(id, payload).then(cancelTaskEdit);
+  }
   else addTask(payload).then(() => { $("#task-title").value = ""; $("#task-notes").value = ""; $("#task-estimate").value = ""; });
 }
 
@@ -1989,6 +2112,16 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function commitProject(payload) {
+  if (S.editingProjectId) {
+    // D116 — capture before/after over the payload's keys
+    const id = S.editingProjectId;
+    const cur = S.projects.find(p => p.id === id);
+    if (cur) {
+      const before = structuredClone(Object.fromEntries(Object.keys(payload).map(k => [k, cur[k] ?? null])));
+      const after = structuredClone(payload);
+      pushUndo("project edit", () => updateProject(id, before), () => updateProject(id, after));
+    }
+  }
   if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(() => { cancelProjectEdit(); closeYvProjectModal(); });
   else addProject(payload).then(() => { $("#project-name").value = ""; suggestProjectColor(true); closeYvProjectModal(); }); // D68: new bar appears behind the closing modal
 }
@@ -2747,7 +2880,12 @@ function wireEstimateDrag(grip, el, b, col, win, span) {
       document.removeEventListener("pointerup", onUp);
       el.classList.remove("dragging");
       grip.textContent = "";
-      if (next !== orig) updateTask(b.it.id, { estimateMinutes: next });
+      if (next !== orig) {
+        pushUndo("estimate drag",
+          () => updateTask(b.it.id, { estimateMinutes: orig }),      // D114 (orig may be null — D100: null is a real value)
+          () => updateTask(b.it.id, { estimateMinutes: next }));     // D116: + redo
+        updateTask(b.it.id, { estimateMinutes: next });
+      }
       endGesture(); // D101
     };
     document.addEventListener("pointermove", onMove);
@@ -3179,8 +3317,11 @@ function yvDetails(p, prog) {
   return out;
 }
 
+let yvPopBar = null;   // D115 — which bar owns the open popover
 function yvShowDetails(bar, p) {
   const pop = $("#popover");
+  if (!pop.hidden && yvPopBar === bar) { pop.hidden = true; yvPopBar = null; return; }   // D115: second tap collapses
+  yvPopBar = bar;
   pop.textContent = yvDetails(p, projectProgress(p));
   pop.hidden = false;
   const r = bar.getBoundingClientRect();
@@ -3195,6 +3336,11 @@ function commitBarDrag(p, ns, ne) {
   if (!isDayAllowed(ns, allowed)) ns = allowedNeighbors(ns, allowed).next;
   if (!isDayAllowed(ne, allowed)) ne = allowedNeighbors(ne, allowed).prev;
   if (ne < ns) ne = allowedNeighbors(ns, allowed).next;
+  if (ns !== p.startDate || ne !== p.endDate) {
+    const before = { startDate: p.startDate, endDate: p.endDate };   // D114
+    const after = { startDate: ns, endDate: ne };
+    pushUndo("bar drag", () => updateProject(p.id, before), () => updateProject(p.id, after));   // D116: + redo
+  }
   updateProject(p.id, { startDate: ns, endDate: ne });
 }
 
