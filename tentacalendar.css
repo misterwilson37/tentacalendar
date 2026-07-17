@@ -1,7 +1,10 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.35.1  (banner and --tc-version move together, ALWAYS —
+   Version 0.36.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.36.0 (D117/D119): .yv-bar.forced-full (click-to-expand, outranks the
+   size rules; D115 hitbox reverted), .project-dates goes flex with the
+   inline clock controls (.clock-row retired).
    0.35.1 (D115): .yv-bar::after — the invisible ±5px tap hitbox.
    0.35.0 (D112): .clock-row/.clock-btn(.running)/.clock-total — the
    billable clock on project cards.
@@ -130,7 +133,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.35.1";
+  --tc-version: "0.36.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -640,18 +643,21 @@ body.celebration-wave::after {
   #view-switch button[data-view="dash"] { display: none; }
 }
 
-/* D115 — a 2px hairline is a statement, not a tap target. Every year bar
-   carries an invisible ±5px vertical hitbox so "tap for details" (and the
-   drag grips) are true at every Auto size. Pointer-area only; nothing
-   visual moves. Overlapping lanes: the topmost bar wins the 5px strip —
-   acceptable, and far better than missing entirely. */
-.yv-bar::after { content: ""; position: absolute; left: 0; right: 0; top: -5px; bottom: -5px; }
+/* D117 — click-to-expand for year bars (the week's forced-full answer,
+   transplanted; D115's hitbox reverted at Jake's call — overlapping
+   pointer fields complicate expansion). An expanded bar rides ABOVE its
+   lane neighbours: readability over tightness is the whole point. */
+.yv-bar.forced-full {
+  z-index: 6;
+  box-shadow: 0 1px 7px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(255, 255, 255, .28);
+}
+.yv-bar.forced-full .yv-bar-label { display: inline-block; }
 
-/* D112 — the clock row on project cards. Visible collapsed (Katie clocks
-   dozens of times a day; no chevron tax). The running button glows accent;
+/* D112/D119 — the clock, inline on the dates/weight line (a whole row of
+   vertical space returned to the cards). The running button glows accent;
    the Σ is quiet — it's the answer, not the interface. */
-.clock-row { display: flex; align-items: center; gap: .5rem; margin: .25rem 0 .35rem; }
-.clock-btn { padding: .15rem .55rem; }
+.project-dates { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
+.clock-btn { padding: .02rem .4rem; font-size: .68rem; }
 .clock-btn.running {
   color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent), 0 0 6px rgba(77, 208, 196, .3);
@@ -762,6 +768,7 @@ header, .dash-split { transition: opacity 1.2s ease; }
    hide — the legend and tap-popover carry the names. */
 @container (max-width: 700px) {
   .yv-bar-label { display: none; }
+  .yv-bar.forced-full .yv-bar-label { display: inline-block; }   /* D117: expansion outranks the size rule */
   .yv-month { font-size: .68rem; padding-left: .15rem; }
   .yv-dayline { display: none; }
 }
