@@ -1,6 +1,9 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.14.0 — D112: billable sessions (clockIn/clockOut/logSession/
+// Version 0.15.0 — D116: writes become undo-informative. clockIn/clockOut/
+// logSession return the ids and bodies they touched; setSessionEnd and
+// restoreDoc (same-id resurrection) join the toolbox.
+// (prev) Version 0.14.0
 // deleteSession + subscribeSessions). One open session max, enforced by
 // the clockIn batch. The rules wildcard already covers the collection.
 // (prev) Version 0.13.0
@@ -60,7 +63,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.14.0";
+export const STORE_VERSION = "0.15.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -386,16 +389,22 @@ export function subscribeSessions(cb) {
   });
 }
 
-/** Close whatever is open at `at`, open projectId at `at` — one commit. */
+/** Close whatever is open at `at`, open projectId at `at` — one commit.
+ *  D116: returns everything undo needs — the ids it closed, the id and
+ *  body of the session it opened, and the boundary. */
 export async function clockIn(projectId, at = Date.now()) {
   const open = await getDocs(query(col("sessions"), where("end", "==", null)));
   const batch = writeBatch(db);
-  open.forEach(s => batch.update(s.ref, { end: Math.max(at, s.data().start) }));
-  batch.set(doc(col("sessions")), {
+  const closedIds = [];
+  open.forEach(s => { closedIds.push(s.id); batch.update(s.ref, { end: Math.max(at, s.data().start) }); });
+  const ref = doc(col("sessions"));
+  const body = {
     projectId, start: at, end: null,
     createdBy: auth.currentUser?.email || "unknown", createdAt: Date.now()
-  });
+  };
+  batch.set(ref, body);
   await batch.commit();
+  return { newId: ref.id, body, closedIds, at };
 }
 
 /** End the open session (whichever project holds it) at `at`, clamped so a
@@ -403,9 +412,10 @@ export async function clockIn(projectId, at = Date.now()) {
 export async function clockOut(at = Date.now()) {
   const open = await getDocs(query(col("sessions"), where("end", "==", null)));
   const batch = writeBatch(db);
-  let any = false;
-  open.forEach(s => { batch.update(s.ref, { end: Math.max(at, s.data().start) }); any = true; });
-  if (any) await batch.commit();
+  const closed = [];
+  open.forEach(s => { closed.push({ id: s.id, end: Math.max(at, s.data().start) }); batch.update(s.ref, { end: Math.max(at, s.data().start) }); });
+  if (closed.length) await batch.commit();
+  return closed;   // D116: [{id, end}] so undo can reopen and redo can re-close
 }
 
 /** D112 — the forgot-to-clock-in eraser: a manual, backdated session. If
@@ -416,16 +426,31 @@ export async function clockOut(at = Date.now()) {
 export async function logSession(projectId, start, end) {
   const open = await getDocs(query(col("sessions"), where("end", "==", null)));
   const batch = writeBatch(db);
-  open.forEach(s => { if (s.data().start < start) batch.update(s.ref, { end: start }); });
-  batch.set(doc(col("sessions")), {
+  const truncatedIds = [];
+  open.forEach(s => { if (s.data().start < start) { truncatedIds.push(s.id); batch.update(s.ref, { end: start }); } });
+  const ref = doc(col("sessions"));
+  const body = {
     projectId, start, end,
     createdBy: auth.currentUser?.email || "unknown", createdAt: Date.now()
-  });
+  };
+  batch.set(ref, body);
   await batch.commit();
+  return { newId: ref.id, body, truncatedIds, start };   // D116
 }
 
 export function deleteSession(sessionId) {
   return deleteDoc(doc(col("sessions"), sessionId));
+}
+
+/** D116 — set (or null-out, i.e. reopen) a session's end. Undo machinery. */
+export function setSessionEnd(sessionId, end) {
+  return updateDoc(doc(col("sessions"), sessionId), { end });
+}
+
+/** D116 — resurrect a deleted doc at its ORIGINAL id, so references
+ *  (parentTaskId chains, session ledgers) keep pointing at the truth. */
+export function restoreDoc(collName, id, data) {
+  return setDoc(doc(col(collName), id), data);
 }
 
 export function subscribeProjects(cb) {
