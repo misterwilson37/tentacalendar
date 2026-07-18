@@ -1,5 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.8.0 — THE NOW BAR (D121, the Y) + THE PARADE GETS A NAME
+// (D120). D121, Katie's ask: the top of the Projects list carries a bar
+// showing the CURRENT project and how long she's been on it — project
+// color on the edge, name, "since 2:14 PM", and a live H:MM:SS second
+// hand (a 1-second interval that touches ONE text node, never render()).
+// Tap it → the clock-out dialog. It only exists while a timer runs, and
+// it rides the 🗂 pane reparenting to the wall for free. ALSO the D119
+// finish: the 🕰 was still a full-size .icon-btn wrapping onto its own
+// row ("the same size it was before the move" — Jake); it now wears
+// .clock-btn like its siblings, and all three clock controls live in one
+// .clock-cluster that right-aligns and wraps as a UNIT, never the 🕰
+// alone. D120: onStageToggle hands the project's NAME to celebrate(3)
+// for the ticker-tape banner (celebrate.js 0.2.0 — the parade itself
+// lives there).
+// ------------------------------------------------------------
 // Version 1.7.0 — THE YEAR EXPANDS ON CLICK (D117, a Y) + the clock slims
 // down (D119) + three modals escape drift-wrap (D118). D117: Jake's actual
 // ask, decoded — the hover title was always fine; he wanted the WEEK
@@ -514,9 +529,9 @@ import {
   clockBlocks, weekClockWindow, taskEstimate,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES
 } from "./queue.js?v=0.17.0";
-import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.1.1";
+import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.7.0";
+export const APP_VERSION = "1.8.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -739,6 +754,15 @@ document.addEventListener("DOMContentLoaded", () => {
   watchAuth(onSignedIn, onSignedOut);
   setInterval(tick, 60 * 1000);
   setInterval(drift, 5 * 1000);
+  // D121 — the NOW bar's second hand. Touches exactly ONE text node when
+  // the bar exists, and does nothing at all when it doesn't; render()
+  // stays a minute-tick affair.
+  setInterval(() => {
+    const el = document.getElementById("now-elapsed");
+    if (!el) return;
+    const os = openSessionNow();
+    if (os) el.textContent = fmtClockLive(Date.now() - os.start);
+  }, 1000);
 });
 
 function reportVersions() {
@@ -1307,6 +1331,14 @@ function fmtElapsed(ms) {
   const m = Math.max(0, Math.floor(ms / 60000));
   return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
 }
+/** D121 — the NOW bar's live readout: H:MM:SS. A working timer with a
+ *  visible second hand feels alive; one that jumps by minutes feels
+ *  stopped. Negative clamps to zero (clock skew is not Katie's problem). */
+function fmtClockLive(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
 // D113 — Jake, on the midnight-honesty guess: "the next day, it should
 // probably ask when the session ended. Katie pulls the occasional
 // all-nighter." He's right: a time-only field can only reach back 24h and
@@ -1376,6 +1408,47 @@ function renderProjects(now) {
   // their own collapsed section below. Both keep start-date order.
   const open = S.projects.filter(p => !p.completedAt);
   const finished = S.projects.filter(p => p.completedAt);
+
+  // D121 — Katie's NOW bar: the current project and how long she's been
+  // on it, at the top of the list. Exists ONLY while a timer runs (an
+  // empty nag bar would be noise, not accountability). The elapsed span
+  // carries #now-elapsed so the 1-second interval (boot) can move the
+  // second hand without a render. Tap = the clock-out dialog; the handler
+  // re-derives the open session at click time so a stale card can't
+  // clock out the wrong thing.
+  {
+    const os = openSessionNow();
+    if (os) {
+      const p = S.projects.find(x => x.id === os.projectId);
+      const color = p?.color || "#4dd0c4";
+      const bar = document.createElement("div");
+      bar.className = "now-bar";
+      bar.style.borderLeftColor = color;
+      bar.style.background = hexToRgba(color, 0.10);
+      bar.title = "Working on it — tap to clock out or adjust the end time";
+      const glyph = document.createElement("span");
+      glyph.className = "now-pulse";
+      glyph.textContent = "⏱";
+      const main = document.createElement("div");
+      main.className = "now-main";
+      const nm = document.createElement("strong");
+      nm.textContent = p?.name || projName(os.projectId);
+      const since = document.createElement("div");
+      since.className = "sub";
+      since.textContent = `since ${fmtTime(os.start)}`;
+      main.append(nm, since);
+      const el = document.createElement("span");
+      el.className = "now-elapsed";
+      el.id = "now-elapsed";
+      el.textContent = fmtClockLive(Date.now() - os.start);
+      bar.append(glyph, main, el);
+      bar.addEventListener("click", () => {
+        const cur = openSessionNow();
+        if (cur) openClockOutDialog(cur);
+      });
+      box.append(bar);
+    }
+  }
 
   for (const p of open) box.append(projectCard(p));
 
@@ -1465,7 +1538,17 @@ function projectCard(p) {
       tot.title = `${S.sessions.filter(s => s.projectId === p.id).length} session(s) logged — next year's ask, off the paper`;
     }
     const fix = iconBtn("🕰", "Log time by hand — forgot to clock in? Pick start and end; an overlapping running timer gets truncated where this starts.", () => openLogDialog(p));
-    dates.append(cbtn, tot, fix);
+    // D119 finish (Jake: "the clock icon being alone on its row does not
+    // make it smaller — it's the same size it was before the move"). The
+    // 🕰 was still a full-size .icon-btn; .clock-btn slims it to match ⏱.
+    // And the three controls now live in ONE cluster that right-aligns
+    // and wraps as a unit — a narrow card wraps the whole clock, never
+    // the 🕰 alone.
+    fix.classList.add("clock-btn");
+    const cluster = document.createElement("span");
+    cluster.className = "clock-cluster";
+    cluster.append(cbtn, tot, fix);
+    dates.append(cluster);
   }
   card.append(dates);
 
@@ -1537,7 +1620,10 @@ async function onStageToggle(projectId, stageIndex, done, ev) {
     const level = result.hurrah ? 3
       : (result.allDone && !result.projectHasHurrah) ? 3
       : 2;
-    celebrate(level, clickPoint(ev));
+    // D120: the parade banner carries the project's name — the party
+    // should say WHOSE party it is.
+    const pName = S.projects.find(x => x.id === projectId)?.name;
+    celebrate(level, clickPoint(ev), level === 3 && pName ? { name: pName } : undefined);
     // D59: once the fireworks land, offer next year's run.
     if (result.allDone) {
       const p = S.projects.find(x => x.id === projectId);
