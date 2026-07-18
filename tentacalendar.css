@@ -1,8 +1,12 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.37.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.38.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
-   0.37.0 (D120/D121): #parade-banner/.parade-text (the ticker-tape
+   0.38.0 (D123): the US-federal-holiday overlay — --holiday amber, the
+   .yvg-day.yvg-holiday dot on month/wall calendars, .yv-holiday-mark tick
+   on the timeline, .wv-holname ★ label on the week day heads, and the
+   #wv-overlays/#yv-overlays control groups sharing the .ctl-group family.
+   0.37.0 (D121/D122): #parade-banner/.parade-text (the ticker-tape
    parade's gold name card — z 99: above the night face, UNDER the
    confetti so the paper falls in front of the words), .now-bar family
    (Katie's current-project bar with the live second hand), and
@@ -139,7 +143,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.37.0";
+  --tc-version: "0.38.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -148,6 +152,7 @@
   --line: #1f2d3d;
   --accent: #4dd0c4;          /* octopus teal */
   --danger: #ff6b6b;
+  --holiday: #e6b84d;         /* federal-holiday amber (D123) */
   --radius: 10px;
 }
 
@@ -676,7 +681,7 @@ body.celebration-wave::after {
    🕰 wears .clock-btn now, so the size rule above slims it too. */
 .clock-cluster { display: inline-flex; align-items: center; gap: .35rem; margin-left: auto; }
 
-/* D121 — Katie's NOW bar: the current project, at the top of the list.
+/* D122 — Katie's NOW bar: the current project, at the top of the list.
    Border-left + tint come inline in the project's own color; the elapsed
    span is the live second hand (updated by a 1s interval, no render). */
 .now-bar {
@@ -696,7 +701,7 @@ body.celebration-wave::after {
   font-size: 1.05rem; color: var(--ink); white-space: nowrap;
 }
 
-/* D120 — the parade banner. Fixed on <body> (outside #drift-wrap, D37);
+/* D121 — the parade banner. Fixed on <body> (outside #drift-wrap, D37);
    z-index 99 = above the screen-rest night face (98) and UNDER the
    confetti canvas (100), so the ticker tape falls in front of the words.
    Solid gold + layered glow rather than gradient-clipped text — the old
@@ -784,6 +789,9 @@ header, .dash-split { transition: opacity 1.2s ease; }
 .yv-lanes { position: relative; }
 .yv-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
 .yv-todayline { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); opacity: .8; z-index: 2; }
+/* D123 — a federal holiday on the timeline: a thin amber tick. Sits just
+   proud of the lanes so the top sliver stays hoverable for its name. */
+.yv-holiday-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--holiday); opacity: .7; z-index: 2; border-radius: 1px; }
 .yv-dayline { opacity: .22; }
 .yv-weekline { opacity: .65; }
 .yv-weekend { position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.30); }
@@ -855,6 +863,13 @@ header, .dash-split { transition: opacity 1.2s ease; }
 .yvg-day.yvg-we { background: rgba(0, 0, 0, .30); }
 .yvg-day.yvg-out { color: transparent; background: rgba(0, 0, 0, .18); }
 .yvg-day.yvg-today { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
+/* D123 — a holiday day: amber number + a small corner dot. Weekend/today
+   composition is intentional (today's teal ring still reads over the amber). */
+.yvg-day.yvg-holiday { color: var(--holiday); position: relative; }
+.yvg-day.yvg-holiday::after {
+  content: ""; position: absolute; top: 2px; right: 2px;
+  width: 3px; height: 3px; border-radius: 50%; background: var(--holiday);
+}
 .yvg-lanes { position: relative; margin-top: 15px; }
 
 #yv-add-project {
@@ -1413,6 +1428,7 @@ header, .dash-split { transition: opacity 1.2s ease; }
   border-bottom: 2px solid var(--line);
 }
 .wv-dayhead.is-today { border-bottom-color: var(--accent); }
+.wv-dayhead.wv-holiday:not(.is-today) { border-bottom-color: var(--holiday); }  /* D123 — amber underline; today's teal still wins */
 .wv-dayhead.is-past { opacity: .5; }
 .wv-dayhead.is-today .wv-date { color: var(--accent); }
 .wv-left {
@@ -1420,6 +1436,14 @@ header, .dash-split { transition: opacity 1.2s ease; }
   margin-left: auto; white-space: nowrap;
 }
 .wv-left.none { opacity: .4; font-style: italic; }
+/* D123 — the holiday label on a week day head: amber ★ + abbreviation,
+   truncating with the full name in the head's title. Sits after the date,
+   before .wv-left (which keeps its margin-left:auto push to the right). */
+.wv-holname {
+  font-size: clamp(.55rem, .42vw, 1rem); color: var(--holiday);
+  font-weight: 600; white-space: nowrap; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+}
 .wv-missed {
   font-size: clamp(.62rem, .5vw, 1.15rem); color: var(--danger);
   font-weight: 700; white-space: nowrap;
