@@ -1,6 +1,13 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.17.0 — D111: nextNag speaks the harmonized unit ladder
+// Version 0.18.0 — D123: US federal holidays, client-computed. usFederalHolidays(year)
+// is a pure per-year function (fixed dates + floating rules — MLK 3rd Mon Jan,
+// Memorial last Mon May, Thanksgiving 4th Thu Nov, …), Juneteenth from 2021;
+// holidaysForRange(a,b) → a day-keyed Map for a render window. Local Date math
+// throughout so a holiday lands on the day the wall draws. Observed on the true
+// date (no Sat/Sun→Monday shift — a planning wall should SHOW that July 4 is a
+// Saturday, not hide it). No new dependencies; no infrastructure (D75 moot).
+// (prev) Version 0.17.0 — D111: nextNag speaks the harmonized unit ladder
 // (months/years/decades/centuries step calendar-correct via addMonths).
 // (prev) Version 0.16.0
 // 0.16.0 (D100): THE CLOCK GRID's geometry — clockBlocks() + weekClockWindow().
@@ -78,7 +85,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.17.0";
+export const QUEUE_VERSION = "0.18.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -176,6 +183,74 @@ export function addWeekdays(ts, n) {
 export function weekendNeighbors(ts) {
   const { prev, next } = allowedNeighbors(ts, WEEKDAYS);
   return { fri: prev, mon: next };
+}
+
+// ---------- US federal holidays (D123) ----------
+// Client-computed, per Jake's call and the 5b-bis roadmap: a pure function
+// per year, zero infrastructure, works offline, no calendar sharing. Local
+// Date construction throughout so a holiday lands on the SAME calendar day
+// the rest of the app draws (startOfDayTs is local; new Date(y,m,d) is local).
+// Returns local-midnight timestamps — the day key the render loops compare on.
+
+/** The n-th given weekday of a month (n≥1). weekday: 0=Sun … 6=Sat. */
+function nthWeekdayOfMonth(year, monthIdx, weekday, n) {
+  const first = new Date(year, monthIdx, 1);
+  const shift = (weekday - first.getDay() + 7) % 7;   // days until the first such weekday
+  return new Date(year, monthIdx, 1 + shift + (n - 1) * 7).getTime();
+}
+
+/** The LAST given weekday of a month (e.g., Memorial Day = last Mon of May). */
+function lastWeekdayOfMonth(year, monthIdx, weekday) {
+  const last = new Date(year, monthIdx + 1, 0);       // day 0 of next month = last day
+  const back = (last.getDay() - weekday + 7) % 7;
+  return new Date(year, monthIdx, last.getDate() - back).getTime();
+}
+
+const atMidnight = (year, monthIdx, day) => new Date(year, monthIdx, day).getTime();
+
+/**
+ * The eleven US federal holidays for a given calendar year, as observed on
+ * their actual date (NOT the Monday-observed shift for a Sat/Sun — the wall
+ * is a planning surface, and "July 4 is a Saturday this year" is exactly what
+ * Katie wants to SEE, not have quietly moved to the 3rd or 5th). Juneteenth
+ * is included from 2021 on (the year it became federal); asking for an earlier
+ * year simply omits it, so a rolling window across 2020→2021 is honest.
+ * @returns {{ts:number, name:string, abbr:string}[]}
+ */
+export function usFederalHolidays(year) {
+  const list = [
+    { ts: atMidnight(year, 0, 1),                        name: "New Year's Day",         abbr: "New Year" },
+    { ts: nthWeekdayOfMonth(year, 0, 1, 3),              name: "Martin Luther King Jr. Day", abbr: "MLK Day" },
+    { ts: nthWeekdayOfMonth(year, 1, 1, 3),              name: "Presidents' Day",        abbr: "Presidents'" },
+    { ts: lastWeekdayOfMonth(year, 4, 1),                name: "Memorial Day",           abbr: "Memorial" },
+    { ts: atMidnight(year, 5, 19),                       name: "Juneteenth",             abbr: "Juneteenth", since: 2021 },
+    { ts: atMidnight(year, 6, 4),                        name: "Independence Day",       abbr: "July 4" },
+    { ts: nthWeekdayOfMonth(year, 8, 1, 1),              name: "Labor Day",              abbr: "Labor Day" },
+    { ts: nthWeekdayOfMonth(year, 9, 1, 2),              name: "Columbus Day",           abbr: "Columbus" },
+    { ts: atMidnight(year, 10, 11),                      name: "Veterans Day",           abbr: "Veterans" },
+    { ts: nthWeekdayOfMonth(year, 10, 4, 4),             name: "Thanksgiving",           abbr: "Thanksgiving" },
+    { ts: atMidnight(year, 11, 25),                      name: "Christmas Day",          abbr: "Christmas" }
+  ];
+  return list.filter(h => !h.since || year >= h.since)
+             .map(({ ts, name, abbr }) => ({ ts, name, abbr }));
+}
+
+/**
+ * A day-keyed lookup of holidays intersecting [startTs, endTs). Computes only
+ * the years the window actually spans (a rolling year can straddle two, a
+ * quarter view rarely does). Key = local-midnight ms; value = {name, abbr}.
+ * @returns {Map<number,{name:string, abbr:string}>}
+ */
+export function holidaysForRange(startTs, endTs) {
+  const map = new Map();
+  const y0 = new Date(startTs).getFullYear();
+  const y1 = new Date(endTs - 1).getFullYear();
+  for (let y = y0; y <= y1; y++) {
+    for (const h of usFederalHolidays(y)) {
+      if (h.ts >= startTs && h.ts < endTs) map.set(h.ts, { name: h.name, abbr: h.abbr });
+    }
+  }
+  return map;
 }
 
 // ---------- Stage timing (D44) ----------
