@@ -1,7 +1,11 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.32.3 (banner and data-html-version move together, always)
+     Version 0.32.4 (banner and data-html-version move together, always)
+     0.32.4 (D120/D121): ?v= bumps only — app.js → 1.8.0 (NOW bar + the
+     parade's name), css → 0.37.0, celebrate → 0.2.0 (rides inside app.js's
+     import). No markup changes: the NOW bar and parade banner are built
+     by JS.
      0.32.3 (D118): clock/followup/yv-project modals relocated OUTSIDE
      #drift-wrap — its transform re-rooted their fixed centering to the
      page, so scrolled-down users got off-screen modals.
@@ -145,9 +149,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.36.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.37.0">
 </head>
-<body data-html-version="0.32.3">
+<body data-html-version="0.32.4">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -688,6 +692,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.7.0"></script>
+  <script type="module" src="app.js?v=1.8.0"></script>
 </body>
 </html>
