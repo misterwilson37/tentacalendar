@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.32.4 (banner and data-html-version move together, always)
-     0.32.4 (D120/D121): ?v= bumps only — app.js → 1.8.0 (NOW bar + the
+     Version 0.32.5 (banner and data-html-version move together, always)
+     0.32.5 (D123): the Overlay control group (★ Holidays) added to BOTH the
+     week and year .view-ctls (D104 grammar); ?v= bumps app.js → 1.9.0 and
+     queue.js → 0.18.0 (holidaysForRange). css → 0.38.0.
+     0.32.4 (D121/D122): ?v= bumps only — app.js → 1.8.0 (NOW bar + the
      parade's name), css → 0.37.0, celebrate → 0.2.0 (rides inside app.js's
      import). No markup changes: the NOW bar and parade banner are built
      by JS.
@@ -149,9 +152,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.37.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.38.0">
 </head>
-<body data-html-version="0.32.4">
+<body data-html-version="0.32.5">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -355,6 +358,10 @@
             <button data-size="quarter" class="mini">▁</button>
             <button data-size="hair" class="mini">🧵</button>
           </div>
+          <div class="ctl-group" id="wv-overlays" title="Overlays drawn on the days themselves — reference marks, not tasks.">
+            <span class="ctl-label">Overlay</span>
+            <button id="wv-holidays" class="mini" title="Show US federal holidays on the day headings. A reference overlay — nothing to check off.">★ Holidays</button>
+          </div>
         </div>
       </div>
       <div class="wv-strip" id="wv-days"></div>
@@ -397,6 +404,10 @@
             <button data-size="half" class="mini">▪</button>
             <button data-size="quarter" class="mini">▁</button>
             <button data-size="hair" class="mini" title="Hairline: 2px color threads — see the year, tap for details, edit elsewhere">🧵</button>
+          </div>
+          <div class="ctl-group" id="yv-overlays" title="Overlays drawn on the calendar itself — reference marks, not projects.">
+            <span class="ctl-label">Overlay</span>
+            <button id="yv-holidays" class="mini" title="Show US federal holidays on the month calendars and timeline. A reference overlay — hover a marked day for its name.">★ Holidays</button>
           </div>
         </div>
       </div>
@@ -692,6 +703,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.8.0"></script>
+  <script type="module" src="app.js?v=1.9.0"></script>
 </body>
 </html>
