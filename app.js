@@ -1,7 +1,18 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 1.8.0 — THE NOW BAR (D121, the Y) + THE PARADE GETS A NAME
-// (D120). D121, Katie's ask: the top of the Projects list carries a bar
+// Version 1.9.0 — HOLIDAYS ON THE WALL AND THE WEEK (D123, a Y). A per-device
+// "★ Holidays" toggle (new Overlay group in BOTH the year and week .view-ctls,
+// the D104 grammar) overlays US federal holidays, computed client-side in
+// queue.js (holidaysForRange). Three surfaces, one shared preference
+// (tc-holidays, default OFF): the year GRID/wall marks the day cell (accent
+// dot + the holiday name in its title); the year TIMELINE drops an accent tick
+// in the day-texture loop (title on hover); the week DAY-HEADS gain a small
+// labelled line (abbr) with the full name in the head's title. holidayMapFor()
+// caches per render window so the same Map serves every surface. No new data,
+// no calendar sharing, works offline — D75's "gated behind integration" is moot.
+// ------------------------------------------------------------
+// Version 1.8.0 — THE NOW BAR (D122, the Y) + THE PARADE GETS A NAME
+// (D121). D122, Katie's ask: the top of the Projects list carries a bar
 // showing the CURRENT project and how long she's been on it — project
 // color on the edge, name, "since 2:14 PM", and a live H:MM:SS second
 // hand (a 1-second interval that touches ONE text node, never render()).
@@ -11,7 +22,7 @@
 // row ("the same size it was before the move" — Jake); it now wears
 // .clock-btn like its siblings, and all three clock controls live in one
 // .clock-cluster that right-aligns and wraps as a UNIT, never the 🕰
-// alone. D120: onStageToggle hands the project's NAME to celebrate(3)
+// alone. D121: onStageToggle hands the project's NAME to celebrate(3)
 // for the ticker-tape banner (celebrate.js 0.2.0 — the parade itself
 // lives there).
 // ------------------------------------------------------------
@@ -526,12 +537,12 @@ import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION,
-  clockBlocks, weekClockWindow, taskEstimate,
+  clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES
-} from "./queue.js?v=0.17.0";
+} from "./queue.js?v=0.18.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.8.0";
+export const APP_VERSION = "1.9.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -563,6 +574,7 @@ const S = {
   weekSize: ["auto", "full", "half", "quarter", "hair"].includes(localStorage.getItem("tc-wsize")) ? localStorage.getItem("tc-wsize") : "auto", // D90
   weekLayout: ["columns", "tidal", "clock"].includes(localStorage.getItem("tc-week-layout")) ? localStorage.getItem("tc-week-layout") : "tidal", // D97 — sibling layouts under Week (D90: Gantesque is the LAYOUT, the view stays "Week")
   weekCards: localStorage.getItem("tc-wcards") !== "0", // D97 — reflection cards on past days
+  showHolidays: localStorage.getItem("tc-holidays") === "1", // D123 — US federal holiday overlay (default OFF; opt-in)
   weekExpanded: new Set(),   // D91: bars clicked open for a read at compact sizes
   yearExpanded: new Set(),   // D117: the same answer for the year — session-only, cleared on size change
   weekStripPct: Math.min(75, Math.max(10, parseFloat(localStorage.getItem("tc-wstrip")) || 34)), // D94
@@ -627,6 +639,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("#wv-fullscreen").addEventListener("click", toggleFullscreen);   // D96
   $("#day-fullscreen").addEventListener("click", toggleFullscreen);  // D96 — Today had none
+  // D123 — one preference, a button in each view's Overlay group. render()
+  // updates the current solo view AND both dashboard panes.
+  const toggleHolidays = () => {
+    S.showHolidays = !S.showHolidays;
+    localStorage.setItem("tc-holidays", S.showHolidays ? "1" : "0");
+    render();
+  };
+  $("#wv-holidays").addEventListener("click", toggleHolidays);
+  $("#yv-holidays").addEventListener("click", toggleHolidays);
 
   $("#yv-today").addEventListener("click", () => { S.yearOffset = 0; S.yearZoom = null; renderYear(); });
   $("#yv-unzoom").addEventListener("click", () => { S.yearZoom = null; renderYear(); });
@@ -754,7 +775,7 @@ document.addEventListener("DOMContentLoaded", () => {
   watchAuth(onSignedIn, onSignedOut);
   setInterval(tick, 60 * 1000);
   setInterval(drift, 5 * 1000);
-  // D121 — the NOW bar's second hand. Touches exactly ONE text node when
+  // D122 — the NOW bar's second hand. Touches exactly ONE text node when
   // the bar exists, and does nothing at all when it doesn't; render()
   // stays a minute-tick affair.
   setInterval(() => {
@@ -1331,7 +1352,7 @@ function fmtElapsed(ms) {
   const m = Math.max(0, Math.floor(ms / 60000));
   return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
 }
-/** D121 — the NOW bar's live readout: H:MM:SS. A working timer with a
+/** D122 — the NOW bar's live readout: H:MM:SS. A working timer with a
  *  visible second hand feels alive; one that jumps by minutes feels
  *  stopped. Negative clamps to zero (clock skew is not Katie's problem). */
 function fmtClockLive(ms) {
@@ -1409,7 +1430,7 @@ function renderProjects(now) {
   const open = S.projects.filter(p => !p.completedAt);
   const finished = S.projects.filter(p => p.completedAt);
 
-  // D121 — Katie's NOW bar: the current project and how long she's been
+  // D122 — Katie's NOW bar: the current project and how long she's been
   // on it, at the top of the list. Exists ONLY while a timer runs (an
   // empty nag bar would be noise, not accountability). The elapsed span
   // carries #now-elapsed so the 1-second interval (boot) can move the
@@ -1620,7 +1641,7 @@ async function onStageToggle(projectId, stageIndex, done, ev) {
     const level = result.hurrah ? 3
       : (result.allDone && !result.projectHasHurrah) ? 3
       : 2;
-    // D120: the parade banner carries the project's name — the party
+    // D121: the parade banner carries the project's name — the party
     // should say WHOSE party it is.
     const pName = S.projects.find(x => x.id === projectId)?.name;
     celebrate(level, clickPoint(ev), level === 3 && pName ? { name: pName } : undefined);
@@ -2485,6 +2506,7 @@ function renderWeek() {
   for (const b of document.querySelectorAll("#wv-sizes button")) {
     b.classList.toggle("active", b.dataset.size === S.weekSize);
   }
+  $("#wv-holidays").classList.toggle("active", S.showHolidays);   // D123
   renderWeekDayHeads(w);
 
   renderWeekBanners(w);
@@ -3027,10 +3049,18 @@ function setWeekLayout(v) {
 function renderWeekDayHeads(w) {
   const bar = $("#wv-days");
   bar.innerHTML = "";
+  // D123 — holidays across the seven-day window, keyed by day-start.
+  const holMap = S.showHolidays
+    ? holidaysForRange(w.days[0].dayStart, w.days[6].dayStart + DAY_MS)
+    : null;
   for (const col of w.days) {
     const d = new Date(col.dayStart);
+    const hol = holMap ? holMap.get(col.dayStart) : null;   // D123
+    const holLine = hol
+      ? `<span class="wv-holname" title="${esc(hol.name)}">★ ${esc(hol.abbr)}</span>`
+      : "";
     const h = document.createElement("div");
-    h.className = "wv-dayhead" + (col.isToday ? " is-today" : "") + (col.isPast ? " is-past" : "");
+    h.className = "wv-dayhead" + (col.isToday ? " is-today" : "") + (col.isPast ? " is-past" : "") + (hol ? " wv-holiday" : "");
     // Honest words, not a bar. The old meter showed "40% as many items as
     // the busiest day" in the visual language of "40% done" (Jake: "we're
     // unclear as to what that means"). Two numbers that mean what they say.
@@ -3044,23 +3074,25 @@ function renderWeekDayHeads(w) {
       h.innerHTML =
         `<span class="wv-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>` +
         `<span class="wv-date">${d.getDate()}</span>` +
+        holLine +
         (won ? `<span class="wv-done">✓${won}</span>` : "") +
         (lost ? `<span class="wv-putoff">↻${lost}</span>` : "") +
-        (!won && !lost ? `<span class="wv-left none">—</span>` : "");
-      h.title = won || lost
+        (!won && !lost && !hol ? `<span class="wv-left none">—</span>` : "");
+      h.title = (won || lost
         ? `${won} finished · ${lost} didn't happen`
-        : "Nothing was on this day.";
+        : "Nothing was on this day.") + (hol ? ` · ${hol.name}` : "");
       bar.append(h);
       continue;
     }
     h.innerHTML =
       `<span class="wv-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>` +
       `<span class="wv-date">${d.getDate()}</span>` +
+      holLine +
       (left ? `<span class="wv-left">${left} left</span>` : `<span class="wv-left none">clear</span>`) +
       (missed ? `<span class="wv-missed">❗${missed}</span>` : "");
-    h.title = left
+    h.title = (left
       ? `${left} still to do${missed ? ` · ${missed} already missed` : ""}`
-      : "Nothing left on this day";
+      : "Nothing left on this day") + (hol ? ` · ${hol.name}` : "");
     bar.append(h);
   }
 }
@@ -3693,6 +3725,14 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
   const dows = wall ? ["S", "M", "T", "W", "T", "F", "S"]
                     : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const todayTs = startOfDayTs(now);
+  // D123 — holidays for the whole grid window, once. In-month cells only, so a
+  // holiday on a spillover day shows in its OWN month block, never twice.
+  let holMap = null;
+  if (S.showHolidays && monthsList.length) {
+    const lastD = new Date(Math.max(...monthsList));
+    holMap = holidaysForRange(Math.min(...monthsList),
+      new Date(lastD.getFullYear(), lastD.getMonth() + 1, 1).getTime());
+  }
   for (const m of months) {
     const box = document.createElement("div");
     box.className = "yvg-month";
@@ -3735,6 +3775,10 @@ function renderYearGrid(grid, monthsList, projs, now, wall = false) {
         if (!inMonth) cell.classList.add("yvg-out");
         if (c.getDay() === 0 || c.getDay() === 6) cell.classList.add("yvg-we");
         if (inMonth && ts === todayTs) cell.classList.add("yvg-today");
+        if (inMonth && holMap && holMap.has(ts)) {          // D123
+          cell.classList.add("yvg-holiday");
+          cell.title = holMap.get(ts).name;
+        }
         cell.textContent = c.getDate();
         daysEl.append(cell);
         c.setDate(c.getDate() + 1);
@@ -3841,6 +3885,7 @@ function renderYear() {
 
   $("#yv-sizes").querySelectorAll("button").forEach(b =>
     b.classList.toggle("active", b.dataset.size === S.yearBarSize));
+  $("#yv-holidays").classList.toggle("active", S.showHolidays);   // D123
 
   // D68/D69: calendar layouts take over here; the Gantt continues below.
   // A zoomed wall month renders BIG (stacked-month styling) — the wall
@@ -3882,6 +3927,8 @@ function renderYear() {
     : Math.max(9, Math.min(34, Math.floor((avail - rows.length * 46) / totalLanes)));
   const BAR_H = LANE_H - 4;
   const showLabels = BAR_H >= 16;
+  // D123 — holidays across the whole timeline window, once for every row.
+  const tlHolidays = S.showHolidays ? holidaysForRange(winStart, winEnd) : null;
 
   for (const [rs, re] of rows) {
     const span = re - rs;
@@ -3949,6 +3996,13 @@ function renderYear() {
         gl.className = "yv-gridline " + (cur.getDay() === 1 ? "yv-weekline" : "yv-dayline");
         gl.style.left = `${((ts - rs) / span) * 100}%`;
         lanes.append(gl);
+      }
+      if (tlHolidays && tlHolidays.has(ts)) {   // D123 — accent tick + name on hover
+        const hm = document.createElement("div");
+        hm.className = "yv-holiday-mark";
+        hm.style.left = `${((ts - rs) / span) * 100}%`;
+        hm.title = tlHolidays.get(ts).name;
+        lanes.append(hm);
       }
       cur.setDate(cur.getDate() + 1);
     }
