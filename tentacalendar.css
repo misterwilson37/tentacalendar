@@ -1,7 +1,13 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.36.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.37.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.37.0 (D120/D121): #parade-banner/.parade-text (the ticker-tape
+   parade's gold name card — z 99: above the night face, UNDER the
+   confetti so the paper falls in front of the words), .now-bar family
+   (Katie's current-project bar with the live second hand), and
+   .clock-cluster — the D119 finish: the three clock controls right-align
+   and wrap as one unit; the 🕰 finally matches its siblings' size.
    0.36.0 (D117/D119): .yv-bar.forced-full (click-to-expand, outranks the
    size rules; D115 hitbox reverted), .project-dates goes flex with the
    inline clock controls (.clock-row retired).
@@ -133,7 +139,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.36.0";
+  --tc-version: "0.37.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -664,6 +670,58 @@ body.celebration-wave::after {
   opacity: 1;
 }
 .clock-total { font-size: .78rem; color: var(--ink-dim); cursor: default; }
+/* D119 finish — the three clock controls are ONE unit: right-aligned on
+   the dates line, wrapping together when the card is narrow (the 🕰 was
+   wrapping ALONE at full .icon-btn size — Jake's report, verbatim). The
+   🕰 wears .clock-btn now, so the size rule above slims it too. */
+.clock-cluster { display: inline-flex; align-items: center; gap: .35rem; margin-left: auto; }
+
+/* D121 — Katie's NOW bar: the current project, at the top of the list.
+   Border-left + tint come inline in the project's own color; the elapsed
+   span is the live second hand (updated by a 1s interval, no render). */
+.now-bar {
+  display: flex; align-items: center; gap: .55rem;
+  margin: 0 0 .55rem; padding: .45rem .6rem;
+  border: 1px solid var(--line); border-left: 4px solid var(--accent);
+  border-radius: 8px; background: var(--panel-2);
+  cursor: pointer;
+}
+.now-bar:hover { border-color: var(--ink-dim); border-left-width: 4px; }
+.now-pulse { animation: nowPulse 2.4s ease-in-out infinite; }
+@keyframes nowPulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+.now-main { flex: 1 1 auto; min-width: 0; }
+.now-main strong { display: block; overflow-wrap: anywhere; line-height: 1.15; }
+.now-elapsed {
+  font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: 1.05rem; color: var(--ink); white-space: nowrap;
+}
+
+/* D120 — the parade banner. Fixed on <body> (outside #drift-wrap, D37);
+   z-index 99 = above the screen-rest night face (98) and UNDER the
+   confetti canvas (100), so the ticker tape falls in front of the words.
+   Solid gold + layered glow rather than gradient-clipped text — the old
+   Android tablet gets the same party as the 4K wall. */
+#parade-banner {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 99;
+}
+.parade-text {
+  opacity: 0;
+  font-size: clamp(1.6rem, 6vw, 5rem);
+  font-weight: 900; text-align: center;
+  padding: 0 4vw; overflow-wrap: anywhere;
+  color: #ffd700;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .75), 0 0 26px rgba(255, 215, 0, .55), 0 0 60px rgba(255, 169, 77, .35);
+}
+.parade-on .parade-text { animation: paradePop 5.2s cubic-bezier(.2, .9, .3, 1) forwards; }
+@keyframes paradePop {
+  0%   { opacity: 0; transform: scale(.4) rotate(-4deg); }
+  8%   { opacity: 1; transform: scale(1.12) rotate(2deg); }
+  14%  { transform: scale(1) rotate(0deg); }
+  80%  { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 0; transform: scale(1.08) translateY(-14px); }
+}
 
 /* D111 — the ↻ recurrence badge on queue rows. Quiet by design: the row
    is about the task, the badge just answers "will this come back?" */
