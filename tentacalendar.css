@@ -1,7 +1,17 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.38.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.40.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.40.0 (D125): phone fit + dash scroll. text-size-adjust:100% stops
+   mobile Chrome font-boosting (was ballooning the day header ~2x and
+   breaking "Today — Sat, Jul 18" one-word-per-line); .day-nav h2 gains
+   min-width:0 and phones get slimmer panel padding. And #dash-bottom >
+   section now align-self:stretch — #projects-panel's base align-self:start
+   was collapsing it to content height in the dash row, defeating its own
+   overflow-y (the agenda scrolled, the pipeline didn't).
+   0.39.0 (D124): project-type library controls — #pipeline-picker-row
+   alignment, .mini:disabled (Default can't be renamed/deleted), and the
+   #project-type-label picker on the new-project form.
    0.38.0 (D123): the US-federal-holiday overlay — --holiday amber, the
    .yvg-day.yvg-holiday dot on month/wall calendars, .yv-holiday-mark tick
    on the timeline, .wv-holname ★ label on the week day heads, and the
@@ -143,7 +153,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.38.0";
+  --tc-version: "0.40.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -157,6 +167,11 @@
 }
 
 * { box-sizing: border-box; }
+
+/* D125 — stop mobile browsers from auto-inflating ("boosting") text.
+   Without this, Chrome on Android enlarged the day header far past its
+   1.15rem, wrapping it one word per line. We size type ourselves. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 body {
   margin: 0;
@@ -219,7 +234,7 @@ main {
 
 /* ---------- Day nav ---------- */
 .day-nav { display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem; }
-.day-nav h2 { margin: 0; font-size: 1.15rem; flex: 1; text-align: center; }
+.day-nav h2 { margin: 0; font-size: 1.15rem; flex: 1; min-width: 0; text-align: center; }  /* D125 — min-width:0: wrap inside the box, don't blow out the row */
 
 /* ---------- Rows ---------- */
 .row {
@@ -311,6 +326,11 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
   color: var(--ink-dim); border-radius: 6px;
   padding: .25rem .6rem; font-size: .8rem;
 }
+.mini:disabled { opacity: .4; cursor: default; }   /* D124 — Default type can't be renamed/deleted */
+/* D124 — the project-type library controls */
+#pipeline-picker-row { align-items: center; gap: .4rem; flex-wrap: wrap; }
+#pipeline-picker-row label { flex: 0 1 auto; }
+#project-type-label { display: block; margin: .1rem 0 .3rem; }
 .hint { color: var(--ink-dim); font-size: .78rem; }
 .hint-inline { color: var(--ink-dim); font-size: .75rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 
@@ -403,6 +423,11 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
   #form-panel { order: 3; }
   .auth-card { padding: 2rem 1.4rem; }
   .user { display: none; }
+}
+/* D125 — reclaim horizontal room on phones so the header and chips breathe. */
+@media (max-width: 600px) {
+  #queue-panel, #projects-panel, #form-panel { padding: .7rem; }
+  .day-nav { gap: .35rem; }
 }
 
 /* ---------- Projects panel ---------- */
@@ -629,7 +654,7 @@ body.celebration-wave::after {
 #dash-right { flex: 1 1 0; display: flex; flex-direction: column; min-width: 0; }
 #dash-week  { flex: 0 0 var(--dash-rows, 55%); }
 #dash-bottom { flex: 1 1 0; flex-direction: row; gap: .8rem; }
-#dash-bottom > section { flex: 1 1 0; min-width: 0; overflow-y: auto; }  /* agenda — and the pipeline when 🗂 splits it two-up */
+#dash-bottom > section { flex: 1 1 0; min-width: 0; align-self: stretch; overflow-y: auto; }  /* agenda + pipeline; D125 align-self:stretch overrides #projects-panel's base align-self:start so overflow-y actually has room to scroll */
 .dash-pane > #year-view { max-width: none; margin: 0; padding: .6rem; } /* the 1500px solo cap would waste half a 4K pane */
 #dashboard-view #yv-add-project { display: none; }  /* Jake: adding projects lives on the other screens — this is the glance wall */
 #dash-projects-toggle {

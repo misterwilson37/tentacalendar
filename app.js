@@ -1,5 +1,17 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.10.0 — PROJECT-TYPE LIBRARY (D124, a Y). The single stage
+// template becomes a LIBRARY: a "Project type" picker on the new-project
+// form snapshots the CHOSEN pipeline (Default = the old stageTemplate, or
+// any named type) via the existing addProjectWithStages — zero creation-path
+// risk. Settings ▸ Pipeline gains a #pipeline-target selector + New/Rename/
+// Delete; the one stage editor now edits whichever pipeline is selected,
+// held in an in-memory draft that switch-syncs so unsaved edits survive a
+// hop, and Save persists Default → saveStageTemplate and the rest →
+// saveProjectTypes. Existing projects keep their own snapshot; nothing
+// migrates. The holiday-card pipeline Jake wanted is now just a type he
+// builds once and picks — the bridge toward types beyond Katie's default.
+// ------------------------------------------------------------
 // Version 1.9.0 — HOLIDAYS ON THE WALL AND THE WEEK (D123, a Y). A per-device
 // "★ Holidays" toggle (new Overlay group in BOTH the year and week .view-ctls,
 // the D104 grammar) overlays US federal holidays, computed client-side in
@@ -530,9 +542,10 @@ import {
   addProject, addProjectWithStages, deleteProject, updateProject,
   setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate,
+  subscribeProjectTypes, saveProjectTypes,
   subscribeSessions, clockIn, clockOut, logSession, deleteSession,
   setSessionEnd, restoreDoc
-} from "./store.js?v=0.15.0";
+} from "./store.js?v=0.16.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -542,14 +555,14 @@ import {
 } from "./queue.js?v=0.18.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.9.0";
+export const APP_VERSION = "1.10.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
 // ---------- State ----------
 const S = {
   user: null,
-  tiers: [], tasks: [], events: [], projects: [], stageTemplate: [],
+  tiers: [], tasks: [], events: [], projects: [], stageTemplate: [], projectTypes: [],
   config: null,
   viewDay: Date.now(),
   editingTaskId: null,
@@ -690,8 +703,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#project-color").addEventListener("input", checkProjectColor);
   $("#tier-add").addEventListener("click", () => tierEditorRow({}, true));
   $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
-  $("#settings-save").addEventListener("click", onSaveSettings);
-  $("#cfg-poll").addEventListener("input", updatePollCostHint);
+  wirePipelineManager();   // D124 — the project-type library controls (once)
+  $("#settings-save").addEventListener("click", onSaveSettings);  $("#cfg-poll").addEventListener("input", updatePollCostHint);
   $("#due-save").addEventListener("click", dueSave);
   $("#due-clear").addEventListener("click", dueClear);
   $("#due-cancel").addEventListener("click", () => { $("#due-modal").hidden = true; });
@@ -811,6 +824,7 @@ function onSignedIn(user) {
   S.unsubs.push(subscribeProjects(p => { S.projects = p; suggestProjectColor(); render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeSessions(s => { S.sessions = s; render(); }));   // D112
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
+  S.unsubs.push(subscribeProjectTypes(t => { S.projectTypes = t; refreshTypeSelect(); }));  // D124
   S.unsubs.push(subscribeConfig(c => {
     S.config = c;
     setDeadlineHour(c?.deadlineHour ?? 16); // D51 — queue math follows settings
@@ -2074,6 +2088,33 @@ function refreshTierSelects() {
     const work = taskTiers.find(t => t.name.toLowerCase() === "work");
     if (work) $("#project-tier").value = work.id;
   }
+  refreshTypeSelect();   // D124 — keep the project-type picker in sync
+}
+
+// D124 — the project-type picker on the new-project form: Default + each
+// named type. Preserves the current selection across refreshes.
+function refreshTypeSelect() {
+  const sel = $("#project-type");
+  if (!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = `<option value="">Default template</option>` +
+    (S.projectTypes || []).map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+  sel.value = keep && (S.projectTypes || []).some(t => t.id === keep) ? keep : "";
+}
+
+/** D124 — copy a pipeline's stages into a fresh project's stage array:
+ *  carry name/direction/anchor/offsetDays/hurrah, reset completedAt/dueAt.
+ *  Mirrors store.addProject's snapshot (incl. the legacy phase fallback). */
+function stagesFromPipeline(stages) {
+  const legacy = { before: ["before", "start"], during: ["after", "start"], after: ["after", "end"] };
+  return (stages || []).map(s => {
+    const [dir, anc] = s.direction && s.anchor ? [s.direction, s.anchor] : (legacy[s.phase] || legacy.during);
+    return {
+      name: s.name, direction: dir, anchor: anc, offsetDays: s.offsetDays || 0,
+      completedAt: null, dueAt: null,
+      ...(s.hurrah ? { hurrah: true } : {})
+    };
+  });
 }
 
 function startTaskEdit(task) {
@@ -2154,6 +2195,7 @@ function startProjectEdit(p) {
   $("#project-workload").value = String(p.workload || 2);
   $("#project-start").value = toDateInput(new Date(p.startDate));
   $("#project-end").value = toDateInput(new Date(p.endDate));
+  const tl = $("#project-type-label"); if (tl) tl.hidden = true;   // D124 — editing keeps the project's own stages
   checkProjectColor();
   $("#project-name").focus();
 }
@@ -2165,6 +2207,7 @@ function cancelProjectEdit() {
   $("#project-cancel").hidden = true;
   $("#project-form").reset();
   $("#project-workload").value = "2";
+  const tl = $("#project-type-label"); if (tl) tl.hidden = false;   // D124 — new projects choose a pipeline again
   suggestProjectColor(true);
   $("#project-color-hint").textContent = "";
 }
@@ -2244,7 +2287,18 @@ function commitProject(payload) {
     }
   }
   if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(() => { cancelProjectEdit(); closeYvProjectModal(); });
-  else addProject(payload).then(() => { $("#project-name").value = ""; suggestProjectColor(true); closeYvProjectModal(); }); // D68: new bar appears behind the closing modal
+  else {
+    // D124 — snapshot the CHOSEN pipeline. Default (empty value) keeps the
+    // old addProject path (which reads stageTemplate); a named type copies
+    // its own stages via the existing addProjectWithStages.
+    const typeId = $("#project-type") ? $("#project-type").value : "";
+    const type = typeId ? (S.projectTypes || []).find(t => t.id === typeId) : null;
+    const done = () => { $("#project-name").value = ""; suggestProjectColor(true); if ($("#project-type")) $("#project-type").value = ""; closeYvProjectModal(); };
+    (type
+      ? addProjectWithStages({ ...payload, stages: stagesFromPipeline(type.stages) })
+      : addProject(payload)   // D68: new bar appears behind the closing modal
+    ).then(done);
+  }
 }
 
 // ---------- Color conflict assistant (D40) ----------
@@ -4237,9 +4291,14 @@ function openSettings() {
   box.innerHTML = "";
   for (const t of S.tiers) tierEditorRow(t, false);
   checkTierColors();
-  const stBox = $("#stage-template-editor");
-  stBox.innerHTML = "";
-  for (const st of S.stageTemplate) stageTemplateRow(normalizeStage(st), false);
+  // D124 — the pipeline library draft: Default (stageTemplate) + named types.
+  pipelineDraft = {
+    default: (S.stageTemplate || []).map(x => ({ ...x })),
+    types: (S.projectTypes || []).map(t => ({ id: t.id, name: t.name, stages: (t.stages || []).map(x => ({ ...x })) }))
+  };
+  pipelineCurrent = "default";
+  refreshPipelineTarget();
+  loadPipelineEditor();
 }
 
 /** D55: tiers get the same conflict assistant projects have. One shared
@@ -4347,6 +4406,92 @@ function wireTmplRow(row, box) {
   });
 }
 
+// ---------- D124: project-type LIBRARY (the Pipeline tab) ----------
+// One stage editor edits any pipeline. A draft holds the whole library while
+// settings is open; switching targets syncs the editor into the draft first,
+// so unsaved edits survive a hop. Save persists Default -> saveStageTemplate
+// and the rest -> saveProjectTypes.
+let pipelineDraft = null;        // { default:[stages], types:[{id,name,stages}] }
+let pipelineCurrent = "default"; // "default" | type id
+
+/** Read the shared stage editor's rows into a stages array (with clamping). */
+function readStageEditor() {
+  return [...document.querySelectorAll("#stage-template-editor .stage-tmpl-row")].map(row => ({
+    name: row.querySelector(".st-name").value.trim() || "Untitled stage",
+    direction: row.querySelector(".st-dir").value,
+    anchor: row.querySelector(".st-anchor").value,
+    offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
+    ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})  // D109
+  }));
+}
+
+/** Fold the editor's current contents back into the draft's current target. */
+function capturePipelineEditor() {
+  if (!pipelineDraft) return;
+  const stages = readStageEditor();
+  if (pipelineCurrent === "default") pipelineDraft.default = stages;
+  else { const t = pipelineDraft.types.find(x => x.id === pipelineCurrent); if (t) t.stages = stages; }
+}
+
+/** Render the current target's stages into the shared editor. */
+function loadPipelineEditor() {
+  const stBox = $("#stage-template-editor");
+  stBox.innerHTML = "";
+  const stages = pipelineCurrent === "default"
+    ? pipelineDraft.default
+    : (pipelineDraft.types.find(t => t.id === pipelineCurrent)?.stages || []);
+  for (const st of stages) stageTemplateRow(normalizeStage(st), false);
+}
+
+/** Populate the target selector; Default can't be renamed or deleted. */
+function refreshPipelineTarget() {
+  const sel = $("#pipeline-target");
+  if (!sel || !pipelineDraft) return;
+  sel.innerHTML = `<option value="default">Default template</option>` +
+    pipelineDraft.types.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+  sel.value = pipelineCurrent;
+  $("#pipeline-delete").disabled = pipelineCurrent === "default";
+  $("#pipeline-rename").disabled = pipelineCurrent === "default";
+}
+
+function wirePipelineManager() {
+  $("#pipeline-target").addEventListener("change", e => {
+    capturePipelineEditor();
+    pipelineCurrent = e.target.value;
+    refreshPipelineTarget();
+    loadPipelineEditor();
+  });
+  $("#pipeline-new").addEventListener("click", () => {
+    const name = (prompt("Name this project type (e.g. Holiday Card):") || "").trim();
+    if (!name) return;
+    capturePipelineEditor();
+    const id = "pt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    pipelineDraft.types.push({ id, name, stages: [] });
+    pipelineCurrent = id;
+    refreshPipelineTarget();
+    loadPipelineEditor();
+  });
+  $("#pipeline-rename").addEventListener("click", () => {
+    if (pipelineCurrent === "default") return;
+    const t = pipelineDraft.types.find(x => x.id === pipelineCurrent);
+    if (!t) return;
+    const name = (prompt("Rename this project type:", t.name) || "").trim();
+    if (!name) return;
+    t.name = name;
+    refreshPipelineTarget();
+  });
+  $("#pipeline-delete").addEventListener("click", () => {
+    if (pipelineCurrent === "default") return;
+    const t = pipelineDraft.types.find(x => x.id === pipelineCurrent);
+    if (!t) return;
+    if (!confirm(`Delete the "${t.name}" project type? Projects already created from it keep their stages.`)) return;
+    pipelineDraft.types = pipelineDraft.types.filter(x => x.id !== pipelineCurrent);
+    pipelineCurrent = "default";
+    refreshPipelineTarget();
+    loadPipelineEditor();
+  });
+}
+
 function stageTemplateRow(st, isNew) {
   const box = $("#stage-template-editor");
   const row = document.createElement("div");
@@ -4399,14 +4544,11 @@ function onSaveSettings() {
     if (kind === "anchor") data.defaultLeadWindowMinutes = 30;
     saveTier(row.dataset.id || null, data);
   }
-  const stages = [...document.querySelectorAll("#stage-template-editor .stage-tmpl-row")].map(row => ({
-    name: row.querySelector(".st-name").value.trim() || "Untitled stage",
-    direction: row.querySelector(".st-dir").value,
-    anchor: row.querySelector(".st-anchor").value,
-    offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
-    ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})  // D109
-  }));
-  saveStageTemplate(stages);
+  // D124 — persist the whole pipeline library. Capture the visible editor
+  // into its target first, then write Default and the named types.
+  capturePipelineEditor();
+  saveStageTemplate(pipelineDraft.default);
+  saveProjectTypes(pipelineDraft.types);
   closeSettings();
 }
 

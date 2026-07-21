@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.32.5 (banner and data-html-version move together, always)
+     Version 0.32.7 (banner and data-html-version move together, always)
+     0.32.7 (D125): css ?v= → 0.40.0 only (phone font-boost fix + dash
+     projects scroll). No markup change.
+     0.32.6 (D124): the project-type LIBRARY — #project-type picker on the
+     new-project form, and the Pipeline tab's #pipeline-target selector +
+     New/Rename/Delete manager (the single stage editor now edits whichever
+     pipeline is selected). ?v= bumps app.js → 1.10.0, css → 0.39.0;
+     store.js → 0.16.0 (subscribeProjectTypes/saveProjectTypes) rides app's import.
      0.32.5 (D123): the Overlay control group (★ Holidays) added to BOTH the
      week and year .view-ctls (D104 grammar); ?v= bumps app.js → 1.9.0 and
      queue.js → 0.18.0 (holidaysForRange). css → 0.38.0.
@@ -152,9 +159,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.38.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.40.0">
 </head>
-<body data-html-version="0.32.5">
+<body data-html-version="0.32.7">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -296,6 +303,11 @@
             <label>Color <input id="project-color" type="color" value="#4dabf7"></label>
             <label>Stage tier <select id="project-tier"></select></label>
           </div>
+          <label id="project-type-label">Project type
+            <select id="project-type" title="Which pipeline to copy into this new project. 'Default' is your standard template; others are types you've built in Settings ▸ Pipeline. Existing projects keep whatever they already have.">
+              <option value="">Default template</option>
+            </select>
+          </label>
           <div class="form-row">
             <label>Starts <input id="project-start" type="date" required></label>
             <label>Ends <input id="project-end" type="date" required></label>
@@ -480,10 +492,17 @@
       </div>
 
       <div class="tab-pane" data-pane="pipeline" hidden>
-        <h3>Project stage template</h3>
-        <p class="hint">The universal pipeline copied into every NEW project (existing projects keep their own copy). <em>No date</em> = the stage is pipeline weight — it just has to happen before the next dated thing. <em>Before/After</em> = a real target date, offset in working days from project start or end. A stage never surfaces before its predecessors are checked, whatever its date.</p>
+        <h3>Project pipelines</h3>
+        <p class="hint">Build a LIBRARY of pipelines and pick one when you create a project (e.g. an actuarial default, a "Holiday Card", a "Taiko Performance"). <em>Default</em> is the standard template copied into a new project when you don't choose another. Existing projects keep their own copy whatever you change here.</p>
+        <div class="form-row" id="pipeline-picker-row">
+          <label>Editing <select id="pipeline-target"></select></label>
+          <button id="pipeline-new" class="mini" type="button" title="Create a new project type">+ New type</button>
+          <button id="pipeline-rename" class="mini" type="button" title="Rename this type">Rename</button>
+          <button id="pipeline-delete" class="mini" type="button" title="Delete this type (the Default can't be deleted)">Delete</button>
+        </div>
         <div id="stage-template-editor"></div>
         <button id="stage-add" class="mini">+ Add stage</button>
+        <p class="hint"><em>No date</em> = the stage is pipeline weight — it just has to happen before the next dated thing. <em>Before/After</em> = a real target date, offset in working days from project start or end. A stage never surfaces before its predecessors are checked, whatever its date. 🎆 marks the stage whose completion throws the big celebration (D109).</p>
         <div class="form-row">
           <label>Clear the deck at <input id="cfg-cleardeck" type="number" min="0" max="100"> % complete</label>
         </div>
@@ -703,6 +722,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.9.0"></script>
+  <script type="module" src="app.js?v=1.10.0"></script>
 </body>
 </html>

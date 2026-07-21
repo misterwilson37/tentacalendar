@@ -1,6 +1,11 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.15.0 — D116: writes become undo-informative. clockIn/clockOut/
+// Version 0.16.0 — D124: the project-type library. subscribeProjectTypes /
+// saveProjectTypes read/write a settings/projectTypes doc ({types:[{id,name,
+// stages}]}); the existing stageTemplate stays the implicit Default, so live
+// projects are untouched. addProjectWithStages already snapshots explicit
+// stages, so no creation-path change was needed. Rules wildcard covers it.
+// (prev) Version 0.15.0 — D116: writes become undo-informative. clockIn/clockOut/
 // logSession return the ids and bodies they touched; setSessionEnd and
 // restoreDoc (same-id resurrection) join the toolbox.
 // (prev) Version 0.14.0
@@ -63,7 +68,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.15.0";
+export const STORE_VERSION = "0.16.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -469,6 +474,20 @@ export function subscribeStageTemplate(cb) {
 
 export function saveStageTemplate(stages) {
   return setDoc(doc(db, "workspaces", WORKSPACE_ID, "settings", "stageTemplate"), { stages });
+}
+
+// D124 — the project-type LIBRARY. A single settings doc holds named types,
+// each with its own stage pipeline; the existing stageTemplate stays the
+// implicit "Default" (no migration, no risk to live projects). The rules
+// wildcard already covers settings docs — no console re-paste.
+export function subscribeProjectTypes(cb) {
+  return onSnapshot(doc(db, "workspaces", WORKSPACE_ID, "settings", "projectTypes"), snap => {
+    cb(snap.exists() ? (snap.data().types || []) : []);
+  });
+}
+
+export function saveProjectTypes(types) {
+  return setDoc(doc(db, "workspaces", WORKSPACE_ID, "settings", "projectTypes"), { types });
 }
 
 /** New project snapshots the current template into its own editable stages. */

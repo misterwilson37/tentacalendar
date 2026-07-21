@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — celebrate.js
-// Version 0.2.0 — THE TICKER TAPE PARADE (D120, Katie's request verbatim:
+// Version 0.2.0 — THE TICKER TAPE PARADE (D121, Katie's request verbatim:
 // "A ticker tape parade!"). Level 3 is rebuilt as a real parade: ~6
 // seconds of fluttering paper raining the full width of the glass (new
 // "tape" particle — paper physics: terminal velocity, sinusoidal sway,
@@ -101,7 +101,7 @@ function spawnRocket(palette) {
   });
 }
 
-/** D120 — ticker tape: long paper strips falling the full width of the
+/** D121 — ticker tape: long paper strips falling the full width of the
  *  screen. Paper physics, not confetti physics: gravity capped at a
  *  terminal velocity, a per-strip sinusoidal sway, and a tumble rendered
  *  as a width-scale on the strip (the cheap fake of a sheet turning over
@@ -121,7 +121,7 @@ function spawnTape(count, palette) {
   }
 }
 
-/** D120 — party cannon: a directional cone burst (angle in canvas space —
+/** D121 — party cannon: a directional cone burst (angle in canvas space —
  *  y grows DOWNWARD, so "up and to the right" is a negative-sin angle). */
 function spawnCone(x, y, angle, spread, count, palette, speed = 11) {
   if (parts.length > MAX_PARTS) return;
@@ -198,7 +198,7 @@ function wave() {
   setTimeout(() => document.body.classList.remove("celebration-wave"), 2000);
 }
 
-/** D120 — the parade banner: the project's name, huge and gold, center
+/** D121 — the parade banner: the project's name, huge and gold, center
  *  glass. Lives on document.body (OUTSIDE #drift-wrap, D37) at z-index 99
  *  via CSS — above the screen-rest night face (98), UNDER the confetti
  *  canvas (100) so the paper falls in front of the words. Same
@@ -242,7 +242,7 @@ export function celebrate(level = 1, at = {}, opts = {}) {
     spawnStreamers(palette);
     setTimeout(() => { spawnBurst(rand(canvas.width * .2, canvas.width * .8), rand(canvas.height * .2, canvas.height * .5), 45, palette); kick(); }, 200);
   } else {
-    // PROJECT COMPLETE — THE TICKER TAPE PARADE (D120). Full send.
+    // PROJECT COMPLETE — THE TICKER TAPE PARADE (D121). Full send.
     wave();
     paradeBanner(opts.name || "PROJECT COMPLETE!");
     // Opening salvo: party cannons crossing from the bottom corners…
