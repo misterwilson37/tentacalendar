@@ -1,7 +1,19 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.33.1 (banner and data-html-version move together, always)
+     Version 0.33.2 (banner and data-html-version move together, always)
+     0.33.2 (D127): THE REAL D37 FIX. A stray extra closing div, left over
+     from D118's modal-relocation edit, was accidentally acting as
+     #drift-wrap's true closing tag 150 lines later than intended — every
+     modal from #screen-rest through #yv-project-modal (incl. #settings-
+     modal) was structurally still INSIDE #drift-wrap this whole time,
+     D118's own comments notwithstanding. Moved the closing div to where
+     #drift-wrap's own header comment always said it belonged. Found by
+     Jake's screenshot (Settings needing a scroll to reach) plus a ruled-
+     out extensions theory (reproduced in a clean Edge profile) plus a
+     programmatic div-nesting count — not a guess. Full document verified
+     balanced before and after. No CSS or JS change needed; the CSS was
+     already correct, it just never had the DOM structure it assumed.
      0.33.1 (D126 fix): app.js ?v= → 1.11.1 only — the sidebar mode-filter
      bug (Jake's screenshot). No markup change; a Z for THIS file, carrying
      the bump (D94).
@@ -174,7 +186,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.41.0">
 </head>
-<body data-html-version="0.33.1">
+<body data-html-version="0.33.2">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -490,7 +502,17 @@
          when scrolled (Jake's clock-out bug). They now live with the
          other six modals below, outside the wrap, where D37's rule
          always said overlays belong. -->
-  </div><!-- /drift-wrap -->
+  </div>
+  </div><!-- /drift-wrap — D127: THIS is the real close. D118's refactor
+       left the actual closing tag stranded 150 lines down (see the note
+       by #yv-project-modal) disguised as one of ITS closing divs, so by
+       true tag-nesting every "moved outside the wrap" modal — screen-rest,
+       settings, weekend, decision, dup, stages, clock, followup, and
+       yv-project itself — was still genuinely INSIDE #drift-wrap the
+       whole time. D37's transform-reroot bug, structurally unfixed since
+       D118, just quiet: small drift amounts (±2-8px) rarely mispositioned
+       a SHORT modal enough to notice. Settings is the tallest modal in
+       the app, so it was the one that finally showed it plainly. -->
 
   <!-- D107: the screen rest — OUTSIDE #drift-wrap on purpose (D37's rule:
        a fixed overlay inside a transformed ancestor re-roots and shows the
@@ -641,7 +663,13 @@
     <div id="yv-project-slot"></div>
     </div>
   </div>
-  </div>
+  <!-- D127: a stray extra closing div used to sit HERE — a leftover from
+       D118's modal-relocation edit that never got cleaned up. It wasn't
+       harmless: by simple tag counting it was the ACTUAL closing tag for
+       #drift-wrap (see the real fix, ~150 lines up), meaning every modal
+       from #screen-rest through this one was still structurally INSIDE
+       #drift-wrap the whole time, D118's own comments notwithstanding.
+       Moved to where #drift-wrap is genuinely supposed to close. -->
 
 
   <div id="due-modal" class="modal-shell" hidden>
