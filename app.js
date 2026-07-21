@@ -1,5 +1,14 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.11.1 — D126 FIX (a Z): the Projects sidebar wasn't filtering
+// by have-tos/want-tos mode — Jake, from a screenshot, found a someday
+// project sitting in the sidebar on the Have-tos tab too. renderProjects
+// now reads through the same projectsForMode() choke point wantTosShuffle
+// and renderWantTos already used (three separate tier-lookups collapsed
+// into one — timelessTier()). The NOW bar's project lookup stays
+// deliberately UNFILTERED: a running timer is "what you're doing right
+// now" and shouldn't vanish because you flipped tabs to browse.
+// ------------------------------------------------------------
 // Version 1.11.0 — HAVE-TOS / WANT-TOS (D126, a Y). Katie's parking lot for
 // dateless someday-projects. A tier can be marked ⏳ timeless in Settings ▸
 // Tiers (radio-exclusive, same shape as D109's 🎆 — checking one unchecks
@@ -579,7 +588,7 @@ import {
 } from "./queue.js?v=0.19.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.11.0";
+export const APP_VERSION = "1.11.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1121,7 +1130,7 @@ function render() {
     renderDone(q.doneToday);
   }
 
-  renderProjects(now);  // D126 — unaffected by mode: always every project, dated or someday
+  renderProjects(now);  // D126 fix — the sidebar now filters by mode too (was showing every project regardless of tab)
   renderDecision(); // D57: modal rows track live state while open
   if (S.view === "dash") fitDashHeight();                    // D105: the frame first, then the panes fill it
   if (S.view === "year" || S.view === "dash") renderYear(); // D65: live updates flow into the grid
@@ -1134,6 +1143,23 @@ function setTodoMode(mode) {
   render();
 }
 
+/** D126 — which tier (if any) is marked timeless. One choke point, so
+ *  the sidebar, the want-tos card list, and the shuffle can't drift into
+ *  three different ideas of "which tier that is." */
+function timelessTier() {
+  return S.tiers.find(t => t.timeless) || null;
+}
+
+/** D126 — Jake, from a screenshot: a someday project showing in the
+ *  Have-tos sidebar was surprising, not helpful — the tab is meant to
+ *  change the WHOLE workspace's character, not just the center panel.
+ *  Both #projects-list (the sidebar) and #wanttos-list read through here
+ *  now, so they can't disagree about what belongs on screen right now. */
+function projectsForMode() {
+  const tt = timelessTier();
+  return S.projects.filter(p => S.todoMode === "want" ? p.tierId === tt?.id : p.tierId !== tt?.id);
+}
+
 /** D126 — want-tos: the timeless tier's projects, browsed as cards
  *  (reusing projectCard wholesale — "cards with their checklists" per
  *  the spec, and it already handles null dates via projWhen()). */
@@ -1141,13 +1167,13 @@ function renderWantTos() {
   const list = $("#wanttos-list");
   const hint = $("#wanttos-hint");
   list.innerHTML = "";
-  const tier = S.tiers.find(t => t.timeless);
+  const tier = timelessTier();
   if (!tier) {
     hint.hidden = false;
     hint.textContent = "No timeless tier set yet — mark one ⏳ in ⚙️ Settings ▸ Tiers, then create a project on it.";
     return;
   }
-  const projs = S.projects.filter(p => p.tierId === tier.id);
+  const projs = projectsForMode();
   if (!projs.length) {
     hint.hidden = false;
     hint.textContent = `No someday projects yet — add one on the right, on the ${tier.name} tier.`;
@@ -1177,9 +1203,9 @@ function renderWantTos() {
  *  the spec suggested; picks uniformly rather than trying to be clever
  *  about neglect — simplest honest thing that still surprises. */
 function wantTosShuffle() {
-  const tier = S.tiers.find(t => t.timeless);
+  const tier = timelessTier();
   if (!tier) return;
-  const open = S.projects.filter(p => p.tierId === tier.id && !p.completedAt);
+  const open = projectsForMode().filter(p => !p.completedAt);
   if (!open.length) return;
   const pick = open[Math.floor(Math.random() * open.length)];
   S.expandedProjects.add(pick.id);
@@ -1552,13 +1578,21 @@ function saveClockDialog() {
 function renderProjects(now) {
   const box = $("#projects-list");
   box.innerHTML = "";
-  $("#projects-empty").hidden = S.projects.length !== 0;
+  // D126 fix — Jake, from a screenshot: a someday project was showing in
+  // the sidebar even on the Have-tos tab. The sidebar reads through
+  // projectsForMode() now, same as the want-tos card list, so the two
+  // can't disagree about what's currently on screen.
+  const projects = projectsForMode();
+  $("#projects-empty").hidden = projects.length !== 0;
+  $("#projects-empty").textContent = S.todoMode === "want"
+    ? "No someday projects yet. Mark a tier ⏳ timeless in ⚙️ Settings, then create one on the right."
+    : "No projects yet. Create one on the right — its whole pipeline comes with it.";
 
   // D56: unfinished projects up top (whatever their dates — a stalled
   // past project stays visible on purpose); finished ones fold into
   // their own collapsed section below. Both keep start-date order.
-  const open = S.projects.filter(p => !p.completedAt);
-  const finished = S.projects.filter(p => p.completedAt);
+  const open = projects.filter(p => !p.completedAt);
+  const finished = projects.filter(p => p.completedAt);
 
   // D122 — Katie's NOW bar: the current project and how long she's been
   // on it, at the top of the list. Exists ONLY while a timer runs (an
@@ -1567,6 +1601,9 @@ function renderProjects(now) {
   // second hand without a render. Tap = the clock-out dialog; the handler
   // re-derives the open session at click time so a stale card can't
   // clock out the wrong thing.
+  // D126 — deliberately reads S.projects UNFILTERED, not projectsForMode():
+  // a running timer is "what you're doing right now," and that shouldn't
+  // vanish just because you flipped to the other tab to browse.
   {
     const os = openSessionNow();
     if (os) {
