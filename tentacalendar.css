@@ -1,7 +1,13 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.40.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.41.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.41.0 (D126): have-tos/want-tos. .t-timeless-label mirrors .t-carry-label
+   for the tier editor's new ⏳ checkbox. Everything else — the .tab-bar
+   toggle atop #queue-panel, the want-tos header, the want-tos project
+   cards — reuses existing classes (.tab-bar/.tab-btn, .day-nav, .hint,
+   .project-card) on purpose: D104's "one control grammar" lesson applied
+   to a whole new surface instead of inventing a parallel one.
    0.40.0 (D125): phone fit + dash scroll. text-size-adjust:100% stops
    mobile Chrome font-boosting (was ballooning the day header ~2x and
    breaking "Today — Sat, Jul 18" one-word-per-line); .day-nav h2 gains
@@ -153,7 +159,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.40.0";
+  --tc-version: "0.41.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -406,6 +412,7 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 .tier-row .t-kind { width: 6.5rem; }
 .tier-row .t-cal { flex-basis: 100%; font-size: .8rem; }
 .t-carry-label { font-size: .75rem; white-space: nowrap; }
+.t-timeless-label { font-size: .75rem; white-space: nowrap; }   /* D126 */
 
 .info-dot {
   display: inline-flex; align-items: center; justify-content: center;

@@ -1,7 +1,17 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.32.7 (banner and data-html-version move together, always)
+     Version 0.33.0 (banner and data-html-version move together, always)
+     0.33.0 (D126): HAVE-TOS / WANT-TOS — a new .tab-bar toggle atop
+     #queue-panel (reusing the settings tabs' own class, not a new idiom)
+     switches between #havetos-panel (the existing date-driven agenda,
+     now wrapped as one unit) and the new #wanttos-panel (timeless-tier
+     projects as cards, no day-nav — there's no day to nav). #project-tier
+     gains a change listener; the Starts/Ends row gets id="project-dates-row"
+     so JS can hide it live when the selected tier is marked ⏳ timeless.
+     A Y: a whole new panel + tab strip didn't exist before. ?v= bumps
+     app.js → 1.11.0, css → 0.41.0. No store.js change — saveTier/addProject
+     already pass arbitrary fields through untyped.
      0.32.7 (D125): css ?v= → 0.40.0 only (phone font-boost fix + dash
      projects scroll). No markup change.
      0.32.6 (D124): the project-type LIBRARY — #project-type picker on the
@@ -159,9 +169,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.40.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.41.0">
 </head>
-<body data-html-version="0.32.7">
+<body data-html-version="0.33.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -201,34 +211,55 @@
     <main>
       <!-- ===== Queue column ===== -->
       <section id="queue-panel">
-        <div class="day-nav">
-          <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
-          <span class="nav-slot" id="day-slot-back"></span>
-          <h2 id="day-label">Today</h2>
-          <span class="nav-slot" id="day-slot-fwd"><button id="day-today" class="mini" hidden>back to today</button></span>
-          <button id="day-next" class="icon-btn" title="Next day">▶</button>
-          <button id="day-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+        <!-- D126 — have-tos / want-tos. Always visible; picks which panel
+             below is live. Katie's own household words, used verbatim. -->
+        <div class="tab-bar todo-mode-bar">
+          <button type="button" class="tab-btn active" id="mode-have" data-mode="have">Have-tos</button>
+          <button type="button" class="tab-btn" id="mode-want" data-mode="want">Want-tos</button>
         </div>
 
-        <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
+        <div id="havetos-panel">
+          <div class="day-nav">
+            <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
+            <span class="nav-slot" id="day-slot-back"></span>
+            <h2 id="day-label">Today</h2>
+            <span class="nav-slot" id="day-slot-fwd"><button id="day-today" class="mini" hidden>back to today</button></span>
+            <button id="day-next" class="icon-btn" title="Next day">▶</button>
+            <button id="day-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+          </div>
 
-        <div id="pinned" hidden></div>
-        <div id="allday-strip" hidden></div>
-        <div id="queue"></div>
+          <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
 
-        <div id="waiting" hidden>
-          <h3>Waiting on…</h3>
-          <div id="waiting-list"></div>
+          <div id="pinned" hidden></div>
+          <div id="allday-strip" hidden></div>
+          <div id="queue"></div>
+
+          <div id="waiting" hidden>
+            <h3>Waiting on…</h3>
+            <div id="waiting-list"></div>
+          </div>
+
+          <div id="earlier" hidden>
+            <h3>Earlier today</h3>
+            <div id="earlier-list"></div>
+          </div>
+
+          <div id="done" hidden>
+            <h3>Done today <span id="done-count" class="badge-done"></span></h3>
+            <div id="done-list"></div>
+          </div>
         </div>
 
-        <div id="earlier" hidden>
-          <h3>Earlier today</h3>
-          <div id="earlier-list"></div>
-        </div>
-
-        <div id="done" hidden>
-          <h3>Done today <span id="done-count" class="badge-done"></span></h3>
-          <div id="done-list"></div>
+        <!-- D126 — want-tos: dateless someday-projects, browsed for ideas.
+             No day-nav — there's no day to nav. -->
+        <div id="wanttos-panel" hidden>
+          <div class="day-nav wanttos-nav">
+            <h2>Want-tos — someday, for fun</h2>
+            <button id="wanttos-shuffle" class="icon-btn" title="Give me an idea — jump to a random someday project">🎲</button>
+            <button id="wanttos-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+          </div>
+          <p id="wanttos-hint" class="hint" hidden></p>
+          <div id="wanttos-list"></div>
         </div>
       </section>
 
@@ -308,7 +339,7 @@
               <option value="">Default template</option>
             </select>
           </label>
-          <div class="form-row">
+          <div class="form-row" id="project-dates-row">
             <label>Starts <input id="project-start" type="date" required></label>
             <label>Ends <input id="project-end" type="date" required></label>
           </div>
@@ -326,6 +357,7 @@
           </div>
         </form>
         <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
+        <p class="hint">Pick a tier marked ⏳ timeless (Settings ▸ Tiers) and the date fields disappear — it becomes a want-to, browsed under that tab instead of nagging in Have-tos.</p>
       </section>
     </main>
 
@@ -722,6 +754,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.10.0"></script>
+  <script type="module" src="app.js?v=1.11.0"></script>
 </body>
 </html>

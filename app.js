@@ -1,5 +1,29 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.11.0 — HAVE-TOS / WANT-TOS (D126, a Y). Katie's parking lot for
+// dateless someday-projects. A tier can be marked ⏳ timeless in Settings ▸
+// Tiers (radio-exclusive, same shape as D109's 🎆 — checking one unchecks
+// the rest); the project form reads that flag live off #project-tier
+// (syncProjectDateRequirement) and hides/un-requires the date fields, or
+// drops them to null on save. A new .tab-bar atop #queue-panel (reusing the
+// settings tabs' own class) swaps the whole panel body between the existing
+// date-driven agenda (#havetos-panel, untouched in substance) and the new
+// #wanttos-panel — the timeless tier's projects rendered with the same
+// projectCard() the sidebar uses, "cards with their checklists" per the
+// design. projWhen() replaces every direct fmtDay(p.startDate) with a
+// null-safe "Someday" fallback (projectCard, the color-collision hint).
+// 🔁 duplicate-for-next-year hides on a timeless project (no year to bump).
+// CONTAINMENT lives mostly in queue.js 0.19.0 now (buildQueue/buildWeek skip
+// timeless-tier projects outright; stageScheduledAt refuses to compute a
+// date from null project dates regardless of a stage's own direction) — the
+// one app.js-side choke point is the year view's single `projs` filter,
+// which now excludes timeless-tier projects explicitly rather than trusting
+// the epoch-math coincidence that happened to already keep them off-screen.
+// S.todoMode is session-only by design (never localStorage) — Jake's own
+// containment lever: it always boots to have-tos, so landing on the real
+// work is never one stale toggle away. No store.js change: saveTier and
+// addProject already pass whatever object they're handed straight through.
+// ------------------------------------------------------------
 // Version 1.10.0 — PROJECT-TYPE LIBRARY (D124, a Y). The single stage
 // template becomes a LIBRARY: a "Project type" picker on the new-project
 // form snapshots the CHOSEN pipeline (Default = the old stageTemplate, or
@@ -552,10 +576,10 @@ import {
   setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION,
   clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES
-} from "./queue.js?v=0.18.0";
+} from "./queue.js?v=0.19.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.10.0";
+export const APP_VERSION = "1.11.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -598,6 +622,7 @@ const S = {
   yearBarSize: localStorage.getItem("tc-year-barsize") || "auto", // D69: "auto" | "full" | "half" | "quarter"
   lastSuggestedColor: "#4dabf7",
   sessions: [],            // D112 — billable sessions ledger
+  todoMode: "have",        // D126 — "have" | "want"; session-only by design, NEVER localStorage (always boots to have-tos)
   unsubs: []
 };
 
@@ -620,6 +645,10 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#day-prev").addEventListener("click", () => shiftDay(-1));
   $("#day-next").addEventListener("click", () => shiftDay(1));
   $("#day-today").addEventListener("click", () => { S.viewDay = Date.now(); render(); });
+  $("#mode-have").addEventListener("click", () => setTodoMode("have"));   // D126
+  $("#mode-want").addEventListener("click", () => setTodoMode("want"));
+  $("#wanttos-shuffle").addEventListener("click", wantTosShuffle);
+  $("#wanttos-fullscreen").addEventListener("click", toggleFullscreen);
 
   // D65 year view
   $("#view-switch").addEventListener("click", e => {   // D89: labeled, no guessing
@@ -701,6 +730,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#project-form").addEventListener("submit", onProjectFormSubmit);
   $("#project-cancel").addEventListener("click", cancelProjectEdit);
   $("#project-color").addEventListener("input", checkProjectColor);
+  $("#project-tier").addEventListener("change", syncProjectDateRequirement);   // D126
   $("#tier-add").addEventListener("click", () => tierEditorRow({}, true));
   $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
   wirePipelineManager();   // D124 — the project-type library controls (once)
@@ -1017,71 +1047,148 @@ function render() {
   // D101 — defer, never drop. A snapshot that lands mid-drag is real data.
   if (gestureDepth) { renderPending = true; return; }
   const now = Date.now();
-  const q = buildQueue({
-    tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
-    now, viewDay: S.viewDay, hiddenTierIds: S.hiddenTierIds
-  });
 
-  // D80: the all-day shelf — ambient, checkbox-free, above the fold.
-  const strip = $("#allday-strip");
-  if (strip) {
-    strip.innerHTML = "";
-    strip.hidden = !(q.banners && q.banners.length);
-    (q.banners || []).forEach(b => {
-      const pill = document.createElement("span");
-      pill.className = "banner";
-      const c = b.tier?.color || "#4dd0c4";
-      pill.style.borderLeftColor = c;
-      pill.style.background = hexToRgba(c, 0.14);
-      pill.textContent = b.title;
-      if (b.dayTotal > 1) {
-        const sp = document.createElement("span");
-        sp.className = "banner-span";
-        sp.textContent = ` · day ${b.dayN}/${b.dayTotal}`;
-        pill.append(sp);
-      }
-      pill.title = b.dayTotal > 1
-        ? `${b.title} — ${fmtDay(b.start)} → ${fmtDay((b.end || b.start) - 1)}`
-        : `${b.title} — ${fmtDay(b.start)}`;
-      strip.append(pill);
+  // D126 — have-tos / want-tos. The tab bar itself is always visible;
+  // which panel underneath it is live follows S.todoMode.
+  const wantMode = S.todoMode === "want";
+  $("#mode-have").classList.toggle("active", !wantMode);
+  $("#mode-want").classList.toggle("active", wantMode);
+  $("#havetos-panel").hidden = wantMode;
+  $("#wanttos-panel").hidden = !wantMode;
+
+  if (wantMode) {
+    renderWantTos();
+  } else {
+    const q = buildQueue({
+      tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
+      now, viewDay: S.viewDay, hiddenTierIds: S.hiddenTierIds
     });
+
+    // D80: the all-day shelf — ambient, checkbox-free, above the fold.
+    const strip = $("#allday-strip");
+    if (strip) {
+      strip.innerHTML = "";
+      strip.hidden = !(q.banners && q.banners.length);
+      (q.banners || []).forEach(b => {
+        const pill = document.createElement("span");
+        pill.className = "banner";
+        const c = b.tier?.color || "#4dd0c4";
+        pill.style.borderLeftColor = c;
+        pill.style.background = hexToRgba(c, 0.14);
+        pill.textContent = b.title;
+        if (b.dayTotal > 1) {
+          const sp = document.createElement("span");
+          sp.className = "banner-span";
+          sp.textContent = ` · day ${b.dayN}/${b.dayTotal}`;
+          pill.append(sp);
+        }
+        pill.title = b.dayTotal > 1
+          ? `${b.title} — ${fmtDay(b.start)} → ${fmtDay((b.end || b.start) - 1)}`
+          : `${b.title} — ${fmtDay(b.start)}`;
+        strip.append(pill);
+      });
+    }
+
+    // D82: passed events sink here (today only), dimmed with struck time.
+    const earlier = $("#earlier"), earlierList = $("#earlier-list");
+    if (earlier) {
+      earlierList.innerHTML = "";
+      earlier.hidden = !(q.passedEvents && q.passedEvents.length);
+      (q.passedEvents || []).forEach(pe => {
+        const row = document.createElement("div");
+        row.className = "row past-event";
+        const c = pe.tier?.color || "#4dd0c4";
+        const when = pe.end
+          ? `${fmtTime(pe.start)}–${fmtTime(pe.end)}`
+          : fmtTime(pe.start);
+        row.innerHTML = `<div class="row-main"><strong>${esc(pe.title)}</strong><span class="sub">${when}</span></div>`;
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.textContent = pe.tier?.name || "";
+        chip.style.background = hexToRgba(c, 0.18);
+        row.append(chip);
+        earlierList.append(row);
+      });
+    }
+
+    const sameDay = new Date(S.viewDay).toDateString() === new Date(now).toDateString();
+    $("#day-label").textContent = sameDay ? `Today — ${fmtDay(S.viewDay)}` : fmtDay(S.viewDay);
+    placeNowButton("day", sameDay ? 0 : (startOfDayTs(S.viewDay) > startOfDayTs(now) ? 1 : -1)); // D90
+
+    renderPinned(q.pinned, now);
+    renderQueue(q.items, now);
+    renderWaiting(q.waiting);
+    renderDone(q.doneToday);
   }
 
-  // D82: passed events sink here (today only), dimmed with struck time.
-  const earlier = $("#earlier"), earlierList = $("#earlier-list");
-  if (earlier) {
-    earlierList.innerHTML = "";
-    earlier.hidden = !(q.passedEvents && q.passedEvents.length);
-    (q.passedEvents || []).forEach(pe => {
-      const row = document.createElement("div");
-      row.className = "row past-event";
-      const c = pe.tier?.color || "#4dd0c4";
-      const when = pe.end
-        ? `${fmtTime(pe.start)}–${fmtTime(pe.end)}`
-        : fmtTime(pe.start);
-      row.innerHTML = `<div class="row-main"><strong>${esc(pe.title)}</strong><span class="sub">${when}</span></div>`;
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.textContent = pe.tier?.name || "";
-      chip.style.background = hexToRgba(c, 0.18);
-      row.append(chip);
-      earlierList.append(row);
-    });
-  }
-
-  const sameDay = new Date(S.viewDay).toDateString() === new Date(now).toDateString();
-  $("#day-label").textContent = sameDay ? `Today — ${fmtDay(S.viewDay)}` : fmtDay(S.viewDay);
-  placeNowButton("day", sameDay ? 0 : (startOfDayTs(S.viewDay) > startOfDayTs(now) ? 1 : -1)); // D90
-
-  renderPinned(q.pinned, now);
-  renderQueue(q.items, now);
-  renderWaiting(q.waiting);
-  renderDone(q.doneToday);
-  renderProjects(now);
+  renderProjects(now);  // D126 — unaffected by mode: always every project, dated or someday
   renderDecision(); // D57: modal rows track live state while open
   if (S.view === "dash") fitDashHeight();                    // D105: the frame first, then the panes fill it
   if (S.view === "year" || S.view === "dash") renderYear(); // D65: live updates flow into the grid
   if (S.view === "week" || S.view === "dash") renderWeek(); // D88: same deal for the week (D105: the dashboard is all views at once)
+}
+
+function setTodoMode(mode) {
+  if (S.todoMode === mode) return;
+  S.todoMode = mode;
+  render();
+}
+
+/** D126 — want-tos: the timeless tier's projects, browsed as cards
+ *  (reusing projectCard wholesale — "cards with their checklists" per
+ *  the spec, and it already handles null dates via projWhen()). */
+function renderWantTos() {
+  const list = $("#wanttos-list");
+  const hint = $("#wanttos-hint");
+  list.innerHTML = "";
+  const tier = S.tiers.find(t => t.timeless);
+  if (!tier) {
+    hint.hidden = false;
+    hint.textContent = "No timeless tier set yet — mark one ⏳ in ⚙️ Settings ▸ Tiers, then create a project on it.";
+    return;
+  }
+  const projs = S.projects.filter(p => p.tierId === tier.id);
+  if (!projs.length) {
+    hint.hidden = false;
+    hint.textContent = `No someday projects yet — add one on the right, on the ${tier.name} tier.`;
+    return;
+  }
+  hint.hidden = true;
+  const open = projs.filter(p => !p.completedAt);
+  const finished = projs.filter(p => p.completedAt);
+  for (const p of open) list.append(projectCard(p));
+  if (finished.length) {
+    const toggle = document.createElement("button");
+    toggle.className = "mini finished-toggle";
+    toggle.textContent = `${S.showFinished ? "▾" : "▸"} Finished ✓ (${finished.length})`;
+    toggle.title = "Completed someday projects, kept for the record";
+    toggle.addEventListener("click", () => {
+      S.showFinished = !S.showFinished;
+      localStorage.setItem("tc-show-finished", S.showFinished ? "1" : "0");
+      render();
+    });
+    list.append(toggle);
+    if (S.showFinished) for (const p of finished) list.append(projectCard(p));
+  }
+}
+
+/** D126 — "give me an idea": jump to a random open someday project,
+ *  expanded so its checklist is right there. Browsing-for-fun affordance
+ *  the spec suggested; picks uniformly rather than trying to be clever
+ *  about neglect — simplest honest thing that still surprises. */
+function wantTosShuffle() {
+  const tier = S.tiers.find(t => t.timeless);
+  if (!tier) return;
+  const open = S.projects.filter(p => p.tierId === tier.id && !p.completedAt);
+  if (!open.length) return;
+  const pick = open[Math.floor(Math.random() * open.length)];
+  S.expandedProjects.add(pick.id);
+  persistExpanded();
+  render();
+  requestAnimationFrame(() => {
+    const card = document.querySelector(`#wanttos-list .project-card[data-project-id="${pick.id}"]`);
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 }
 
 function tierChip(tier) {
@@ -1353,6 +1460,15 @@ window.addEventListener("keydown", ev => {
 // lifetime Σ, and everything is correctable after the fact.
 function openSessionNow() { return S.sessions.find(s => s.end == null) || null; }
 function projName(id) { return S.projects.find(x => x.id === id)?.name || "another project"; }
+
+/** D126 — a project's date range as text, or "Someday" for a timeless
+ *  (null-dated) want-to. Every place that used to write fmtDay(p.startDate)
+ *  directly needs this now, or a want-to renders "Thu, Jan 1" (epoch). */
+function projWhen(p) {
+  return (p.startDate != null && p.endDate != null)
+    ? `${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}`
+    : "Someday";
+}
 function projectClockedMs(pid, now) {
   let t = 0;
   for (const s of S.sessions) if (s.projectId === pid) t += (s.end ?? now) - s.start;
@@ -1510,6 +1626,7 @@ function projectCard(p) {
   const expanded = S.expandedProjects.has(p.id);
   const card = document.createElement("div");
   card.className = "project-card" + (p.completedAt ? " project-done" : "");
+  card.dataset.projectId = p.id; // D126 — lets the want-tos shuffle find its pick after a render
   card.style.borderTop = `3px solid ${p.color}`;
 
   const head = document.createElement("div");
@@ -1522,8 +1639,13 @@ function projectCard(p) {
   nameEl.textContent = p.name;
   const btns = document.createElement("span");
   btns.className = "proj-btns";
+  // D126 — "duplicate for next year" has no year to bump on a timeless
+  // project; offering it would either no-op confusingly or need its own
+  // invented semantics. Left out on purpose, not forgotten.
+  if (p.startDate != null) {
+    btns.append(iconBtn("🔁", "Duplicate this project for next year (same window, stages reset)", () => openDuplicateModal(p)));
+  }
   btns.append(
-    iconBtn("🔁", "Duplicate this project for next year (same window, stages reset)", () => openDuplicateModal(p)),
     iconBtn("✎", "Edit project (name, color, tier, dates, workload)", () => startProjectEdit(p)),
     iconBtn("✎⋮", "Edit this project's stages (rename, reorder, add, remove)", () => openStagesDialog(p)),
     iconBtn("✕", "Delete project", () => {
@@ -1542,7 +1664,7 @@ function projectCard(p) {
   const dates = document.createElement("div");
   dates.className = "project-dates sub";
   dates.append(document.createTextNode(
-    `${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}${wl}` +
+    `${projWhen(p)}${wl}` +
     (p.completedAt ? ` · finished ${fmtDay(p.completedAt)}` : "")));
   {
     // D119 — Jake: the clock row "adds a ton of vertical space." The
@@ -1679,6 +1801,10 @@ function plusOneYear(ts) {
 }
 
 function openDuplicateModal(p) {
+  if (p.startDate == null) {   // D126 — the 🔁 button is hidden for these; belt and suspenders
+    alert("Someday projects don't duplicate for next year — there's no year to bump. Use ✎⋮ for a fresh checklist instead.");
+    return;
+  }
   const tier = S.tiers.find(t => t.id === p.tierId);
   const allowed = tier?.allowedDays;
   // Shift the window +1 year, then snap onto the tier's working days:
@@ -2089,6 +2215,7 @@ function refreshTierSelects() {
     if (work) $("#project-tier").value = work.id;
   }
   refreshTypeSelect();   // D124 — keep the project-type picker in sync
+  syncProjectDateRequirement();   // D126
 }
 
 // D124 — the project-type picker on the new-project form: Default + each
@@ -2184,6 +2311,22 @@ function onTaskFormSubmit(ev) {
 
 // ---------- Project form (create + edit) + weekend interception (D45) ----------
 
+/** D126 — the date row's visibility/required-ness follows whichever tier
+ *  is currently selected, live. Timeless tier picked → dates hide and stop
+ *  being required (and any typed-in values are cleared, so a stale date
+ *  can't sneak through unseen); any other tier → dates return required.
+ *  Called on tier <select> change AND whenever the form is (re)opened, so
+ *  new-project, edit, and the year-view's reparented copy all agree. */
+function syncProjectDateRequirement() {
+  const tier = S.tiers.find(t => t.id === $("#project-tier").value);
+  const timeless = !!tier?.timeless;
+  const row = $("#project-dates-row");
+  if (row) row.hidden = timeless;
+  $("#project-start").required = !timeless;
+  $("#project-end").required = !timeless;
+  if (timeless) { $("#project-start").value = ""; $("#project-end").value = ""; }
+}
+
 function startProjectEdit(p) {
   S.editingProjectId = p.id;
   $("#project-form-title").textContent = "✎ Edit project";
@@ -2193,8 +2336,11 @@ function startProjectEdit(p) {
   $("#project-color").value = p.color;
   $("#project-tier").value = p.tierId;
   $("#project-workload").value = String(p.workload || 2);
-  $("#project-start").value = toDateInput(new Date(p.startDate));
-  $("#project-end").value = toDateInput(new Date(p.endDate));
+  // D126 — a want-to has no dates to prefill; new Date(null) would show
+  // the epoch, which is a lie dressed as a date.
+  $("#project-start").value = p.startDate != null ? toDateInput(new Date(p.startDate)) : "";
+  $("#project-end").value = p.endDate != null ? toDateInput(new Date(p.endDate)) : "";
+  syncProjectDateRequirement();
   const tl = $("#project-type-label"); if (tl) tl.hidden = true;   // D124 — editing keeps the project's own stages
   checkProjectColor();
   $("#project-name").focus();
@@ -2207,6 +2353,7 @@ function cancelProjectEdit() {
   $("#project-cancel").hidden = true;
   $("#project-form").reset();
   $("#project-workload").value = "2";
+  syncProjectDateRequirement();   // D126 — .reset() can land back on a timeless tier's default
   const tl = $("#project-type-label"); if (tl) tl.hidden = false;   // D124 — new projects choose a pipeline again
   suggestProjectColor(true);
   $("#project-color-hint").textContent = "";
@@ -2218,18 +2365,24 @@ function onProjectFormSubmit(ev) {
   const color = $("#project-color").value;
   const tierId = $("#project-tier").value;
   const workload = parseInt($("#project-workload").value, 10) || 2;
+  const tier = S.tiers.find(t => t.id === tierId);
+  const timeless = !!tier?.timeless;   // D126
   const start = $("#project-start").value;
   const end = $("#project-end").value;
-  if (!name || !tierId || !start || !end) return;
+  if (!name || !tierId) return;
+  if (!timeless && (!start || !end)) return;
   const payload = {
     name, color, tierId, workload,
-    startDate: new Date(`${start}T00:00`).getTime(),
-    endDate: new Date(`${end}T00:00`).getTime()
+    startDate: timeless ? null : new Date(`${start}T00:00`).getTime(),
+    endDate: timeless ? null : new Date(`${end}T00:00`).getTime()
   };
-  if (payload.endDate < payload.startDate) {
+  if (!timeless && payload.endDate < payload.startDate) {
     alert("Project can't end before it starts. (The octopus checked.)");
     return;
   }
+  // D126 — a timeless project has no weekend to intercept; skip straight
+  // to commit. validateWeekends assumes a real date in the field it checks.
+  if (timeless) { commitProject(payload); return; }
   validateWeekends(payload, "startDate");
 }
 
@@ -3929,7 +4082,12 @@ function renderYear() {
 
   // Visible projects — everything intersecting the window, finished
   // included (their bars read fully saturated; that IS the year story).
+  // D126 — a want-to's null dates would ALSO fail this window test by
+  // epoch-math accident (0 never overlaps a real year), but "accident" is
+  // exactly the kind of trap this file's own history keeps warning about
+  // (D106, D110). Exclude by tier, explicitly, and let that be the reason.
   const projs = S.projects
+    .filter(p => !S.tiers.find(t => t.id === p.tierId)?.timeless)
     .filter(p => startOfDayTs(p.startDate || 0) < winEnd &&
                  startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS > winStart)
     .sort((x, y) => (x.startDate || 0) - (y.startDate || 0));
@@ -4166,9 +4324,9 @@ function checkProjectColor() {
     if (d < nearestDist) { nearestDist = d; nearest = p; }
   }
   if (nearest && nearestDist < 25) {
-    hint.textContent = `⚠️ Same color as ${nearest.name} (${fmtDay(nearest.startDate)} – ${fmtDay(nearest.endDate)}). Try ${bestFreeColor()}.`;
+    hint.textContent = `⚠️ Same color as ${nearest.name} (${projWhen(nearest)}). Try ${bestFreeColor()}.`;
   } else if (nearest && nearestDist < 60) {
-    hint.textContent = `⚠️ Very close to ${nearest.name} (${fmtDay(nearest.startDate)} – ${fmtDay(nearest.endDate)}). Try ${bestFreeColor()}.`;
+    hint.textContent = `⚠️ Very close to ${nearest.name} (${projWhen(nearest)}). Try ${bestFreeColor()}.`;
   } else {
     hint.textContent = "";
   }
@@ -4366,6 +4524,7 @@ function tierEditorRow(t, isNew) {
       <option value="anchor" ${t.kind === "anchor" ? "selected" : ""}>Calendar</option>
     </select>
     <label class="t-carry-label" title="If tasks in this tier are still unchecked at midnight, they get written onto tomorrow's Google Calendar with a ❗ at the carryover hour below. (Phase 3 feature.)"><input class="t-carry" type="checkbox" ${t.midnightCarryover ? "checked" : ""}> ❗ carryover</label>
+    <label class="t-timeless-label" title="Projects on this tier need no start/end date — a parking lot for someday ideas (D126's want-tos). Only ONE tier may be timeless; checking this one unchecks any other." ${t.kind === "anchor" ? "hidden" : ""}><input class="t-timeless" type="checkbox" ${t.timeless ? "checked" : ""}> ⏳ timeless</label>
     <button class="t-del" title="Delete tier">✕</button>
     <span class="t-days" title="Working days for this tier: reschedules land on these days, project dates outside them get intercepted, and pipeline offsets only count them. Weekend jobs? Check Sa/Su." ${t.kind === "anchor" ? "hidden" : ""}>${dayToggles}</span>
     <input class="t-cal" type="text" value="${esc(t.gcalCalendarId || "")}"
@@ -4375,6 +4534,16 @@ function tierEditorRow(t, isNew) {
   row.querySelector(".t-kind").addEventListener("change", ev => {
     row.querySelector(".t-cal").hidden = ev.target.value !== "anchor";
     row.querySelector(".t-days").hidden = ev.target.value === "anchor";
+    row.querySelector(".t-timeless-label").hidden = ev.target.value === "anchor";
+    if (ev.target.value === "anchor") row.querySelector(".t-timeless").checked = false; // an anchor can't be someday's parking lot
+  });
+  // D126 — timeless is a radio across the whole editor, same shape as
+  // D109's 🎆: checking one unchecks every other row's box. Containment
+  // depends on there being AT MOST one (project form reads whichever
+  // tier the editor currently marks).
+  row.querySelector(".t-timeless").addEventListener("change", ev => {
+    if (!ev.target.checked) return;
+    box.querySelectorAll(".t-timeless").forEach(cb => { if (cb !== ev.target) cb.checked = false; });
   });
   row.querySelector(".t-del").addEventListener("click", () => {
     if (row.dataset.id) {
@@ -4538,6 +4707,7 @@ function onSaveSettings() {
       color: row.querySelector(".t-color").value,
       kind,
       midnightCarryover: row.querySelector(".t-carry").checked,
+      timeless: kind !== "anchor" && row.querySelector(".t-timeless").checked, // D126
       gcalCalendarId: kind === "anchor" ? row.querySelector(".t-cal").value.trim() : "",
       allowedDays
     };

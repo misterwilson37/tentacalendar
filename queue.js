@@ -1,6 +1,25 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.18.0 — D123: US federal holidays, client-computed. usFederalHolidays(year)
+// Version 0.19.0 — D126: TIMELESS CONTAINMENT. Katie's want-tos projects
+// carry null startDate/endDate on purpose (D126, app.js/store.js) — this
+// file is the deadline spine, so it's the one place that MUST refuse to
+// turn "no dates" into an accidental date. Two structural guards, not one:
+// (1) stageScheduledAt returns null outright when project.startDate or
+// .endDate is null, REGARDLESS of a stage's own direction/offset — a
+// timeless project's stages read as undated weight no matter what a
+// pipeline template says, so a mis-set directional stage can't silently
+// compute an epoch-anchored (1970) deadline. (2) buildQueue AND buildWeek's
+// project loops both additionally skip any project on a timeless tier
+// outright — belt and suspenders, and load-bearing in buildWeek's case:
+// its own "nothing silently disappears" rescue (a project whose window
+// is entirely in the past still gets a bar stretched to today, D89) would
+// otherwise read a timeless project's epoch-zero window as "deeply
+// overdue" and paint a bar from 1970 to today. dayReflection needed no
+// extra guard — guard (1) alone makes its put-off path see `null` and
+// skip; its victory path is left open on purpose, since finishing a
+// someday-project stage today is a real, dated accomplishment worth
+// showing in the daily reflection even though the project itself isn't.
+// (prev) Version 0.18.0 — D123: US federal holidays, client-computed. usFederalHolidays(year)
 // is a pure per-year function (fixed dates + floating rules — MLK 3rd Mon Jan,
 // Memorial last Mon May, Thanksgiving 4th Thu Nov, …), Juneteenth from 2021;
 // holidaysForRange(a,b) → a day-keyed Map for a render window. Local Date math
@@ -85,7 +104,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.18.0";
+export const QUEUE_VERSION = "0.19.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -277,6 +296,7 @@ export function stageIsDated(s) {
  *  owning tier's ALLOWED days (D60; default Mon–Fri), at the deadline
  *  hour (D51). Returns null for undated stages (D50). */
 export function stageScheduledAt(project, stage, allowedDays) {
+  if (project.startDate == null || project.endDate == null) return null; // D126 — timeless project: no anchor to compute FROM
   const s = normalizeStage(stage);
   if (s.direction === "none") return null;
   const base = s.anchor === "end" ? (project.endDate || 0) : (project.startDate || 0);
@@ -522,6 +542,7 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
   for (const p of projects) {
     if (hidden(p.tierId)) continue;
     if (offDay(p.tierId)) continue; // D61
+    if (tierById[p.tierId]?.timeless) continue; // D126 — want-tos live off the deadline spine entirely
     const stages = p.stages || [];
     const activeIdx = stages.findIndex(s => !s.completedAt);
     if (activeIdx === -1) continue; // complete
@@ -895,6 +916,7 @@ export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay,
   const projectSpans = [];
   for (const p of projects) {
     if (hidden(p.tierId)) continue;
+    if (tierById[p.tierId]?.timeless) continue; // D126 — want-tos never get a week bar
     const stages = p.stages || [];
     if (!stages.length) continue;
     const activeIdx = stages.findIndex(s => !s.completedAt);
