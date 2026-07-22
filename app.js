@@ -1,5 +1,25 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.12.0 — D120: THE TIME REPORT (a Y). Katie's question — "can it
+// roll up by day/week/month/quarter/year" — answered without ever asking
+// the fiscal-vs-calendar question that was parked for her: the report's
+// date range is arbitrary (Starts/Ends fields), and month/quarter/year
+// buckets step FORWARD from wherever Starts is set (queue.js's
+// reportPeriods, built on the existing calendar-correct addMonths). Start
+// Jan 1 for calendar periods, Jul 1 for fiscal ones, or any custom window
+// for a specific engagement — same code, no setting to get wrong. Opens
+// from a new 📊 button in the Projects panel header (all projects) or by
+// clicking any project's Σ total (pre-filtered to that one, with a "show
+// all projects" escape hatch in the modal itself). Two CSV exports: the
+// rollup (spreadsheet-ready decimal hours, project × period) and the raw
+// session ledger (UN-split — an actuary gets her own intervals, not our
+// bucketing decisions). All the bucketing/splitting/CSV logic lives in
+// queue.js 0.20.0 as pure functions, verified with 19 verbatim assertions
+// against the real module (calendar AND fiscal-style ranges, midnight-
+// crossing session splits, open-session handling, CSV comma-escaping)
+// before this file ever touched it. No store.js or schema change — reads
+// the existing sessions ledger (D112) exactly as it already is.
+// ------------------------------------------------------------
 // Version 1.11.1 — D126 FIX (a Z): the Projects sidebar wasn't filtering
 // by have-tos/want-tos mode — Jake, from a screenshot, found a someday
 // project sitting in the sidebar on the Have-tos tab too. renderProjects
@@ -584,11 +604,12 @@ import {
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION,
   clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
-  DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES
-} from "./queue.js?v=0.19.0";
+  DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES,
+  rollupSessions, rollupToCSV, sessionsToCSV
+} from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.11.1";
+export const APP_VERSION = "1.12.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -729,6 +750,14 @@ document.addEventListener("DOMContentLoaded", () => {
   wireBurnInCare();  // D107 — ditto
   $("#clock-save").addEventListener("click", saveClockDialog);            // D112
   $("#clock-cancel").addEventListener("click", () => { $("#clock-modal").hidden = true; clockMode = null; });
+  // D120 — the Time Report
+  $("#report-btn").addEventListener("click", () => openTimeReport(null));
+  $("#report-close").addEventListener("click", closeTimeReport);
+  $("#report-start").addEventListener("change", renderTimeReport);
+  $("#report-end").addEventListener("change", renderTimeReport);
+  $("#report-granularity").addEventListener("change", renderTimeReport);
+  $("#report-export-rollup").addEventListener("click", exportReportRollupCSV);
+  $("#report-export-raw").addEventListener("click", exportReportRawCSV);
   $("#yv-project-close").addEventListener("click", closeYvProjectModal);
   window.addEventListener("resize", () => {           // D68: timeline resizes with the window
     clearTimeout(yvResizeT);
@@ -1575,6 +1604,132 @@ function saveClockDialog() {
   clockMode = null;
 }
 
+// ---------- D120: THE TIME REPORT ----------
+// Module-scoped, not S — same pattern as clockMode: modal-lifetime state
+// that has no business surviving a render() or persisting anywhere.
+let reportProjectId = null;   // null = every project; a string = one, by name
+let reportRollup = null;      // cached from the last render, for the export buttons
+
+/** Opens the report. projectId set = pre-filtered (the per-project 🕰
+ *  shortcut); null = the all-projects view (the panel-header button).
+ *  Default range is "this calendar year so far" — a harmless starting
+ *  point, not an assumption: change the Starts field once and every
+ *  month/quarter/year bucket downstream re-aligns to THAT date instead
+ *  (D120's actual answer to fiscal-vs-calendar — an arbitrary range,
+ *  not a setting). */
+function openTimeReport(projectId = null) {
+  reportProjectId = projectId;
+  const now = Date.now();
+  const yearStart = new Date(new Date(now).getFullYear(), 0, 1).getTime();
+  $("#report-start").value = toDateInput(new Date(yearStart));
+  $("#report-end").value = toDateInput(new Date(now));
+  if (!$("#report-granularity").value) $("#report-granularity").value = "month";
+  renderReportFilterHint();
+  $("#report-modal").hidden = false;
+  renderTimeReport();
+}
+
+function renderReportFilterHint() {
+  const hint = $("#report-project-filter");
+  if (!reportProjectId) { hint.hidden = true; hint.innerHTML = ""; return; }
+  const name = S.projects.find(p => p.id === reportProjectId)?.name || "this project";
+  hint.hidden = false;
+  hint.innerHTML = `Showing <strong>${esc(name)}</strong> only. `;
+  const clear = document.createElement("button");
+  clear.className = "mini";
+  clear.textContent = "Show all projects";
+  clear.addEventListener("click", () => { reportProjectId = null; renderReportFilterHint(); renderTimeReport(); });
+  hint.append(clear);
+}
+
+function closeTimeReport() {
+  $("#report-modal").hidden = true;
+  reportProjectId = null;
+  reportRollup = null;
+}
+
+/** Re-derives the rollup from the current form fields and repaints the
+ *  table. Called on open and on every date/granularity change — cheap
+ *  enough (session count is small) to just recompute rather than diff. */
+function renderTimeReport() {
+  const startVal = $("#report-start").value, endVal = $("#report-end").value;
+  const warn = $("#report-warn");
+  if (!startVal || !endVal) { warn.hidden = false; warn.textContent = "Pick both a start and an end date."; return; }
+  const rangeStart = new Date(`${startVal}T00:00`).getTime();
+  const rangeEnd = new Date(`${endVal}T00:00`).getTime() + DAY_MS; // the end date is inclusive
+  if (rangeEnd <= rangeStart) { warn.hidden = false; warn.textContent = "End date must be after the start date."; return; }
+  warn.hidden = true;
+
+  const granularity = $("#report-granularity").value || "month";
+  const rollup = rollupSessions({
+    sessions: S.sessions, projects: S.projects,
+    rangeStart, rangeEnd, granularity,
+    projectId: reportProjectId, now: Date.now()
+  });
+  reportRollup = rollup;
+
+  const table = $("#report-table");
+  table.innerHTML = "";
+  $("#report-empty").hidden = rollup.rows.length !== 0;
+  if (!rollup.rows.length) return;
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headRow.innerHTML = `<th>Project</th>` +
+    rollup.periods.map(p => `<th>${esc(p.label)}</th>`).join("") +
+    `<th>Total</th>`;
+  thead.append(headRow);
+  table.append(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const row of rollup.rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><span class="report-swatch" style="background:${row.color || "#888"}"></span>${esc(row.projectName)}</td>` +
+      row.byPeriod.map(ms => `<td>${ms > 0 ? fmtHoursTotal(ms) : "—"}</td>`).join("") +
+      `<td><strong>${fmtHoursTotal(row.totalMs)}</strong></td>`;
+    tbody.append(tr);
+  }
+  table.append(tbody);
+
+  const tfoot = document.createElement("tfoot");
+  const footRow = document.createElement("tr");
+  footRow.innerHTML = `<td>Total</td>` +
+    rollup.periodTotals.map(ms => `<td>${ms > 0 ? fmtHoursTotal(ms) : "—"}</td>`).join("") +
+    `<td><strong>${fmtHoursTotal(rollup.grandTotal)}</strong></td>`;
+  tfoot.append(footRow);
+  table.append(tfoot);
+}
+
+/** Standard Blob+anchor download — no library needed for a CSV string. */
+function downloadCSV(text, filename) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.append(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportReportRollupCSV() {
+  if (!reportRollup || !reportRollup.rows.length) return;
+  downloadCSV(rollupToCSV(reportRollup), `tentacalendar-time-report-${$("#report-start").value}-to-${$("#report-end").value}.csv`);
+}
+
+/** Raw export re-derives its OWN session list rather than reusing the
+ *  rollup's (which is period-split by design) — this one is deliberately
+ *  UN-split, so it re-filters S.sessions by the same range/project. */
+function exportReportRawCSV() {
+  const startVal = $("#report-start").value, endVal = $("#report-end").value;
+  if (!startVal || !endVal) return;
+  const rangeStart = new Date(`${startVal}T00:00`).getTime();
+  const rangeEnd = new Date(`${endVal}T00:00`).getTime() + DAY_MS;
+  const raw = S.sessions.filter(s =>
+    (!reportProjectId || s.projectId === reportProjectId) &&
+    s.start < rangeEnd && (s.end ?? Date.now()) > rangeStart);
+  if (!raw.length) return;
+  downloadCSV(sessionsToCSV(raw, S.projects), `tentacalendar-raw-sessions-${startVal}-to-${endVal}.csv`);
+}
+
 function renderProjects(now) {
   const box = $("#projects-list");
   box.innerHTML = "";
@@ -1729,7 +1884,9 @@ function projectCard(p) {
     const ms = projectClockedMs(p.id, Date.now());
     if (ms > 0) {
       tot.textContent = `Σ ${fmtHoursTotal(ms)}`;
-      tot.title = `${S.sessions.filter(s => s.projectId === p.id).length} session(s) logged — next year's ask, off the paper`;
+      tot.title = `${S.sessions.filter(s => s.projectId === p.id).length} session(s) logged — next year's ask, off the paper. Click for the time report.`;
+      tot.classList.add("clickable");
+      tot.addEventListener("click", e => { e.stopPropagation(); openTimeReport(p.id); });   // D120
     }
     const fix = iconBtn("🕰", "Log time by hand — forgot to clock in? Pick start and end; an overlapping running timer gets truncated where this starts.", () => openLogDialog(p));
     // D119 finish (Jake: "the clock icon being alone on its row does not
