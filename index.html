@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.34.0 (banner and data-html-version move together, always)
+     Version 0.34.1 (banner and data-html-version move together, always)
+     0.34.1 (D128/D129): app.js ?v= → 1.13.0 only. Blank project type is
+     injected by refreshTypeSelect() into the existing #project-type
+     picker (no static markup change), and the unsaved-changes guard uses
+     confirm() (no new modal). So this file only carries the version bump —
+     a Z, the D94 pattern (html moves so the cache busts app.js). No CSS
+     change either.
      0.34.0 (D120): THE TIME REPORT. A new #report-modal (safely outside
      #drift-wrap — D127 was a hard-earned lesson, verified with the same
      div-balance count after adding this). A 📊 button in the Projects
@@ -193,7 +199,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.42.0">
 </head>
-<body data-html-version="0.34.0">
+<body data-html-version="0.34.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -828,6 +834,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.12.0"></script>
+  <script type="module" src="app.js?v=1.13.0"></script>
 </body>
 </html>
