@@ -1,5 +1,21 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.14.0 — D130: UPDATE CHECK (a Y). Katie hit the tub bug on a
+// stale cache — a running tab had no way to know a newer version shipped.
+// Now: 1min after boot, then hourly, checkForUpdate() re-fetches index.html
+// cache-BUSTED (?_v=Date.now() + no-store; without it the browser hands back
+// the same stale file and the check is theater) and reads its
+// data-html-version — the one stamp Jake bumps on EVERY deploy, so there's
+// no second source of truth to drift (the deciding reason over a separate
+// version.json, and Jake's own instinct: "don't you compare the index to
+// something?" — yes, and it already carries its version). If the server's
+// html version differs from BOOT_HTML_VERSION (captured once at load, not
+// re-read from the DOM), a bottom banner shows with a 30s countdown that
+// auto-refreshes; Refresh-now reloads immediately, Later dismisses until the
+// NEXT real deploy (a different version passes the guard again). Silent when
+// offline, when boot version is unknown, or when already counting down. The
+// banner lives OUTSIDE #drift-wrap (D127) so it can't mysteriously float.
+// ------------------------------------------------------------
 // Version 1.13.0 — D128 (blank project type) + D129 (unsaved-changes
 // guard), both a Y. D128: a built-in "Blank (no stages)" option in the
 // project-type picker, via a __blank__ sentinel routed through
@@ -633,7 +649,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.13.0";
+export const APP_VERSION = "1.14.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -881,6 +897,10 @@ document.addEventListener("DOMContentLoaded", () => {
   watchAuth(onSignedIn, onSignedOut);
   setInterval(tick, 60 * 1000);
   setInterval(drift, 5 * 1000);
+  // D130 — update check: once a minute after boot (let the app settle
+  // first), then hourly. Cache-busted fetch of index.html; see checkForUpdate.
+  setTimeout(checkForUpdate, 60 * 1000);
+  setInterval(checkForUpdate, 60 * 60 * 1000);
   // D122 — the NOW bar's second hand. Touches exactly ONE text node when
   // the bar exists, and does nothing at all when it doesn't; render()
   // stays a minute-tick affair.
@@ -903,6 +923,64 @@ function reportVersions() {
   $("#version").title = report;
   const line = $("#versions-line");
   if (line) line.textContent = report;
+}
+
+// ---------- D130: update check ----------
+// Katie was running a stale cache when the tub bug hit her (an old queue.js
+// that did epoch math on a want-to's null dates). A running tab has no way
+// to know a newer version shipped — its APP_VERSION is baked into the JS it
+// already loaded. So: hourly, re-fetch index.html itself (cache-BUSTED, or
+// the browser hands back the same stale file and defeats the point) and read
+// its data-html-version — the ONE stamp Jake bumps on every single deploy,
+// so there's no second source of truth to drift (that was the deciding
+// reason over a separate version.json: the index already carries its
+// version, compare against that). If the server's html version differs from
+// this tab's, show a banner and auto-refresh after a countdown. Compares
+// against the tab's OWN loaded value (captured at boot, not re-read from the
+// DOM), so it fires exactly once per real deploy.
+const BOOT_HTML_VERSION = document.body.dataset.htmlVersion || "";
+let updateCountdownTimer = null;
+let dismissedUpdateVersion = "";
+
+async function checkForUpdate() {
+  if (updateCountdownTimer) return; // already counting down; don't stack
+  try {
+    const res = await fetch(`index.html?_v=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return;
+    const text = await res.text();
+    const m = text.match(/data-html-version="([^"]+)"/);
+    if (!m) return;
+    const serverVersion = m[1];
+    if (serverVersion &&
+        BOOT_HTML_VERSION &&
+        serverVersion !== BOOT_HTML_VERSION &&
+        serverVersion !== dismissedUpdateVersion) {   // don't re-nag a version she dismissed this session
+      showUpdateBanner(serverVersion);
+    }
+  } catch { /* offline or blocked — try again next hour, no noise */ }
+}
+
+function showUpdateBanner(serverVersion) {
+  const banner = $("#update-banner");
+  if (!banner || !banner.hidden) return; // missing, or already showing
+  let secs = 30;
+  const msg = $("#update-msg");
+  const reloadNow = () => location.reload();
+  const tickDown = () => {
+    if (secs <= 0) { reloadNow(); return; }
+    msg.textContent = `A new version (${serverVersion}) is ready. Refreshing in ${secs}s…`;
+    secs--;
+  };
+  banner.hidden = false;
+  tickDown();
+  updateCountdownTimer = setInterval(tickDown, 1000);
+  $("#update-now").onclick = reloadNow;
+  $("#update-later").onclick = () => {
+    clearInterval(updateCountdownTimer);
+    updateCountdownTimer = null;
+    banner.hidden = true;
+    dismissedUpdateVersion = serverVersion; // quiet until the NEXT real deploy
+  };
 }
 
 function onSignedIn(user) {
