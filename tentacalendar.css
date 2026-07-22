@@ -1,7 +1,14 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.41.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.42.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.42.0 (D120): the Time Report. .report-card widens the modal for a
+   table (920px vs the usual 640px); .report-controls, #report-table
+   (header/footer weight via border, right-aligned number columns, first
+   column left-aligned and allowed to wrap), .report-swatch (the project-
+   color dot). .clock-total.clickable adds the pointer cursor + hover —
+   the base .clock-total keeps cursor:default for the (now rarer) case
+   where a project has no logged time and the span isn't rendered at all.
    0.41.0 (D126): have-tos/want-tos. .t-timeless-label mirrors .t-carry-label
    for the tier editor's new ⏳ checkbox. Everything else — the .tab-bar
    toggle atop #queue-panel, the want-tos header, the want-tos project
@@ -159,7 +166,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.41.0";
+  --tc-version: "0.42.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -400,6 +407,22 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 }
 .form-actions { display: flex; gap: .5rem; align-items: center; }
 .hint.warn { color: #ffa94d; min-height: 1em; }
+
+/* ---------- D120: THE TIME REPORT ---------- */
+.report-card { width: min(920px, 96vw); }
+.report-controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: .6rem; }
+#report-table-wrap { overflow-x: auto; margin: .6rem 0; }
+#report-table { border-collapse: collapse; width: 100%; font-size: .82rem; white-space: nowrap; }
+#report-table th, #report-table td { padding: .35rem .6rem; text-align: right; border-bottom: 1px solid var(--line); }
+#report-table th:first-child, #report-table td:first-child { text-align: left; white-space: normal; }
+#report-table thead th { color: var(--ink-dim); font-weight: 600; border-bottom: 1px solid var(--ink-dim); }
+#report-table tfoot td { border-top: 1px solid var(--ink-dim); border-bottom: none; font-weight: 600; }
+.report-swatch {
+  display: inline-block; width: .6rem; height: .6rem; border-radius: 50%;
+  margin-right: .4rem; vertical-align: middle;
+}
+.clock-total.clickable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.clock-total.clickable:hover { color: var(--ink); }
 
 .tier-row {
   display: flex; align-items: center; gap: .45rem;
