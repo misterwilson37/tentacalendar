@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.33.2 (banner and data-html-version move together, always)
+     Version 0.34.0 (banner and data-html-version move together, always)
+     0.34.0 (D120): THE TIME REPORT. A new #report-modal (safely outside
+     #drift-wrap — D127 was a hard-earned lesson, verified with the same
+     div-balance count after adding this). A 📊 button in the Projects
+     panel header opens it for every project; each project's Σ total is
+     now clickable too, pre-filtered to just that one. Minor bump, not a
+     patch — a whole new modal surface, same weight as D111's cactus row
+     or D112's clock modal. ?v= bumps app.js → 1.12.0, css → 0.42.0.
      0.33.2 (D127): THE REAL D37 FIX. A stray extra closing div, left over
      from D118's modal-relocation edit, was accidentally acting as
      #drift-wrap's true closing tag 150 lines later than intended — every
@@ -184,9 +191,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.41.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.42.0">
 </head>
-<body data-html-version="0.33.2">
+<body data-html-version="0.34.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -280,7 +287,7 @@
 
       <!-- ===== Projects column (Katie's pipeline) ===== -->
       <section id="projects-panel">
-        <h3>Projects</h3>
+        <h3>Projects <button id="report-btn" class="icon-btn" title="Time Report — hours by project, any date range and granularity (D120)">📊</button></h3>
         <p id="projects-empty" class="hint">No projects yet. Create one on the right — its whole pipeline comes with it.</p>
         <div id="projects-list"></div>
       </section>
@@ -625,6 +632,42 @@
     </div>
   </div>
 
+  <!-- D120: THE TIME REPORT — an arbitrary date range, not a fiscal-vs-
+       calendar setting; month/quarter/year buckets step from wherever
+       "Starts" is set, so either kind of year falls out for free. -->
+  <div id="report-modal" class="modal-shell" hidden>
+    <div class="modal-card report-card">
+      <div class="modal-head">
+        <h2>📊 Time Report</h2>
+        <button id="report-close" class="icon-btn">✕</button>
+      </div>
+      <p id="report-project-filter" class="hint" hidden></p>
+      <div class="report-controls">
+        <label>Starts <input id="report-start" type="date"></label>
+        <label>Ends <input id="report-end" type="date"></label>
+        <label>By
+          <select id="report-granularity">
+            <option value="day">Day</option>
+            <option value="week">Week</option>
+            <option value="month" selected>Month</option>
+            <option value="quarter">Quarter</option>
+            <option value="year">Year</option>
+          </select>
+        </label>
+      </div>
+      <p id="report-warn" class="hint warn" hidden></p>
+      <div id="report-table-wrap">
+        <table id="report-table"></table>
+      </div>
+      <p id="report-empty" class="hint" hidden>No sessions logged in this range.</p>
+      <div class="modal-actions">
+        <button id="report-export-rollup" class="mini">⬇ Export rollup CSV</button>
+        <button id="report-export-raw" class="mini">⬇ Export raw sessions CSV</button>
+      </div>
+      <p class="hint">The rollup export is spreadsheet-ready hours per project per period. The raw export is every logged session, un-split, exactly as recorded — build your own model on it.</p>
+    </div>
+  </div>
+
   <!-- D82: follow-up create/edit — retires the prompt() pair -->
   <div id="followup-modal" class="modal-shell" hidden>
     <div class="modal-card">
@@ -785,6 +828,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.11.1"></script>
+  <script type="module" src="app.js?v=1.12.0"></script>
 </body>
 </html>
