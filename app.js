@@ -1,5 +1,29 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.13.0 — D128 (blank project type) + D129 (unsaved-changes
+// guard), both a Y. D128: a built-in "Blank (no stages)" option in the
+// project-type picker, via a __blank__ sentinel routed through
+// addProjectWithStages with []. For the projects that match no template
+// (Jake's tub — a bathtub has no "engagement letter") and the natural
+// home for someday/want-to projects, which shouldn't inherit Katie's
+// actuarial stages. No stages = nothing to compute deadlines from, which
+// also sidesteps the whole relative-date-on-null class of nonsense. The
+// sentinel isn't a stored type, so it can't be renamed/deleted and always
+// sits in the list; the Settings ▸ Pipeline editor is untouched (nothing
+// to edit in "blank"). D129: an unsaved-changes guard on editing modals.
+// Jake edited a want-to's stages, hit ✕ to discard (what he wanted), and
+// noticed the app never checked — got lucky discard was the intent.
+// Snapshot-on-open / compare-on-close dirty check (his call: warn ONLY on
+// real edits, so edit-then-revert reads clean); one signature fn per
+// editor, guardedClose() does the compare + confirm. Wired for the stage
+// editor (✎⋮), Settings, and the follow-up modal — each marks clean on
+// open, guards every close path, clears on save. The project form is
+// deliberately NOT wired yet: it's a persistent inline PANEL, not a
+// modal, so "close" isn't a single clear action — its signature fn is
+// written and ready, pending a UX call from Jake. Every field selector
+// checked against real markup before wiring (several first-guess
+// selectors were wrong — .t-dow not .t-day, cfg-* ids, fu-n/fu-unit).
+// ------------------------------------------------------------
 // Version 1.12.0 — D120: THE TIME REPORT (a Y). Katie's question — "can it
 // roll up by day/week/month/quarter/year" — answered without ever asking
 // the fiscal-vs-calendar question that was parked for her: the report's
@@ -609,7 +633,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.12.0";
+export const APP_VERSION = "1.13.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -663,7 +687,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#signout-btn").addEventListener("click", () => signOutUser());
   $("#signout-bottom").addEventListener("click", () => signOutUser());  // D78
   $("#fu-save").addEventListener("click", saveFollowUpModal);            // D82
-  $("#fu-cancel").addEventListener("click", () => { $("#followup-modal").hidden = true; fuTarget = null; });
+  $("#fu-cancel").addEventListener("click", () => { if (!guardedClose("followup", followupSignature)) return; $("#followup-modal").hidden = true; fuTarget = null; });
   $("#jump-add").addEventListener("click", () => {                      // D78
     if (S.view !== "day") setView("day"); // the form lives in Today
     $("#task-form").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -778,6 +802,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#due-cancel").addEventListener("click", () => { $("#due-modal").hidden = true; });
   $("#stages-save").addEventListener("click", stagesSave);
   $("#stages-cancel").addEventListener("click", () => {
+    if (!guardedClose("stages", stagesSignature)) return;   // D129
     $("#stages-modal").hidden = true;
     if (S.stagesFromDup) { S.stagesFromDup = false; $("#dup-modal").hidden = false; } // back to the dup form, unsaved
   });
@@ -2199,6 +2224,7 @@ function openStagesDialog(p) {
   box.innerHTML = "";
   (p.stages || []).forEach((st, i) => projStageRow(normalizeStage(st), i, false));
   $("#stages-modal").hidden = false;
+  markClean("stages", stagesSignature);   // D129
 }
 
 function timingSelects(st) {
@@ -2288,6 +2314,7 @@ function stagesSave() {
     pushUndo("stages edit", () => setProjectStages(pid, before), () => setProjectStages(pid, after));
   }
   setProjectStages(S.stagesTarget, stages);
+  delete dirtySnapshots["stages"];   // D129 — saved, so no longer dirty
   $("#stages-modal").hidden = true;
 }
 
@@ -2414,13 +2441,20 @@ function refreshTierSelects() {
 
 // D124 — the project-type picker on the new-project form: Default + each
 // named type. Preserves the current selection across refreshes.
+// D128 — plus a built-in "Blank (no stages)" via the __blank__ sentinel:
+// a project that copies NO pipeline, for the things that match no template
+// (Jake's tub — refurbishing a bathtub has no "engagement letter"). Also
+// the natural home for someday/want-to projects, which shouldn't inherit
+// Katie's actuarial stages at all. Sentinel, not a real stored type, so it
+// can't be renamed or deleted and always sits in the list.
 function refreshTypeSelect() {
   const sel = $("#project-type");
   if (!sel) return;
   const keep = sel.value;
   sel.innerHTML = `<option value="">Default template</option>` +
+    `<option value="__blank__">Blank (no stages)</option>` +
     (S.projectTypes || []).map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
-  sel.value = keep && (S.projectTypes || []).some(t => t.id === keep) ? keep : "";
+  sel.value = (keep === "__blank__" || (keep && (S.projectTypes || []).some(t => t.id === keep))) ? keep : "";
 }
 
 /** D124 — copy a pipeline's stages into a fresh project's stage array:
@@ -2638,12 +2672,17 @@ function commitProject(payload) {
     // D124 — snapshot the CHOSEN pipeline. Default (empty value) keeps the
     // old addProject path (which reads stageTemplate); a named type copies
     // its own stages via the existing addProjectWithStages.
+    // D128 — __blank__ sentinel: a project with NO stages at all. Routes
+    // through addProjectWithStages with [] so it takes the explicit-stages
+    // path and never touches the stageTemplate default.
     const typeId = $("#project-type") ? $("#project-type").value : "";
-    const type = typeId ? (S.projectTypes || []).find(t => t.id === typeId) : null;
+    const type = (typeId && typeId !== "__blank__") ? (S.projectTypes || []).find(t => t.id === typeId) : null;
     const done = () => { $("#project-name").value = ""; suggestProjectColor(true); if ($("#project-type")) $("#project-type").value = ""; closeYvProjectModal(); };
-    (type
-      ? addProjectWithStages({ ...payload, stages: stagesFromPipeline(type.stages) })
-      : addProject(payload)   // D68: new bar appears behind the closing modal
+    (typeId === "__blank__"
+      ? addProjectWithStages({ ...payload, stages: [] })
+      : type
+        ? addProjectWithStages({ ...payload, stages: stagesFromPipeline(type.stages) })
+        : addProject(payload)   // D68: new bar appears behind the closing modal
     ).then(done);
   }
 }
@@ -4027,6 +4066,111 @@ function openYvProjectModal() {
   $("#project-name").focus();
 }
 
+// ---------- D129: unsaved-changes guard ----------
+// Jake edited a want-to's stages, hit ✕ to leave WITHOUT saving (which he
+// wanted), and noted the app never checked — it got lucky that discard
+// was the intent. This guards every editing modal with a Save button.
+//
+// Design (Jake's call): warn ONLY on real unsaved edits, not on every
+// close. So it's a snapshot-on-open / compare-on-close dirty check — a
+// serialized signature of the editor's fields captured when it opens,
+// re-derived on the close path and compared. Edit-then-revert reads as
+// clean (the signatures match), so the guard stays quiet exactly when
+// there's nothing to lose. One helper per editor produces its signature;
+// guardedClose() does the compare + confirm and only closes if clean or
+// confirmed. Deliberately NOT a beforeunload/global thing — those fire on
+// tab close and can't be styled or scoped; this is per-modal and precise.
+
+const dirtySnapshots = {};   // modalId -> signature string at open time
+
+/** Record the modal's current field signature as its clean baseline.
+ *  Call at the END of each open* function, after fields are populated. */
+function markClean(modalId, signatureFn) {
+  dirtySnapshots[modalId] = signatureFn();
+}
+
+/** True if the editor's fields differ from their open-time snapshot. */
+function isDirty(modalId, signatureFn) {
+  return dirtySnapshots[modalId] !== undefined && signatureFn() !== dirtySnapshots[modalId];
+}
+
+/** The close gate: if dirty, confirm; if the user cancels, DON'T close.
+ *  Returns true if the close should proceed (clean, or confirmed discard). */
+function guardedClose(modalId, signatureFn) {
+  if (isDirty(modalId, signatureFn) &&
+      !confirm("You have unsaved changes. Leave without saving?")) {
+    return false;
+  }
+  delete dirtySnapshots[modalId];
+  return true;
+}
+
+/** Signature of the stage editor (✎⋮ / stages-modal): every row's name,
+ *  direction, anchor, offset, and hurrah flag, in order. */
+function stagesSignature() {
+  return [...document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")].map(row =>
+    [row.querySelector(".st-name").value.trim(),
+     row.querySelector(".st-dir").value,
+     row.querySelector(".st-anchor").value,
+     (parseInt(row.querySelector(".st-off").value, 10) || 0),
+     row.querySelector(".st-hurrah").classList.contains("active") ? "H" : ""
+    ].join("\u001f")).join("\u001e");
+}
+
+/** Signature of the project form (new/edit): name, color, tier, workload,
+ *  dates, and — for a NEW project — the chosen type.
+ *  NOTE (D129): defined but intentionally NOT wired yet. The project form
+ *  is a persistent inline PANEL in the sidebar (only modal in year view),
+ *  so "closing" it isn't a clear single action the way the other modals'
+ *  ✕ is — guarding it needs a UX decision from Jake first (does switching
+ *  away from a half-typed project even count as a "close"?). Kept here,
+ *  ready, so wiring it later is a two-line change, not a rebuild. */
+function projectFormSignature() {
+  return [
+    $("#project-name").value.trim(),
+    $("#project-color").value,
+    $("#project-tier").value,
+    $("#project-workload").value,
+    $("#project-start").value,
+    $("#project-end").value,
+    S.editingProjectId ? "" : ($("#project-type") ? $("#project-type").value : "")
+  ].join("\u001f");
+}
+
+/** Signature of the whole Settings modal — every tier row's fields plus
+ *  all the cfg-* config inputs. Broad on purpose: Settings has no single
+ *  Cancel, and losing a half-built tier is the same sting as losing stage
+ *  edits. Config fields are captured generically (every #cfg-* control) so
+ *  a future setting can't silently fall outside the dirty check. */
+function settingsSignature() {
+  const tierSig = [...document.querySelectorAll("#tier-editor .tier-row")].map(row =>
+    [row.querySelector(".t-rank")?.value,
+     row.querySelector(".t-name")?.value,
+     row.querySelector(".t-color")?.value,
+     row.querySelector(".t-kind")?.value,
+     row.querySelector(".t-cal")?.value,
+     row.querySelector(".t-carry")?.checked ? "C" : "",
+     row.querySelector(".t-timeless")?.checked ? "T" : "",
+     [...row.querySelectorAll(".t-dow")].map(d => d.checked ? "1" : "0").join("")
+    ].join("\u001f")).join("\u001e");
+  const cfgSig = [...document.querySelectorAll('#settings-modal [id^="cfg-"]')]
+    .map(el => `${el.id}=${el.type === "checkbox" ? (el.checked ? "1" : "0") : el.value}`)
+    .join("\u001f");
+  // Also fold in the pipeline draft, which is edited in-place in Settings
+  // ▸ Pipeline and committed on Save alongside everything else.
+  const pipeSig = pipelineDraft ? JSON.stringify(pipelineDraft) : "";
+  return tierSig + "\u001d" + cfgSig + "\u001d" + pipeSig;
+}
+
+/** Signature of the follow-up create/edit modal. */
+function followupSignature() {
+  return [
+    $("#fu-title")?.value.trim() ?? "",
+    $("#fu-n")?.value ?? "",
+    $("#fu-unit")?.value ?? ""
+  ].join("\u001f");
+}
+
 function closeYvProjectModal() {
   const modal = $("#yv-project-modal");
   if (modal.hidden) return;
@@ -4597,6 +4741,7 @@ function openFollowUpModal(target) {
   $("#fu-unit").value = unit;
   $("#followup-modal").hidden = false;
   $("#fu-title").focus();
+  markClean("followup", followupSignature);   // D129
 }
 
 function saveFollowUpModal() {
@@ -4607,6 +4752,7 @@ function saveFollowUpModal() {
   const offsetDays = n * OFFSET_UNIT_DAYS[unit];
   if (fuTarget?.mode === "edit") updateTask(fuTarget.task.id, { title, offsetDays });
   else if (fuTarget?.mode === "create") addFollowUp(fuTarget.item.id, { title, offsetDays, tierId: fuTarget.item.tier?.id || fuTarget.item.raw.tierId });
+  delete dirtySnapshots["followup"];   // D129 — saved
   $("#followup-modal").hidden = true;
   fuTarget = null;
 }
@@ -4651,6 +4797,7 @@ function openSettings() {
   pipelineCurrent = "default";
   refreshPipelineTarget();
   loadPipelineEditor();
+  markClean("settings", settingsSignature);   // D129
 }
 
 /** D55: tiers get the same conflict assistant projects have. One shared
@@ -4913,10 +5060,18 @@ function onSaveSettings() {
   capturePipelineEditor();
   saveStageTemplate(pipelineDraft.default);
   saveProjectTypes(pipelineDraft.types);
+  delete dirtySnapshots["settings"];   // D129 — saved; the close below must not re-prompt
   closeSettings();
 }
 
-function closeSettings() { $("#settings-modal").hidden = true; }
+function closeSettings() {
+  // D129 — fold the visible pipeline editor into the draft first, so an
+  // unsaved stage-row edit counts as dirty (the draft is what the
+  // signature reads). capturePipelineEditor is a no-op if nothing's loaded.
+  capturePipelineEditor();
+  if (!guardedClose("settings", settingsSignature)) return;
+  $("#settings-modal").hidden = true;
+}
 
 function updatePollCostHint() {
   const raw = parseInt($("#cfg-poll").value, 10);
