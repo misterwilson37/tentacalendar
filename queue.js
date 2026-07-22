@@ -1,6 +1,25 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.19.0 — D126: TIMELESS CONTAINMENT. Katie's want-tos projects
+// Version 0.20.0 — D120: THE TIME REPORT engine. reportPeriods() steps
+// day/week/month/quarter/year buckets FORWARD from an arbitrary range's
+// own start (via addMonths — now exported — for calendar-correct month
+// math), not from a calendar epoch: start a range Jan 1 and quarters/
+// years land calendar-aligned, start it Jul 1 and they land fiscal-
+// aligned, same code either way. This is the actual answer to the
+// fiscal-vs-calendar question parked for Katie back at D120 — don't
+// pick one, let the range be arbitrary and both fall out for free.
+// rollupSessions() buckets the sessions ledger into those periods,
+// SPLITTING any session that crosses a boundary (a 10pm-2am session
+// gives 2h to each side of midnight — decide once, split at boundaries,
+// never guess which side "owns" it); open sessions count to `now`.
+// rollupToCSV/sessionsToCSV round out the "CSV export of BOTH the
+// rollup AND the raw sessions" the spec asked for — raw stays UN-split,
+// the respectful export for an actuary building her own models. 19
+// verbatim assertions against this exact module (not reimplemented)
+// before wiring into app.js — a 20th line in the same script was
+// self-contradictory (asserted a string both did and didn't appear),
+// caught as a script bug rather than chased as a product one.
+// (prev) Version 0.19.0 — D126: TIMELESS CONTAINMENT. Katie's want-tos projects
 // carry null startDate/endDate on purpose (D126, app.js/store.js) — this
 // file is the deadline spine, so it's the one place that MUST refuse to
 // turn "no dates" into an accidental date. Two structural guards, not one:
@@ -104,7 +123,7 @@
 // 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
 // ============================================================
 
-export const QUEUE_VERSION = "0.19.0";
+export const QUEUE_VERSION = "0.20.0";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -134,7 +153,7 @@ const UNIT_MS = {
   weeks: 7 * DAY_MS
 };
 
-function addMonths(ts, n) {
+export function addMonths(ts, n) {
   const d = new Date(ts);
   const day = d.getDate();
   d.setDate(1);
@@ -1049,4 +1068,139 @@ export function fmtTime(ts) {
 
 export function fmtDay(ts) {
   return new Date(ts).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
+
+// ============================================================
+// D120 — THE TIME REPORT. Pure logic, no DOM: bucket sessions into
+// periods over an arbitrary date range, splitting any session that
+// crosses a boundary (the decide-once rule — a 10pm-2am session gives
+// 2h to each side of midnight, not a guess about which day "owns" it).
+//
+// Deliberately NOT built around "calendar year" vs "fiscal year" as a
+// setting anywhere: Jake's question to Katie was left open, and the
+// answer turned out to be "don't ask — let the range be arbitrary."
+// Month/quarter/year buckets step FORWARD from the range's own start
+// date (via addMonths, so day-of-month clamps and leap years are
+// already handled) rather than from a calendar epoch. Start a range
+// Jan 1 and you get calendar quarters/years for free; start it Jul 1
+// and you get fiscal ones — same code, no branch, no setting to be
+// wrong about. Any other custom range (a specific engagement's window,
+// a stretch of months) works exactly the same way.
+// ============================================================
+
+/** [{start,end,label}] covering [rangeStart,rangeEnd) at the given
+ *  granularity. The last period clips to rangeEnd (an honest partial
+ *  bucket, not silently rounded up). Empty range → []. */
+export function reportPeriods(rangeStart, rangeEnd, granularity) {
+  const periods = [];
+  let cur = startOfDay(rangeStart);
+  const end = startOfDay(rangeEnd);
+  if (end <= cur) return periods;
+  while (cur < end) {
+    const next =
+      granularity === "week" ? addDaysLocal(cur, 7) :
+      granularity === "month" ? addMonths(cur, 1) :
+      granularity === "quarter" ? addMonths(cur, 3) :
+      granularity === "year" ? addMonths(cur, 12) :
+      addDaysLocal(cur, 1); // "day" and any unrecognized value
+    const periodEnd = Math.min(next, end);
+    periods.push({ start: cur, end: periodEnd, label: reportPeriodLabel(cur, periodEnd, granularity) });
+    cur = periodEnd;
+  }
+  return periods;
+}
+
+/** Day/month get their own concise label; week/quarter/year show the
+ *  actual span instead of a number ("Q3", "week 12") — those buckets
+ *  are range-relative here, not necessarily calendar-aligned, and a
+ *  numbered label would silently imply an alignment that may not hold. */
+function reportPeriodLabel(start, end, granularity) {
+  if (granularity === "day") return fmtDay(start);
+  if (granularity === "month") return new Date(start).toLocaleDateString([], { month: "short", year: "numeric" });
+  return `${fmtDay(start)} – ${fmtDay(end - DAY_MS)}`;
+}
+
+/**
+ * Bucket sessions into report periods. projectId null = every project
+ * that has time in range, one row each; a specific id = that project
+ * alone (kept even at zero, since it was asked for by name — e.g. the
+ * per-project 🕰 shortcut). Open sessions (end === null) count up to
+ * `now`. Returns {periods, rows:[{projectId,projectName,color,byPeriod,
+ * totalMs}], periodTotals:[ms], grandTotal:ms}.
+ */
+export function rollupSessions({ sessions = [], projects = [], rangeStart, rangeEnd, granularity, projectId = null, now = Date.now() }) {
+  const periods = reportPeriods(rangeStart, rangeEnd, granularity);
+  const relevant = projectId ? projects.filter(p => p.id === projectId) : projects;
+  const byProject = new Map(relevant.map(p => [p.id, new Array(periods.length).fill(0)]));
+  const clipStart = periods.length ? periods[0].start : rangeStart;
+  const clipEnd = periods.length ? periods[periods.length - 1].end : rangeEnd;
+
+  for (const s of sessions) {
+    if (projectId && s.projectId !== projectId) continue;
+    const bucket = byProject.get(s.projectId);
+    if (!bucket) continue; // a session on a project not in this report (deleted project, etc.)
+    const start = Math.max(s.start, clipStart);
+    const end = Math.min(s.end ?? now, clipEnd);
+    if (end <= start) continue; // entirely outside the range
+    for (let i = 0; i < periods.length; i++) {
+      const ovStart = Math.max(start, periods[i].start);
+      const ovEnd = Math.min(end, periods[i].end);
+      if (ovEnd > ovStart) bucket[i] += (ovEnd - ovStart);
+    }
+  }
+
+  const rows = relevant
+    .map(p => {
+      const byPeriod = byProject.get(p.id);
+      return { projectId: p.id, projectName: p.name, color: p.color, byPeriod, totalMs: byPeriod.reduce((a, b) => a + b, 0) };
+    })
+    .filter(r => r.totalMs > 0 || projectId) // hide untouched projects from the all-projects view; keep the one asked for by name even at zero
+    .sort((a, b) => a.projectName.localeCompare(b.projectName)); // steady row order across report runs, not a leaderboard
+
+  const periodTotals = periods.map((_, i) => rows.reduce((sum, r) => sum + r.byPeriod[i], 0));
+  const grandTotal = rows.reduce((sum, r) => sum + r.totalMs, 0);
+  return { periods, rows, periodTotals, grandTotal };
+}
+
+/** Wrap in quotes if the field contains a comma, quote, or newline;
+ *  double any internal quotes. The whole reason this is one function. */
+function csvField(v) {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** The rollup as CSV — plain decimal hours (2dp), not "8.5h" strings.
+ *  Katie's an actuary; she builds her own models on top of this, so the
+ *  numbers need to paste into a spreadsheet ready to compute with. */
+export function rollupToCSV(rollup) {
+  const header = ["Project", ...rollup.periods.map(p => p.label), "Total"];
+  const lines = [header.map(csvField).join(",")];
+  for (const row of rollup.rows) {
+    lines.push([row.projectName, ...row.byPeriod.map(ms => (ms / 3600000).toFixed(2)), (row.totalMs / 3600000).toFixed(2)]
+      .map(csvField).join(","));
+  }
+  lines.push(["Total", ...rollup.periodTotals.map(ms => (ms / 3600000).toFixed(2)), (rollup.grandTotal / 3600000).toFixed(2)]
+    .map(csvField).join(","));
+  return lines.join("\n");
+}
+
+/** The raw ledger as CSV — one row per session, UN-split by period.
+ *  This is the respectful export: her own intervals, not our bucketing
+ *  decisions. Sorted oldest first; an open session reports "(still
+ *  running)" rather than a fabricated end time. */
+export function sessionsToCSV(sessions, projects) {
+  const nameById = Object.fromEntries(projects.map(p => [p.id, p.name]));
+  const header = ["Project", "Start", "End", "Hours", "Logged by"];
+  const lines = [header.map(csvField).join(",")];
+  for (const s of [...sessions].sort((a, b) => a.start - b.start)) {
+    const end = s.end ?? Date.now();
+    lines.push([
+      nameById[s.projectId] || "(deleted project)",
+      new Date(s.start).toISOString(),
+      s.end != null ? new Date(s.end).toISOString() : "(still running)",
+      ((end - s.start) / 3600000).toFixed(2),
+      s.createdBy || ""
+    ].map(csvField).join(","));
+  }
+  return lines.join("\n");
 }
