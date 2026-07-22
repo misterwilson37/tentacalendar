@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.34.1 (banner and data-html-version move together, always)
+     Version 0.35.0 (banner and data-html-version move together, always)
+     0.35.0 (D130): #update-banner added — a fixed bottom bar (outside
+     #drift-wrap, D127) the hourly version check shows when a newer deploy
+     is live. ⚠️ NOTE: this data-html-version value is ITSELF what the
+     check compares — bumping it is what makes every OTHER running tab
+     notice this deploy. That's the whole mechanism; the version discipline
+     now does double duty. ?v= bumps app.js → 1.14.0, css → 0.43.0.
      0.34.1 (D128/D129): app.js ?v= → 1.13.0 only. Blank project type is
      injected by refreshTypeSelect() into the existing #project-type
      picker (no static markup change), and the unsaved-changes guard uses
@@ -197,9 +203,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.42.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.43.0">
 </head>
-<body data-html-version="0.34.1">
+<body data-html-version="0.35.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -527,6 +533,16 @@
        a SHORT modal enough to notice. Settings is the tallest modal in
        the app, so it was the one that finally showed it plainly. -->
 
+  <!-- D130: update banner — OUTSIDE #drift-wrap (D127's lesson: a fixed
+       overlay inside the transformed wrapper mispositions). Hourly, the app
+       re-fetches index.html and compares its data-html-version; a newer one
+       shows this with a countdown auto-refresh. -->
+  <div id="update-banner" hidden>
+    <span id="update-msg"></span>
+    <button id="update-now" class="primary">Refresh now</button>
+    <button id="update-later" class="mini">Later</button>
+  </div>
+
   <!-- D107: the screen rest — OUTSIDE #drift-wrap on purpose (D37's rule:
        a fixed overlay inside a transformed ancestor re-roots and shows the
        drift as edge gaps). z-index 98: above everything but the confetti —
@@ -834,6 +850,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.13.0"></script>
+  <script type="module" src="app.js?v=1.14.0"></script>
 </body>
 </html>
