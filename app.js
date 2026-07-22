@@ -1,5 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js
+// Version 1.15.0 — D131: the D129 unsaved-changes guard now covers the
+// PROJECT FORM too (Jake asked for it, and it doubles as the live test of
+// D130's update check — deploy this, and the NEXT deploy is what an open
+// tab will detect). The form is a persistent inline PANEL, not a modal, so
+// D129 had left it out pending a UX call; the call is: guard the two real
+// abandon paths — the Cancel button (on an edit) and startProjectEdit
+// replacing the form when you click ✎ on a project while unsaved content
+// sits there — plus the year-view modal's ✕. markClean re-baselines after
+// every open / reset / save, so an untouched form or a freshly-launched one
+// never nags, and the auto-suggested color on reset isn't counted dirty
+// (the baseline captures it post-reset). cancelProjectEdit gained an
+// {saved:true} opt so its post-save internal calls skip the prompt. 5
+// behavioral assertions incl. the half-typed-new-project switch-away and
+// the auto-color edge. app.js-only; no markup/CSS/schema change.
+// ------------------------------------------------------------
 // Version 1.14.0 — D130: UPDATE CHECK (a Y). Katie hit the tub bug on a
 // stale cache — a running tab had no way to know a newer version shipped.
 // Now: 1min after boot, then hourly, checkForUpdate() re-fetches index.html
@@ -649,7 +664,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.14.0";
+export const APP_VERSION = "1.15.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -798,7 +813,14 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#report-granularity").addEventListener("change", renderTimeReport);
   $("#report-export-rollup").addEventListener("click", exportReportRollupCSV);
   $("#report-export-raw").addEventListener("click", exportReportRawCSV);
-  $("#yv-project-close").addEventListener("click", closeYvProjectModal);
+  $("#yv-project-close").addEventListener("click", () => {
+    // D131 — the ✕ on the year-view project modal abandons the form. Guard
+    // it. (closeYvProjectModal itself stays unguarded — it's also called
+    // internally right after a save, where prompting would be wrong.)
+    if (!guardedClose("projectForm", projectFormSignature)) return;
+    cancelProjectEdit({ saved: true }); // reset the form back to New-project state
+    closeYvProjectModal();
+  });
   window.addEventListener("resize", () => {           // D68: timeline resizes with the window
     clearTimeout(yvResizeT);
     yvResizeT = setTimeout(() => { if (S.view === "year") renderYear(); }, 150);
@@ -806,9 +828,10 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#task-form").addEventListener("submit", onTaskFormSubmit);
   $("#task-cancel").addEventListener("click", cancelTaskEdit);
   $("#project-form").addEventListener("submit", onProjectFormSubmit);
-  $("#project-cancel").addEventListener("click", cancelProjectEdit);
+  $("#project-cancel").addEventListener("click", () => cancelProjectEdit());   // D131 — bare call; don't pass the click event as opts
   $("#project-color").addEventListener("input", checkProjectColor);
   $("#project-tier").addEventListener("change", syncProjectDateRequirement);   // D126
+  markClean("projectForm", projectFormSignature);   // D131 — initial empty-form baseline at boot
   $("#tier-add").addEventListener("click", () => tierEditorRow({}, true));
   $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
   wirePipelineManager();   // D124 — the project-type library controls (once)
@@ -2634,6 +2657,10 @@ function syncProjectDateRequirement() {
 }
 
 function startProjectEdit(p) {
+  // D131 — clicking ✎ (on this project or a different one) replaces
+  // whatever's in the form. If that content is unsaved and dirty, confirm
+  // before blowing it away. guardedClose returns false → keep what's there.
+  if (!guardedClose("projectForm", projectFormSignature)) return;
   S.editingProjectId = p.id;
   $("#project-form-title").textContent = "✎ Edit project";
   $("#project-submit").textContent = "Save changes";
@@ -2650,9 +2677,13 @@ function startProjectEdit(p) {
   const tl = $("#project-type-label"); if (tl) tl.hidden = true;   // D124 — editing keeps the project's own stages
   checkProjectColor();
   $("#project-name").focus();
+  markClean("projectForm", projectFormSignature);   // D131 — this populated edit form is the clean baseline
 }
 
-function cancelProjectEdit() {
+function cancelProjectEdit(opts = {}) {
+  // D131 — the Cancel button abandons an in-progress edit. Guard it unless
+  // called internally post-save (opts.saved), where there's nothing to lose.
+  if (!opts.saved && !guardedClose("projectForm", projectFormSignature)) return false;
   S.editingProjectId = null;
   $("#project-form-title").textContent = "New project";
   $("#project-submit").textContent = "Launch pipeline";
@@ -2663,6 +2694,8 @@ function cancelProjectEdit() {
   const tl = $("#project-type-label"); if (tl) tl.hidden = false;   // D124 — new projects choose a pipeline again
   suggestProjectColor(true);
   $("#project-color-hint").textContent = "";
+  markClean("projectForm", projectFormSignature);   // D131 — the empty new-project form is clean
+  return true;
 }
 
 function onProjectFormSubmit(ev) {
@@ -2745,7 +2778,7 @@ function commitProject(payload) {
       pushUndo("project edit", () => updateProject(id, before), () => updateProject(id, after));
     }
   }
-  if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(() => { cancelProjectEdit(); closeYvProjectModal(); });
+  if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(() => { cancelProjectEdit({ saved: true }); closeYvProjectModal(); });
   else {
     // D124 — snapshot the CHOSEN pipeline. Default (empty value) keeps the
     // old addProject path (which reads stageTemplate); a named type copies
@@ -2755,7 +2788,12 @@ function commitProject(payload) {
     // path and never touches the stageTemplate default.
     const typeId = $("#project-type") ? $("#project-type").value : "";
     const type = (typeId && typeId !== "__blank__") ? (S.projectTypes || []).find(t => t.id === typeId) : null;
-    const done = () => { $("#project-name").value = ""; suggestProjectColor(true); if ($("#project-type")) $("#project-type").value = ""; closeYvProjectModal(); };
+    const done = () => {
+      $("#project-name").value = ""; suggestProjectColor(true);
+      if ($("#project-type")) $("#project-type").value = "";
+      markClean("projectForm", projectFormSignature);   // D131 — launched; form is clean again
+      closeYvProjectModal();
+    };
     (typeId === "__blank__"
       ? addProjectWithStages({ ...payload, stages: [] })
       : type
@@ -4142,6 +4180,7 @@ function openYvProjectModal() {
   $("#yv-project-slot").append(title, form);
   $("#yv-project-modal").hidden = false;
   $("#project-name").focus();
+  markClean("projectForm", projectFormSignature);   // D131 — baseline for this modal session
 }
 
 // ---------- D129: unsaved-changes guard ----------
@@ -4197,12 +4236,14 @@ function stagesSignature() {
 
 /** Signature of the project form (new/edit): name, color, tier, workload,
  *  dates, and — for a NEW project — the chosen type.
- *  NOTE (D129): defined but intentionally NOT wired yet. The project form
- *  is a persistent inline PANEL in the sidebar (only modal in year view),
- *  so "closing" it isn't a clear single action the way the other modals'
- *  ✕ is — guarding it needs a UX decision from Jake first (does switching
- *  away from a half-typed project even count as a "close"?). Kept here,
- *  ready, so wiring it later is a two-line change, not a rebuild. */
+ *  D131 — now wired. The form is a persistent inline PANEL, so it has no
+ *  ✕; the two real abandon paths are the Cancel button (on an edit) and
+ *  startProjectEdit replacing the form's contents with a different project.
+ *  Both guard through this; markClean re-baselines after every open/reset/
+ *  save so an untouched or freshly-launched form never nags. The color
+ *  field is included, but note suggestProjectColor auto-cycles it on reset —
+ *  that's fine, since markClean captures the post-reset value as the
+ *  baseline, so an auto-suggested color isn't itself "dirty." */
 function projectFormSignature() {
   return [
     $("#project-name").value.trim(),
