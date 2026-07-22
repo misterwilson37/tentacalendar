@@ -1,7 +1,11 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.42.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.43.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.43.0 (D130): #update-banner — a fixed bottom bar (z-index 140, above
+   modals so it's reachable even with Settings open), shown when the hourly
+   version check finds a newer deploy. Reuses --panel-2/--accent; no new
+   tokens. Outside #drift-wrap in the markup (D127).
    0.42.0 (D120): the Time Report. .report-card widens the modal for a
    table (920px vs the usual 640px); .report-controls, #report-table
    (header/footer weight via border, right-aligned number columns, first
@@ -166,7 +170,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.42.0";
+  --tc-version: "0.43.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -382,6 +386,22 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
   padding: .5rem .65rem;
   box-shadow: 0 4px 18px rgba(0,0,0,.5);
 }
+
+/* D130 — update banner: fixed bottom bar, above modals (140 > 130) so it's
+   always reachable, even with Settings open. */
+#update-banner {
+  position: fixed; z-index: 140;
+  left: 50%; transform: translateX(-50%);
+  bottom: 1.2rem;
+  display: flex; align-items: center; gap: .8rem;
+  background: var(--panel-2, var(--panel));
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: .7rem 1rem;
+  box-shadow: 0 6px 24px rgba(0,0,0,.55);
+  max-width: 92vw;
+}
+#update-msg { font-size: .85rem; color: var(--ink); }
 
 .proj-stage-done .st-name { text-decoration: line-through; opacity: .6; }
 .st-flags { font-size: .75rem; color: var(--accent); white-space: nowrap; }
