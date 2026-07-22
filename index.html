@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.35.0 (banner and data-html-version move together, always)
+     Version 0.35.1 (banner and data-html-version move together, always)
+     0.35.1 (D131): app.js ?v= → 1.15.0 only — the unsaved-changes guard now
+     covers the project form. No markup change (the form and its buttons
+     already existed). A Z carrying the bump (D94). AND — this is the first
+     deploy that will exercise D130 end-to-end: any tab already running
+     1.14.0 (D130) will see THIS html version (0.35.1) differ from its boot
+     value and offer the refresh banner. That's the live test Jake wanted.
      0.35.0 (D130): #update-banner added — a fixed bottom bar (outside
      #drift-wrap, D127) the hourly version check shows when a newer deploy
      is live. ⚠️ NOTE: this data-html-version value is ITSELF what the
@@ -205,7 +211,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.43.0">
 </head>
-<body data-html-version="0.35.0">
+<body data-html-version="0.35.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -850,6 +856,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.14.0"></script>
+  <script type="module" src="app.js?v=1.15.0"></script>
 </body>
 </html>
