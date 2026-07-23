@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.37.0 (banner and data-html-version move together, always)
+     Version 0.38.0 (banner and data-html-version move together, always)
+     0.38.0 (D136): no markup change — app ?v= → 1.18.0 for the document
+     census in the version tooltip / Settings footer.
      0.37.0 (D134): no markup change — app ?v= → 1.17.0 for the Escape
      handler. Bumped because data-html-version is the update signal
      (D130) and app.js changed; the ?v= is what busts the cache.
@@ -219,7 +221,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.44.0">
 </head>
-<body data-html-version="0.37.0">
+<body data-html-version="0.38.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -878,6 +880,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.17.0"></script>
+  <script type="module" src="app.js?v=1.18.0"></script>
 </body>
 </html>
