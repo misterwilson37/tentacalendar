@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.38.0 (banner and data-html-version move together, always)
+     Version 0.39.0 (banner and data-html-version move together, always)
+     0.39.0 (D137): THE ALERTER. #alert-toast (outside #drift-wrap, D37/
+     D127 — the wall is often fullscreen, where an OS notification may
+     never paint but our own banner always does) + five per-device
+     controls in Settings > Timing (#cfg-alerts, #cfg-alert-sound,
+     #cfg-alert-notify, #cfg-alert-vol, #alert-test) and #alert-status.
+     They are #cfg-* on purpose: D129's dirty guard captures that prefix
+     generically, so the unsaved-changes check covers them for free.
      0.38.0 (D136): no markup change — app ?v= → 1.18.0 for the document
      census in the version tooltip / Settings footer.
      0.37.0 (D134): no markup change — app ?v= → 1.17.0 for the Escape
@@ -219,9 +226,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.44.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.45.0">
 </head>
-<body data-html-version="0.38.0">
+<body data-html-version="0.39.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -573,6 +580,18 @@
     <button id="update-later" class="mini">Later</button>
   </div>
 
+  <!-- D137: the alert toast — OUTSIDE #drift-wrap for the same reason as
+       the banner above, and z-index 141 so it clears the update banner.
+       This is the channel that matters on the WALL: a fullscreen kiosk may
+       never paint an OS notification, but it always paints its own page. -->
+  <div id="alert-toast" hidden>
+    <span id="alert-toast-level"></span>
+    <div class="at-text">
+      <strong id="alert-toast-title"></strong>
+      <span id="alert-toast-body"></span>
+    </div>
+  </div>
+
   <!-- D107: the screen rest — OUTSIDE #drift-wrap on purpose (D37's rule:
        a fixed overlay inside a transformed ancestor re-roots and shows the
        drift as edge gaps). z-index 98: above everything but the confetti —
@@ -653,6 +672,21 @@
           <label><input id="cfg-idle-dim" type="checkbox"> 🕯️ Dim chrome when idle <span class="hint-inline">(dashboard · this device)</span></label>
         </div>
         <p class="hint">Burn-in care for a TV that lives on the dashboard: during sleep hours the screen goes near-black with a wandering clock (tap it to peek for 5 minutes), and after 5 idle minutes the header and dividers fade. The whole app already drifts a few pixels (D37); the dashboard rides a second, wider orbit. These two switches are per-device — flip them on the TV itself.</p>
+        <!-- D137: alerts. PER-DEVICE like the two above — turn these ON at
+             the wall and the tablet, leave them off on a phone. -->
+        <div class="form-row">
+          <label><input id="cfg-alerts" type="checkbox"> 🔔 Alert me when things come due <span class="hint-inline">(this device)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input id="cfg-alert-sound" type="checkbox"> 🔊 Play a sound</label>
+          <label><input id="cfg-alert-notify" type="checkbox"> 💬 System notifications</label>
+        </div>
+        <div class="form-row">
+          <label>Volume <input id="cfg-alert-vol" type="range" min="0" max="100" step="5"></label>
+          <button id="alert-test" class="mini" type="button">▶ Test</button>
+        </div>
+        <p class="hint" id="alert-status"></p>
+        <p class="hint">A task speaks when it comes due and again on every step of <em>its own</em> escalation — the same schedule that turns it red, so a task set to nag hourly now chimes hourly. Project stages speak once when their deadline passes. Calendar events speak when they enter their lead window. Nothing makes a sound during sleep hours, and hidden tiers stay silent. An on-screen banner always appears; the sound and the system notification are the two switches above.</p>
         <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
         <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
         <p class="hint" id="poll-cost-hint"></p>
@@ -880,6 +914,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.18.0"></script>
+  <script type="module" src="app.js?v=1.19.0"></script>
 </body>
 </html>
