@@ -1,7 +1,12 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.44.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.45.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.45.0 (D137): the alerter. #alert-toast (top-centre, z-index 141 so a
+   deploy banner at 140 can never bury an alert) + three level tints
+   (--alert-due/-nag/-soon) and a width for the volume slider. The
+   kiosk-idle override is load-bearing: D107 fades the wall's chrome
+   after 5 idle minutes, and an alarm that fades is not an alarm.
    0.44.0 (D132): the follow-up chain builder in the New Task form —
    .fu-chain-head, .fu-chain-row and its fuc-* children. Rows carry a
    left border and panel-2 fill so the "and then, and then" indent is
@@ -174,7 +179,14 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.44.0";
+  --tc-version: "0.45.0";
+  /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
+     colour says "which part of life", an alert colour says "how loud",
+     and overloading one onto the other would make a red Home task and an
+     overdue alert indistinguishable at a glance. */
+  --alert-due: #ff8787;
+  --alert-nag: #ffa94d;
+  --alert-soon: #74c0fc;
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -425,6 +437,46 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
   max-width: 92vw;
 }
 #update-msg { font-size: .85rem; color: var(--ink); }
+
+/* D137 — the alert toast. TOP-centre on purpose: the update banner owns
+   the bottom, and on the wall the agenda's live rows are down there too.
+   z-index 141 clears the banner (140) so a deploy notice can't bury an
+   alert. Reuses --panel-2/--accent; the only new tokens are the two
+   level tints, which exist so "due" and "soon" are distinguishable at a
+   glance across a room without reading the words. */
+#alert-toast {
+  position: fixed; z-index: 141;
+  left: 50%; transform: translateX(-50%);
+  top: 1.2rem;
+  display: flex; align-items: center; gap: .75rem;
+  background: var(--panel-2, var(--panel));
+  border: 1px solid var(--alert-due);
+  border-left: 5px solid var(--alert-due);
+  border-radius: 10px;
+  padding: .65rem 1.1rem .65rem .9rem;
+  box-shadow: 0 6px 26px rgba(0,0,0,.6);
+  max-width: 92vw; cursor: pointer;
+  animation: alert-in .28s ease-out;
+}
+#alert-toast[data-level="nag"]  { border-color: var(--alert-nag);  border-left-color: var(--alert-nag); }
+#alert-toast[data-level="soon"] { border-color: var(--alert-soon); border-left-color: var(--alert-soon); }
+#alert-toast-level {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--alert-due); white-space: nowrap; font-weight: 700;
+}
+#alert-toast[data-level="nag"]  #alert-toast-level { color: var(--alert-nag); }
+#alert-toast[data-level="soon"] #alert-toast-level { color: var(--alert-soon); }
+#alert-toast .at-text { display: flex; flex-direction: column; min-width: 0; }
+#alert-toast strong { font-size: .95rem; color: var(--ink); }
+#alert-toast .at-text span { font-size: .78rem; opacity: .75; }
+@keyframes alert-in {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+/* The kiosk dims its chrome after 5 idle minutes (D107) — an ALERT must
+   not dim with it. That is the entire point of the alert. */
+body.kiosk-idle #alert-toast { opacity: 1 !important; }
+#cfg-alert-vol { vertical-align: middle; width: 8rem; }
 
 .proj-stage-done .st-name { text-decoration: line-through; opacity: .6; }
 .st-flags { font-size: .75rem; color: var(--accent); white-space: nowrap; }
