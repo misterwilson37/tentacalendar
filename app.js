@@ -1,6 +1,22 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 1.18.0 — D136: THE DOCUMENT CENSUS. Every figure in the cost
+// Version 1.19.0 — D137: THE ALERTER. Jake, on the escalation glow: "it
+// getting redder every hour does nothing." D3 built a real escalation
+// engine and then whispered its results in colour. This makes the SAME
+// engine audible: a task speaks on ITS OWN per-task escalation cadence,
+// so no new schedule was invented and no new setting can be wrong.
+// Three channels, one master switch, ALL PER-DEVICE (D107's rule): an
+// in-page toast (the load-bearing one — a fullscreen kiosk may never
+// paint an OS notification, but it always paints its own page), a
+// synthesized Web Audio chime (no asset to host or 404), and the OS
+// notification. Reads through buildQueue for TODAY — never S.viewDay,
+// never raw S.tasks — so hidden tiers (D47), off-days (D61), timeless
+// want-tos (D126) and pipeline windows (D48) are all honoured for free
+// instead of by a second copy of the rules (D98). Announcements are
+// keyed per MOMENT and persisted, so D130's auto-refresh cannot make a
+// deadline speak twice; the first pass after load is always silent, so
+// opening the app on a bad day does not detonate.
+// (prev) Version 1.18.0 — D136: THE DOCUMENT CENSUS. Every figure in the cost
 // conversation was modelled; the app knows the truth, because it already
 // subscribes to all eight collections and can just count what arrived.
 // The version tooltip and the ⚙️ Settings footer now read e.g.
@@ -720,7 +736,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.18.0";
+export const APP_VERSION = "1.19.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -893,6 +909,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
   wirePipelineManager();   // D124 — the project-type library controls (once)
   $("#settings-save").addEventListener("click", onSaveSettings);  $("#cfg-poll").addEventListener("input", updatePollCostHint);
+  $("#alert-test").addEventListener("click", testAlert);              // D137 — a click is also the audio unlock
+  $("#cfg-alert-notify").addEventListener("change", onNotifyToggle);  // D137 — permission must be asked from a gesture
   $("#due-save").addEventListener("click", dueSave);
   $("#due-clear").addEventListener("click", dueClear);
   $("#due-cancel").addEventListener("click", () => { $("#due-modal").hidden = true; });
@@ -981,6 +999,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // first), then hourly. Cache-busted fetch of index.html; see checkForUpdate.
   setTimeout(checkForUpdate, 60 * 1000);
   setInterval(checkForUpdate, 60 * 60 * 1000);
+  wireAlerts();                              // D137
+  setTimeout(() => alertTick(true), 4000);   // D137 — silent seeding once data has landed
   // D122 — the NOW bar's second hand. Touches exactly ONE text node when
   // the bar exists, and does nothing at all when it doesn't; render()
   // stays a minute-tick affair.
@@ -1137,6 +1157,7 @@ function tick() {
   }
   render();
   updateScreenRest();   // D107 — sleep hours are checked on the minute
+  alertTick();          // D137 — and so is everything that just came due
 }
 
 // D37: drift transforms #drift-wrap, NEVER <body>.
@@ -1210,6 +1231,278 @@ function wireBurnInCare() {
   for (const ev of ["pointermove", "pointerdown", "keydown"]) {
     window.addEventListener(ev, pokeIdle, { passive: true });
   }
+}
+
+// ---------- D137: THE ALERTER (Katie: the red glow does nothing) ----------
+// Jake, on the escalation glow: "it getting redder every hour does nothing."
+// He's right — D3 built a real escalation engine and then whispered its
+// results in colour, on a screen nobody is staring at. This makes the SAME
+// engine audible. It invents no new schedule: a task nags on ITS OWN D3
+// escalation cadence (already per-task, already configurable), so the
+// feature Katie has been ignoring is the feature that now speaks.
+//
+// THREE CHANNELS, one master switch, all PER-DEVICE (D107's rule — the TV
+// is a device, the phone is not; a beeping phone in a client meeting is
+// exactly the thing she's already ignoring):
+//   · toast   — an in-page banner. THE LOAD-BEARING ONE ON THE WALL: a
+//               system notification is drawn by the OS and a fullscreen
+//               kiosk may never show it. This one is ours, so it always
+//               appears. Outside #drift-wrap (D37/D127).
+//   · sound   — Web Audio, SYNTHESIZED. No asset to host, no file to 404,
+//               works offline, and three distinguishable shapes mean you
+//               can tell what happened without looking up.
+//   · notify  — the OS notification, for a windowed tab.
+//
+// READS THROUGH buildQueue, NEVER through S.tasks. That is the whole
+// safety of it: hidden tiers (D47), off-days (D61), timeless want-tos
+// (D126), pipeline windows (D48) and expiry all already live in there.
+// Re-deriving "what is overdue" from raw tasks would be a second truth,
+// and D98 is this file's standing warning about what those cost. It is
+// also evaluated for TODAY explicitly — not S.viewDay — because paging
+// the queue to next Thursday must not silence the alarm.
+
+const ALERT_LEVELS = {
+  due:  { tones: [[880, 0, 0.20], [1174.7, 0.17, 0.26]], vol: 0.9, label: "Due now" },
+  nag:  { tones: [[622.3, 0, 0.22], [622.3, 0.26, 0.30]], vol: 0.8, label: "Still waiting" },
+  soon: { tones: [[1318.5, 0, 0.07], [1318.5, 0.11, 0.07], [1318.5, 0.22, 0.10]], vol: 0.55, label: "Starting soon" }
+};
+const ANNOUNCED_KEY = "tc-announced";
+const ANNOUNCE_TTL = 36 * 60 * 60 * 1000;   // long enough to survive a night, short enough not to grow
+
+function alertsOn()  { return localStorage.getItem("tc-alerts") === "1"; }        // master, default OFF
+function alertSound(){ return localStorage.getItem("tc-alert-sound") !== "0"; }   // on when alerts are
+function alertNotify(){ return localStorage.getItem("tc-alert-notify") === "1"; } // needs OS permission
+function alertVol()  { return Math.min(1, Math.max(0, (parseInt(localStorage.getItem("tc-alert-vol"), 10) || 70) / 100)); }
+
+// --- audio ---
+// The AudioContext starts SUSPENDED until a user gesture. On a wall that
+// auto-refreshed at 3 AM (D130) nobody has touched the glass since, so the
+// first alert of the morning would be silent — and a silent alarm is worse
+// than no alarm, because you believe it works. So: resume on any gesture,
+// and if it is still suspended when we want to speak, SAY SO in settings
+// and on the toast rather than failing quietly (D96's lesson, verbatim).
+let audioCtx = null;
+let audioBlocked = false;
+function ensureAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!audioCtx) audioCtx = new AC();
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    audioBlocked = audioCtx.state === "suspended";
+    return audioCtx;
+  } catch (err) {
+    console.warn("[alerts] no audio:", err);
+    return null;
+  }
+}
+function playLevel(level) {
+  const spec = ALERT_LEVELS[level] || ALERT_LEVELS.due;
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const master = alertVol() * spec.vol;
+  if (master <= 0) return;
+  const t0 = ctx.currentTime + 0.02;
+  for (const [freq, at, dur] of spec.tones) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, t0 + at);
+    // exponential ramps only — a linear attack on a sine clicks audibly
+    gain.gain.setValueAtTime(0.0001, t0 + at);
+    gain.gain.exponentialRampToValueAtTime(master, t0 + at + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t0 + at);
+    osc.stop(t0 + at + dur + 0.05);
+  }
+}
+
+// --- the in-page toast ---
+let toastT = null;
+function showToast(level, title, body) {
+  const el = $("#alert-toast");
+  if (!el) return;
+  $("#alert-toast-level").textContent = (ALERT_LEVELS[level] || ALERT_LEVELS.due).label;
+  $("#alert-toast-title").textContent = title;
+  $("#alert-toast-body").textContent = audioBlocked && alertSound()
+    ? (body ? body + " · (tap anywhere to enable sound)" : "Tap anywhere to enable sound")
+    : (body || "");
+  el.dataset.level = level;
+  el.hidden = false;
+  clearTimeout(toastT);
+  toastT = setTimeout(hideToast, 25000);
+}
+function hideToast() {
+  const el = $("#alert-toast");
+  if (el) el.hidden = true;
+  clearTimeout(toastT);
+}
+
+function osNotify(title, body, tag) {
+  if (!alertNotify()) return;
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    // tag collapses a repeat nag onto the same notification instead of
+    // stacking twelve of them down the corner of the screen
+    new Notification(title, { body, tag, icon: "icon-192.png", renotify: true });
+  } catch (err) {
+    console.warn("[alerts] notification refused:", err);
+  }
+}
+
+// --- the announced ledger ---
+// Keyed per MOMENT, not per item, and persisted: a page reload (D130
+// auto-refreshes this app on every deploy) must not re-announce a
+// deadline that already spoke an hour ago.
+function loadAnnounced() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ANNOUNCED_KEY) || "{}");
+    return (raw && typeof raw === "object") ? raw : {};
+  } catch { return {}; }
+}
+function saveAnnounced(map) {
+  const cut = Date.now() - ANNOUNCE_TTL;
+  const out = {};
+  for (const k in map) if (map[k] > cut) out[k] = map[k];
+  try { localStorage.setItem(ANNOUNCED_KEY, JSON.stringify(out)); } catch { /* full/private mode */ }
+}
+
+/** The moments worth a noise, derived from today's real queue.
+ *  Returns [{level, key, title, body, tag}] — pure, so it is testable
+ *  without a DOM and without making a sound. */
+function pendingAlerts(q, seen) {
+  const out = [];
+  for (const it of q.items) {
+    if (it.kind === "event") continue;          // events speak via `soon`, not expiry
+    if (!it.expired) continue;
+    const name = it.kind === "stage" ? `${it.projectName}: ${it.title}` : it.title;
+    const dueKey = `due:${it.id}`;
+    if (!(dueKey in seen)) {
+      // Claim the CURRENT nag slot at the same time, or the very next tick
+      // fires a nag one minute after the due alert — two noises, one event.
+      const also = it.kind === "task" ? [`nag:${it.id}:${it.time}`] : [];
+      out.push({ level: "due", key: dueKey, also, title: name, body: it.tier?.name || "", tag: `tc-${it.id}` });
+      continue;
+    }
+    // Only TASKS re-nag, and only on their own D3 escalation step (it.time
+    // is effectiveDue — the next slot — so it changes exactly once per
+    // period). Stages carry no escalation field; inventing a cadence for
+    // them would be this file's oldest mistake (D50), so they speak once
+    // and the D46 decision modal remains their escalation.
+    if (it.kind !== "task") continue;
+    const nagKey = `nag:${it.id}:${it.time}`;
+    if (!(nagKey in seen)) {
+      out.push({ level: "nag", key: nagKey, also: [], title: name, body: "still not done", tag: `tc-${it.id}` });
+    }
+  }
+  // D7/D80: an anchor entering its lead window IS the app's notification.
+  for (const e of q.pinned) {
+    const key = `soon:${e.id}:${e.time}`;
+    if (key in seen) continue;
+    out.push({ level: "soon", key, also: [], title: e.title, body: `starts ${fmtTime(e.time)}`, tag: `tc-${e.id}` });
+  }
+  return out;
+}
+
+/** Runs on the minute tick. `silent` marks everything as already-said
+ *  without making a sound — used at boot, so opening the app on a day
+ *  with nine overdue things does not detonate. */
+let alertsSeeded = false;
+function alertTick(silent = false) {
+  if (!S.tiers.length) return;                 // pre-subscription: nothing is knowable yet
+  // The FIRST pass is always silent, and it runs even with alerts OFF —
+  // so flipping the switch on at 2 PM does not immediately detonate every
+  // deadline the day already missed. You get told about what happens NEXT.
+  if (!alertsSeeded) { silent = true; alertsSeeded = true; }
+  if (!silent && !alertsOn()) return;
+  const now = Date.now();
+  let q;
+  try {
+    q = buildQueue({
+      tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
+      now, viewDay: now,                       // TODAY, never S.viewDay
+      hiddenTierIds: S.hiddenTierIds
+    });
+  } catch (err) {
+    console.warn("[alerts] queue unavailable:", err);
+    return;
+  }
+  const seen = loadAnnounced();
+  const fresh = pendingAlerts(q, seen);
+  if (!fresh.length) return;
+
+  // Sleep hours are silent, and they SWALLOW rather than defer — the
+  // alternative is a 6 AM avalanche of everything the night accumulated,
+  // which teaches you to ignore the alarm on its second morning.
+  const mute = silent || inSleepHours();
+  let spoke = 0;
+  for (const a of fresh) {
+    seen[a.key] = now;
+    for (const k of a.also || []) seen[k] = now;
+    if (mute) continue;
+    // Cap the NOISE, not the ledger: three sounds is a signal, nine is an
+    // alarm clock you unplug. Everything is still marked, so nothing
+    // repeats later.
+    if (spoke < 3) {
+      if (alertSound()) playLevel(a.level);
+      osNotify(a.title, a.body, a.tag);
+      spoke++;
+    }
+  }
+  if (!mute && fresh.length) {
+    const first = fresh[0];
+    showToast(first.level, first.title,
+      fresh.length > 1 ? `${first.body ? first.body + " · " : ""}+${fresh.length - 1} more` : first.body);
+  }
+  saveAnnounced(seen);
+}
+
+function wireAlerts() {
+  const toast = $("#alert-toast");
+  if (toast && !toast.dataset.wired) {
+    toast.dataset.wired = "1";
+    toast.addEventListener("click", hideToast);
+  }
+  // One-time audio unlock: the first gesture of the session resumes the
+  // context so the first REAL alert is not the one that discovers it was
+  // suspended. Passive + once — this must never cost anything on the wall.
+  for (const ev of ["pointerdown", "keydown"]) {
+    window.addEventListener(ev, () => { if (alertsOn() && alertSound()) ensureAudio(); }, { passive: true, once: true });
+  }
+}
+
+/** Settings: the ▶ Test button. Also the honest audio unlock, since a
+ *  click IS the user gesture the browser wants. */
+function testAlert() {
+  ensureAudio();
+  playLevel("due");
+  showToast("due", "Test alert", "If you heard a chime, you're set.");
+  osNotify("Tentacalendar", "Test alert — notifications are working.", "tc-test");
+  refreshAlertStatus();
+}
+
+function refreshAlertStatus() {
+  const el = $("#alert-status");
+  if (!el) return;
+  const bits = [];
+  if (typeof Notification === "undefined") bits.push("this browser has no notifications");
+  else if (Notification.permission === "denied") bits.push("notifications blocked in browser settings");
+  else if (Notification.permission === "default" && alertNotify()) bits.push("notifications not yet allowed");
+  if (audioBlocked) bits.push("sound waiting for a tap on the page");
+  el.textContent = bits.length ? "⚠ " + bits.join(" · ") : (alertsOn() ? "✓ alerts on for this device" : "");
+}
+
+/** Checking the notify box is a user gesture, which is the only moment a
+ *  browser will honour a permission request — so ask HERE rather than on
+ *  boot, where it is both refused and rude. */
+async function onNotifyToggle() {
+  const box = $("#cfg-alert-notify");
+  if (box && box.checked && typeof Notification !== "undefined" && Notification.permission === "default") {
+    try { await Notification.requestPermission(); } catch { /* user dismissed */ }
+  }
+  refreshAlertStatus();
 }
 
 function shiftDay(n) { S.viewDay += n * DAY_MS; render(); }
@@ -5220,6 +5513,11 @@ function openSettings() {
   $("#cfg-mirror-cal").value = c.mirrorCalendarId ?? "";  // D81
   $("#cfg-rest").checked = localStorage.getItem("tc-rest") !== "0";          // D107 (per-device)
   $("#cfg-idle-dim").checked = localStorage.getItem("tc-idle-dim") !== "0";  // D107 (per-device)
+  $("#cfg-alerts").checked = alertsOn();                                     // D137 (per-device)
+  $("#cfg-alert-sound").checked = alertSound();
+  $("#cfg-alert-notify").checked = alertNotify();
+  $("#cfg-alert-vol").value = String(Math.round(alertVol() * 100));
+  refreshAlertStatus();
   $("#cfg-deadline-hour").value = c.deadlineHour ?? 16;   // D51
   $("#cfg-decision-days").value = c.decisionThresholdDays ?? 2; // D52
   $("#cfg-cleardeck").value = Math.round((c.clearDeckThreshold ?? 0.6) * 100); // D85
@@ -5461,8 +5759,15 @@ function onSaveSettings() {
   // localStorage, not workspace config, and they apply immediately.
   localStorage.setItem("tc-rest", $("#cfg-rest").checked ? "1" : "0");
   localStorage.setItem("tc-idle-dim", $("#cfg-idle-dim").checked ? "1" : "0");
+  // D137 — the alert switches are per-device for the same reason (the wall
+  // and the tablet should speak; a phone in a client meeting should not).
+  localStorage.setItem("tc-alerts", $("#cfg-alerts").checked ? "1" : "0");
+  localStorage.setItem("tc-alert-sound", $("#cfg-alert-sound").checked ? "1" : "0");
+  localStorage.setItem("tc-alert-notify", $("#cfg-alert-notify").checked ? "1" : "0");
+  localStorage.setItem("tc-alert-vol", String(clampInt($("#cfg-alert-vol").value, 0, 100, 70)));
   pokeIdle();
   updateScreenRest();
+  refreshAlertStatus();
   saveConfig({
     carryoverWriteHour: clampInt($("#cfg-carryover").value, 0, 23, 9),
     pollIntervalMinutes: clampInt($("#cfg-poll").value, 5, 1440, 60),
