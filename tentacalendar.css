@@ -1,7 +1,11 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.43.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.44.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.44.0 (D132): the follow-up chain builder in the New Task form —
+   .fu-chain-head, .fu-chain-row and its fuc-* children. Rows carry a
+   left border and panel-2 fill so the "and then, and then" indent is
+   visible as shape, not just implied by a dropdown. No new tokens.
    0.43.0 (D130): #update-banner — a fixed bottom bar (z-index 140, above
    modals so it's reachable even with Settings open), shown when the hourly
    version check finds a newer deploy. Reuses --panel-2/--accent; no new
@@ -170,7 +174,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.43.0";
+  --tc-version: "0.44.0";
   --bg: #0a0f14;
   --panel: #101822;
   --panel-2: #16212e;
@@ -348,6 +352,25 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 #pipeline-picker-row { align-items: center; gap: .4rem; flex-wrap: wrap; }
 #pipeline-picker-row label { flex: 0 1 auto; }
 #project-type-label { display: block; margin: .1rem 0 .3rem; }
+/* D132 — the follow-up chain builder in the New Task form. Rows are
+   indented under the task they hang off, so the "and then, and then"
+   shape is visible at a glance rather than implied by a dropdown. */
+.fu-chain-head { display: flex; align-items: center; gap: .5rem; }
+#fu-chain-rows:not(:empty) { display: flex; flex-direction: column; gap: .45rem; margin-top: .5rem; }
+.fu-chain-row {
+  display: flex; flex-direction: column; gap: .3rem;
+  padding: .45rem .5rem .5rem .6rem;
+  border-left: 2px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 0 6px 6px 0;
+}
+.fu-chain-row .fuc-top { display: flex; align-items: center; gap: .4rem; }
+.fu-chain-row .fuc-title { flex: 1; min-width: 0; }
+.fu-chain-row .fuc-when { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; font-size: .75rem; color: var(--ink-dim); }
+.fu-chain-row .fuc-n { width: 3.6rem; }
+.fu-chain-row .fuc-unit, .fu-chain-row .fuc-anchor { width: auto; flex: 0 1 auto; font-size: .75rem; padding: .3rem .4rem; }
+.fuc-anchor-fixed { font-size: .75rem; color: var(--ink-dim); }
+
 .hint { color: var(--ink-dim); font-size: .78rem; }
 .hint-inline { color: var(--ink-dim); font-size: .75rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 
