@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.35.1 (banner and data-html-version move together, always)
+     Version 0.36.0 (banner and data-html-version move together, always)
+     0.36.0 (D132): the New Task form gains #fu-chain-block — the
+     chained-follow-up builder ("And then…"). Rows are JS-built so
+     add/remove preserves typed values; form.reset() does NOT clear
+     them, which is why cancelTaskEdit clears them by hand. css ?v= →
+     0.44.0, app ?v= → 1.16.0 (D133 rides along in app.js).
      0.35.1 (D131): app.js ?v= → 1.15.0 only — the unsaved-changes guard now
      covers the project form. No markup change (the form and its buttons
      already existed). A Z carrying the bump (D94). AND — this is the first
@@ -209,9 +214,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.43.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.44.0">
 </head>
-<body data-html-version="0.35.1">
+<body data-html-version="0.36.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -360,12 +365,26 @@
               </select>
             </span>
           </label>
+          <!-- D132: chained follow-ups, authored up front. TASK-PLUS-N —
+               the task above is the root and every row hangs off either it
+               or the row above ("and then, and then"). Empty by default: a
+               blank list is not a list (D100/D111's silence rule). Rows are
+               built in JS so add/remove keeps typed values. CREATE ONLY —
+               hidden while editing, because ↳ on an existing task is the
+               path for that and two doors to one room is how drift starts. -->
+          <div id="fu-chain-block">
+            <div class="fu-chain-head">
+              <span class="hint-inline">↳ And then…</span>
+              <button type="button" id="fu-chain-add" class="mini">+ Add follow-up</button>
+            </div>
+            <div id="fu-chain-rows"></div>
+          </div>
           <div class="form-actions">
             <button type="submit" id="task-submit" class="primary">Add to the tentacles</button>
             <button type="button" id="task-cancel" class="mini" hidden>Cancel edit</button>
           </div>
         </form>
-        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish.</p>
+        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish. Chained follow-ups wait their turn — each one gets its date only when the step it hangs off is checked.</p>
 
         <h3 id="project-form-title">New project</h3>
         <form id="project-form">
@@ -856,6 +875,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.15.0"></script>
+  <script type="module" src="app.js?v=1.16.0"></script>
 </body>
 </html>
