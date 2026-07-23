@@ -1,6 +1,20 @@
 // ============================================================
 // Tentacalendar — Cloud Functions
-// functions/index.js — Version 0.3.0 (D87, Phase 3 step 3: the CARRYOVER)
+// functions/index.js — Version 0.4.0 (D135, the poll reconcile)
+// 0.4.0: pollCalendars RECONCILES instead of replacing. It used to delete
+// every cached event and re-write all of them under new auto-ids every
+// hour regardless of change — ~180 document changes pushed to every open
+// tab per run, ~2,900 billed reads per tab per day, scaling with users.
+// Now: docs are keyed {tierId}_{gcalEventId} (what HANDOFF §3 always
+// specified; the code had drifted to auto-ids, which is WHY nothing could
+// be compared), only genuinely-changed events are written, and only
+// vanished ones deleted. syncedAt was REMOVED from the payload — it was
+// never read anywhere, and being Date.now() it would have made every doc
+// differ every run and defeated the whole fix. Legacy auto-id docs delete
+// themselves on the first run (they're not in the wanted set). Same
+// discipline mirrorTasks has used since 0.2.0. No client change needed:
+// nothing keys off an event's doc id, and eventsCache is read-only display.
+// 0.3.0: PHASE 3 IS COMPLETE. Third job, ?job=carryover (and in "all"):
 // 0.3.0: PHASE 3 IS COMPLETE. Third job, ?job=carryover (and in "all"):
 // a task in a ❗ midnightCarryover tier that was due before today began
 // and still isn't checked gets "❗ <task>" on today's calendar at
@@ -53,7 +67,7 @@ const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "0.3.0";
+const FUNCTIONS_VERSION = "0.4.0";
 const WS = "primary"; // one workspace (HANDOFF D12)
 
 admin.initializeApp();
@@ -197,8 +211,7 @@ async function runPoll(cal, calTiers) {
               end: parseWhen(ev.end),
               tierId: tier.id,
               leadWindowMinutes: lead,
-              allDay: !!ev.start?.date,
-              syncedAt: Date.now()
+              allDay: !!ev.start?.date
             });
           }
           pageToken = r.data.nextPageToken;
@@ -211,15 +224,72 @@ async function runPoll(cal, calTiers) {
         continue;
       }
 
-      // Idempotent sync: replace this tier's slice of the cache.
+      // D135 — RECONCILE, don't replace. This used to delete every doc for
+      // the tier and re-`set` all of them under FRESH AUTO-IDs, every hour,
+      // whether or not anything had changed. Cost: ~90 deletes + ~90 writes
+      // server-side per run, and — the expensive part — ~180 document
+      // changes pushed to EVERY connected client's eventsCache listener,
+      // ~16 times a day. That's ~2,900 billed reads per open tab per day
+      // for data that almost never changes, and it scaled with user count,
+      // which is precisely what made the app expensive to share.
+      //
+      // Two things had to be true to fix it, and the second is the one that
+      // would have silently defeated a naive attempt:
+      //   1. A STABLE KEY. Auto-ids made every doc unrecognisable next run,
+      //      so nothing could be compared. HANDOFF §3 always said
+      //      eventsCache/{gcalEventId}; the implementation had drifted.
+      //      Prefixed with the tier id because the SAME calendar event can
+      //      appear on two calendars (shared/invited), and a bare event-id
+      //      key would let two tiers fight over one doc forever.
+      //   2. syncedAt: Date.now() WAS IN THE PAYLOAD. Every doc would have
+      //      differed on every run and "write only what changed" would have
+      //      written everything anyway. Nothing in the codebase ever read
+      //      it, so it's gone rather than excluded — keeping it and writing
+      //      only on change would make it mean "last CHANGED", which is a
+      //      lie in a field called syncedAt.
+      // This is the same discipline mirrorTasks has used since D81, twenty
+      // lines below. The poll was the odd one out.
       const oldSnap = await evCol.where("tierId", "==", tier.id).get();
+      const have = new Map();
+      oldSnap.docs.forEach(d => have.set(d.id, d.data()));
+
       const ops = [];
-      oldSnap.docs.forEach(d => ops.push(b => b.delete(d.ref)));
-      fresh.forEach(e => ops.push(b => b.set(evCol.doc(), e)));
+      const wanted = new Set();
+      let created = 0, updated = 0, removed = 0;
+      for (const e of fresh) {
+        const key = eventDocId(tier.id, e.gcalEventId);
+        if (!key) { ops.push(b => b.set(evCol.doc(), e)); created++; continue; } // no usable id: old behaviour
+        wanted.add(key);
+        const cur = have.get(key);
+        if (!cur) { ops.push(b => b.set(evCol.doc(key), e)); created++; }
+        else if (eventChanged(cur, e)) { ops.push(b => b.set(evCol.doc(key), e)); updated++; }
+      }
+      // Anything of this tier's that the calendar no longer has — including
+      // every legacy auto-id doc, which migrates itself away on first run.
+      for (const key of have.keys()) {
+        if (!wanted.has(key)) { ops.push(b => b.delete(evCol.doc(key))); removed++; }
+      }
       await commitChunked(ops);
-      out.tiers[tier.name] = { removed: oldSnap.size, written: fresh.length };
+      out.tiers[tier.name] = { created, updated, removed, unchanged: fresh.length - created - updated };
   }
   return out;
+}
+
+/** D135 — deterministic doc id. Firestore reserves ids matching __.*__ and
+ *  forbids "/", so the event id is sanitised; the tier prefix keeps two
+ *  calendars holding the same event from overwriting each other. */
+function eventDocId(tierId, gcalEventId) {
+  if (!tierId || !gcalEventId) return null;
+  return `${tierId}_${String(gcalEventId).replace(/[^A-Za-z0-9_-]/g, "-")}`.slice(0, 400);
+}
+
+/** D135 — the fields that actually MATTER to the client. syncedAt is
+ *  deliberately absent (it no longer exists); anything not listed here
+ *  changing does not justify a write, because a write costs every open
+ *  tab a read. */
+const EVENT_FIELDS = ["gcalEventId", "title", "start", "end", "tierId", "leadWindowMinutes", "allDay"];
+function eventChanged(cur, next) {
+  return EVENT_FIELDS.some(f => (cur[f] ?? null) !== (next[f] ?? null));
 }
 
 /** Phase 3 step 2 (D81): tasks → the dedicated mirror calendar.
