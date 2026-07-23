@@ -1,6 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 1.17.0 — D134: ESCAPE CLOSES THE TOPMOST MODAL. Jake, wanting
+// Version 1.18.0 — D136: THE DOCUMENT CENSUS. Every figure in the cost
+// conversation was modelled; the app knows the truth, because it already
+// subscribes to all eight collections and can just count what arrived.
+// The version tooltip and the ⚙️ Settings footer now read e.g.
+// "412 docs/load (tasks 189 · sessions 44 · events 90 · projects 21 ·
+// tiers 6)" — that total IS the per-page-load billed read cost, per
+// device. It exists because subscribeTasks/subscribeSessions are
+// UNFILTERED (every boot re-reads all completed history, forever), and
+// watching this number climb is what will tell Jake WHEN windowing stops
+// being optional, instead of me estimating it from writes-per-day.
+// Read-only, counts documents already received, costs nothing extra.
+// reportVersions() is re-run from the config callback so the tooltip
+// isn't frozen at the zeros it held before any snapshot landed.
+// ------------------------------------------------------------
+// (prev) Version 1.17.0 — D134: ESCAPE CLOSES THE TOPMOST MODAL. Jake, wanting
 // to scroll through the un-dating sweep faster: "the equivalent of
 // clicking the x — no save," and if something changed, confirm. The
 // confirm half cost nothing: the handler never closes anything itself,
@@ -706,7 +720,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.17.0";
+export const APP_VERSION = "1.18.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -978,6 +992,37 @@ document.addEventListener("DOMContentLoaded", () => {
   }, 1000);
 });
 
+// ---------- D136: the document census ----------
+//
+// Every number in the cost conversation so far was MODELLED. The app knows
+// the truth — it subscribes to all eight collections, so it can simply
+// count what arrived. This is that count, surfaced in the version tooltip
+// and the ⚙️ Settings footer line.
+//
+// Why it matters: `subscribeTasks` and `subscribeSessions` are unfiltered,
+// so every boot re-reads all completed history forever. That's ~1 billed
+// read per document here, per page load, per device. Watching this number
+// grow is what tells us WHEN windowing stops being optional — instead of
+// me estimating it from a writes-per-day figure.
+//
+// Read-only. Counts documents already received; costs nothing extra.
+
+const docCensus = { tiers: 0, tasks: 0, events: 0, projects: 0, sessions: 0, singles: 4 };
+
+/** Total docs pulled on a cold boot — the per-page-load read cost.
+ *  The 4 singles are config, stageTemplate, projectTypes, and the
+ *  workspace doc; they're constant, but they're honest to include. */
+function censusTotal() {
+  return docCensus.tiers + docCensus.tasks + docCensus.events +
+         docCensus.projects + docCensus.sessions + docCensus.singles;
+}
+
+function censusLine() {
+  const t = censusTotal();
+  return `${t} docs/load (tasks ${docCensus.tasks} · sessions ${docCensus.sessions} · ` +
+         `events ${docCensus.events} · projects ${docCensus.projects} · tiers ${docCensus.tiers})`;
+}
+
 function reportVersions() {
   const cssVersion = getComputedStyle(document.documentElement)
     .getPropertyValue("--tc-version").trim().replace(/"/g, "") || "?";
@@ -986,9 +1031,9 @@ function reportVersions() {
     `app.js ${APP_VERSION} · store.js ${STORE_VERSION} · queue.js ${QUEUE_VERSION} · ` +
     `celebrate.js ${CELEBRATE_VERSION} · config.js ${CONFIG_VERSION} · css ${cssVersion} · html ${htmlVersion}`;
   $("#version").textContent = "v" + APP_VERSION;
-  $("#version").title = report;
+  $("#version").title = report + "\n\n" + censusLine();   // D136
   const line = $("#versions-line");
-  if (line) line.textContent = report;
+  if (line) line.textContent = report + " — " + censusLine();   // D136
 }
 
 // ---------- D130: update check ----------
@@ -1055,17 +1100,18 @@ function onSignedIn(user) {
   $("#app-screen").hidden = false;
   $("#user-label").textContent = user.email;
   setView(S.view); // D65: restore this device's last view (year renders on first snapshot)
-  S.unsubs.push(subscribeTiers(t => { S.tiers = t; refreshTierSelects(); renderFilters(); render(); }));
-  S.unsubs.push(subscribeTasks(t => { S.tasks = t; render(); maybeDecisionTime(); }));
-  S.unsubs.push(subscribeEvents(e => { S.events = e; render(); }));
-  S.unsubs.push(subscribeProjects(p => { S.projects = p; suggestProjectColor(); render(); maybeDecisionTime(); }));
-  S.unsubs.push(subscribeSessions(s => { S.sessions = s; render(); }));   // D112
+  S.unsubs.push(subscribeTiers(t => { S.tiers = t; docCensus.tiers = t.length; refreshTierSelects(); renderFilters(); render(); }));
+  S.unsubs.push(subscribeTasks(t => { S.tasks = t; docCensus.tasks = t.length; render(); maybeDecisionTime(); }));
+  S.unsubs.push(subscribeEvents(e => { S.events = e; docCensus.events = e.length; render(); }));
+  S.unsubs.push(subscribeProjects(p => { S.projects = p; docCensus.projects = p.length; suggestProjectColor(); render(); maybeDecisionTime(); }));
+  S.unsubs.push(subscribeSessions(s => { S.sessions = s; docCensus.sessions = s.length; render(); }));   // D112
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
   S.unsubs.push(subscribeProjectTypes(t => { S.projectTypes = t; refreshTypeSelect(); }));  // D124
   S.unsubs.push(subscribeConfig(c => {
     S.config = c;
     setDeadlineHour(c?.deadlineHour ?? 16); // D51 — queue math follows settings
     setClearDeckThreshold(c?.clearDeckThreshold ?? 0.6); // D85
+    reportVersions();   // D136 — refresh the census once the counts have landed
     render();
   }));
 }
