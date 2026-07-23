@@ -1,6 +1,27 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 1.16.0 — D132 + D133, the two halves of "things that keep
+// Version 1.17.0 — D134: ESCAPE CLOSES THE TOPMOST MODAL. Jake, wanting
+// to scroll through the un-dating sweep faster: "the equivalent of
+// clicking the x — no save," and if something changed, confirm. The
+// confirm half cost nothing: the handler never closes anything itself,
+// it CLICKS THE MODAL'S OWN CANCEL BUTTON, so every D129/D131 guard,
+// every bit of state cleanup (fuTarget/clockMode/S.dupTarget) and every
+// special case (stages returning you to the dup form) is reused rather
+// than re-implemented — a second copy of "close" is precisely the D98
+// drift trap. Decision modals map to their NO-OP answer, not a raw hide
+// (uncheck → "oops", weekend → "back"), so nothing is left hidden-but-
+// unresolved with S.uncheckTarget stranded. Topmost = LAST OPEN IN DOM
+// ORDER, because every shell shares z-index 50 and paint order is
+// document order; that's self-maintaining, and the ship-check now
+// asserts every .modal-shell has an Escape entry so modal #12 can't
+// arrive without one. With no modal open, Escape presses the update
+// banner's "Later" (same rule: it answers the thing in your way, via
+// that button, so the don't-re-nag bookkeeping still runs). 25
+// behavioral assertions. Version is a Y, not the .1 Jake offered:
+// D94 says Y = something exists that didn't before, and this is his own
+// rule outranking an offhand number.
+// ------------------------------------------------------------
+// (prev) Version 1.16.0 — D132 + D133, the two halves of "things that keep
 // going." D132: CHAINED FOLLOW-UPS authored at task creation. The New
 // Task form grows a builder ("And then…") of task-plus-N rows, each with
 // a title, an offset, and — from row 2 on — an anchor: after the previous
@@ -685,7 +706,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.16.0";
+export const APP_VERSION = "1.17.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1659,6 +1680,79 @@ window.addEventListener("keydown", ev => {
   const t = ev.target;
   if (t && (t.matches?.("input, textarea, select") || t.isContentEditable)) return;
   if (historyStep(y || ev.shiftKey)) ev.preventDefault();
+});
+
+// ---------- D134: Escape closes the topmost modal ----------
+//
+// Jake: "the equivalent of clicking the ✕ — no save," and if something
+// changed, it should confirm. That last part costs NOTHING here, because
+// this handler does not close anything itself: it CLICKS THE MODAL'S OWN
+// cancel button. Every guard (D129/D131), every bit of state cleanup
+// (fuTarget, clockMode, S.dupTarget), and every special case (stages
+// returning you to the dup form) already lives in those handlers, so
+// reimplementing "close" here would be a second copy destined to drift
+// out of sync with the first — exactly the D98 failure. One source of
+// truth for closing; Escape is just another way to press the button.
+//
+// The mapped button is each modal's NEVER-MIND, not a raw hide: the
+// decision modals get their no-op answer (uncheck → "oops", it stays
+// done; weekend → "back"), because leaving one hidden-but-unresolved
+// would strand S.uncheckTarget / S.weekendPending.
+//
+// TOPMOST = LAST OPEN IN DOM ORDER. Every shell shares z-index 50, so
+// paint order IS document order; querySelectorAll returns document order,
+// so the last un-hidden shell is the one on top and the one Escape should
+// answer. That's self-maintaining — a new modal joins the ordering for
+// free — and the ship-check asserts every shell has an entry here, so a
+// future modal can't silently arrive without an Escape.
+//
+// NOTE for whoever adds modal #12: because they all share z-index 50 and
+// #dup-modal is LAST in the markup, dup would paint over anything it ever
+// coexisted with. Today nothing does (each explicitly hides the other),
+// but if you ever want two on screen at once, that's the trap.
+
+const MODAL_ESCAPES = {
+  "settings-modal":   "#settings-close",
+  "clock-modal":      "#clock-cancel",
+  "report-modal":     "#report-close",
+  "followup-modal":   "#fu-cancel",
+  "yv-project-modal": "#yv-project-close",
+  "due-modal":        "#due-cancel",
+  "stages-modal":     "#stages-cancel",
+  "weekend-modal":    "#weekend-back",
+  "decision-modal":   "#decision-close",
+  "uncheck-modal":    "#uncheck-oops",
+  "dup-modal":        "#dup-no"
+};
+
+/** The open modal painted on top, or null. Exported shape for testing. */
+function topOpenModalId() {
+  const shells = [...document.querySelectorAll("#settings-modal, .modal-shell")];
+  const open = shells.filter(el => !el.hidden && MODAL_ESCAPES[el.id]);
+  return open.length ? open[open.length - 1].id : null;
+}
+
+function escapeTopModal() {
+  const id = topOpenModalId();
+  if (!id) return false;
+  const btn = $(MODAL_ESCAPES[id]);
+  if (!btn) return false;
+  btn.click();          // the button owns the guard AND the cleanup
+  return true;
+}
+
+document.addEventListener("keydown", ev => {
+  if (ev.key !== "Escape" || ev.repeat || ev.isComposing) return;
+  // Deliberately does NOT step aside for inputs the way the undo handler
+  // does: Escape while typing in a modal field should still close it —
+  // that's the whole point of the shortcut (scrolling through quickly).
+  if (escapeTopModal()) { ev.preventDefault(); return; }
+  // Nothing modal open: let Escape dismiss the update banner's countdown,
+  // which is the only other thing on screen demanding an answer. Same rule
+  // ("Escape answers the thing in your way"), same delegation to the
+  // existing button, so "Later"'s don't-re-nag bookkeeping still runs.
+  const later = $("#update-later");
+  if (later && !$("#update-banner")?.hidden) { later.click(); ev.preventDefault(); }
 });
 
 // ---------- D112: the clock (Katie's paper replacement) ----------
