@@ -1,6 +1,27 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 1.15.0 — D131: the D129 unsaved-changes guard now covers the
+// Version 1.16.0 — D132 + D133, the two halves of "things that keep
+// going." D132: CHAINED FOLLOW-UPS authored at task creation. The New
+// Task form grows a builder ("And then…") of task-plus-N rows, each with
+// a title, an offset, and — from row 2 on — an anchor: after the previous
+// step, or after this task. NO SCHEMA CHANGE and no store.js change: D4
+// already models a follow-up as dueAt:null + parentTaskId, and setTaskDone
+// already materializes every waiting child of whatever just completed, so
+// "previous step" (parent the row above) yields a sequential chain and
+// "after this task" (parent the root) yields D4's fan-out, both for free.
+// Writes must be SEQUENTIAL — a prev-anchored row can't exist before its
+// parent's id does. Create-only: the builder hides during ✎ edit, since ↳
+// already owns adding follow-ups to a task that exists. 16 behavioral
+// assertions on the parenting math, including the case that bites — a
+// prev-anchored row after a root-anchored one hangs off the ROW ABOVE,
+// not the last sequential link. D133: ✋ END THE SERIES on any recurring
+// task. §5c filed this as a chain feature; it isn't — D111's cactus
+// already repeats forever, the only missing verb was stop, and it has to
+// live on the task (she discovers "that was the last one") rather than as
+// a count at creation. recurrence:null is the whole mechanism; the task
+// survives and still wants checking off. Undoable (D116).
+// ------------------------------------------------------------
+// (prev) Version 1.15.0 — D131: the D129 unsaved-changes guard now covers the
 // PROJECT FORM too (Jake asked for it, and it doubles as the live test of
 // D130's update check — deploy this, and the NEXT deploy is what an open
 // tab will detect). The form is a persistent inline PANEL, not a modal, so
@@ -664,7 +685,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.15.0";
+export const APP_VERSION = "1.16.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -827,6 +848,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("#task-form").addEventListener("submit", onTaskFormSubmit);
   $("#task-cancel").addEventListener("click", cancelTaskEdit);
+  $("#fu-chain-add").addEventListener("click", addChainRow);   // D132
   $("#project-form").addEventListener("submit", onProjectFormSubmit);
   $("#project-cancel").addEventListener("click", () => cancelProjectEdit());   // D131 — bare call; don't pass the click event as opts
   $("#project-color").addEventListener("input", checkProjectColor);
@@ -1514,6 +1536,10 @@ function renderQueue(items, now) {
     const buttons = it.kind === "task" ? [
       iconBtn("✎", "Edit this task", () => startTaskEdit(it.raw)),
       iconBtn("↳", "Add follow-up", () => followUpPrompt(it)),
+      // D133 — only a repeating task can stop repeating. The button is
+      // absent otherwise rather than disabled: a control that can't do
+      // anything is clutter, and the ↻ badge already says which is which.
+      ...(it.raw?.recurrence ? [iconBtn("✋", "Last one — finish this, don't plant the next", () => endRecurrence(it))] : []),
       iconBtn("✕", "Delete", () => {
         if (!confirm(`Delete "${it.title}"?`)) return;
         const { id, ...data } = structuredClone(it.raw);   // D116: full body, id stripped
@@ -2575,6 +2601,12 @@ function stagesFromPipeline(stages) {
 
 function startTaskEdit(task) {
   S.editingTaskId = task.id;
+  // D132 — the chain builder is a CREATE-time tool. Editing an existing
+  // task uses ↳ (which can already target it), so the builder hides and
+  // drops anything half-typed rather than silently attaching new
+  // follow-ups to a task that's only being renamed.
+  clearChainRows();
+  const chainBlock = $("#fu-chain-block"); if (chainBlock) chainBlock.hidden = true;
   $("#task-form-title").textContent = "✎ Edit task";
   $("#task-submit").textContent = "Save changes";
   $("#task-cancel").hidden = false;
@@ -2598,6 +2630,11 @@ function cancelTaskEdit() {
   $("#task-form-title").textContent = "New task";
   $("#task-submit").textContent = "Add to the tentacles";
   $("#task-cancel").hidden = true;
+  // D132 — form.reset() only restores DECLARED inputs; the chain rows are
+  // JS-built children and would survive a reset untouched. Clear them by
+  // hand, and un-hide the block we hid on the way into edit mode.
+  clearChainRows();
+  const chainBlock = $("#fu-chain-block"); if (chainBlock) chainBlock.hidden = false;
   $("#task-form").reset();
   $("#task-time").value = "09:00";
   $("#task-esc-n").value = 1;
@@ -2635,7 +2672,17 @@ function onTaskFormSubmit(ev) {
     }
     updateTask(id, payload).then(cancelTaskEdit);
   }
-  else addTask(payload).then(() => { $("#task-title").value = ""; $("#task-notes").value = ""; $("#task-estimate").value = ""; });
+  else {
+    // D132 — read the chain BEFORE the await; the form is cleared on the
+    // way out and reading it afterwards would find an empty builder.
+    const chain = readChainRows();
+    addTask(payload)
+      .then(ref => chain.length ? createFollowUpChain(ref.id, chain, tierId) : null)
+      .then(() => {
+        $("#task-title").value = ""; $("#task-notes").value = ""; $("#task-estimate").value = "";
+        clearChainRows();
+      });
+  }
 }
 
 // ---------- Project form (create + edit) + weekend interception (D45) ----------
@@ -4878,6 +4925,139 @@ function saveFollowUpModal() {
 
 function followUpPrompt(item) {
   openFollowUpModal({ mode: "create", item });
+}
+
+// ---------- D132: chained follow-ups authored at task creation ----------
+//
+// The whole feature rides on the model D4 already shipped and needs NO
+// schema change: a follow-up is a task with dueAt:null + parentTaskId, and
+// setTaskDone materializes every waiting child of the task just completed.
+// Both anchors Katie asked for fall out of that for free:
+//   "after the previous step" → each row parents the row above → completing
+//      step 1 dates ONLY step 2; step 3 is waiting on step 2, untouched.
+//      A sequential chain, with no chain concept in the database.
+//   "after this task"         → the row parents the ROOT → completing the
+//      root dates all such rows at once. That's D4's fan-out, unchanged.
+// Row 1 is always root-anchored because "the previous step" IS the task —
+// offering a choice there would be two words for one thing.
+//
+// Creation must be SEQUENTIAL, not Promise.all: a row anchored to "prev"
+// cannot be written until its parent's id exists. That's the one real
+// constraint the model imposes, and it's why this is a for-await loop.
+
+const CHAIN_UNITS = ["minutes", "hours", "days", "weeks", "months", "years"];
+
+/** Build one chain row. Rows are DOM-persistent (never re-rendered) so
+ *  adding or removing a row can't wipe what she's already typed. */
+function chainRow() {
+  const row = document.createElement("div");
+  row.className = "fu-chain-row";
+  const opts = CHAIN_UNITS.map(u =>
+    `<option value="${u}"${u === "days" ? " selected" : ""}>${u}</option>`).join("");
+  row.innerHTML = `
+    <div class="fuc-top">
+      <input class="fuc-title" type="text" placeholder="Then what?">
+      <button type="button" class="icon-btn fuc-del" title="Remove this follow-up">✕</button>
+    </div>
+    <div class="fuc-when">
+      <input class="fuc-n" type="number" min="1" max="999" value="2">
+      <select class="fuc-unit">${opts}</select>
+      <span class="fuc-anchor-fixed">after this task</span>
+      <select class="fuc-anchor" hidden>
+        <option value="prev">after the previous step</option>
+        <option value="root">after this task</option>
+      </select>
+    </div>`;
+  row.querySelector(".fuc-del").addEventListener("click", () => {
+    row.remove();
+    syncChainRows();
+  });
+  return row;
+}
+
+/** Row 0 has no anchor CHOICE (previous step == the task itself), so it
+ *  shows the fixed label; every later row gets the select. Called after
+ *  any add or remove, because deleting row 0 promotes row 1. */
+function syncChainRows() {
+  const rows = [...document.querySelectorAll("#fu-chain-rows .fu-chain-row")];
+  rows.forEach((row, i) => {
+    const sel = row.querySelector(".fuc-anchor");
+    const fixed = row.querySelector(".fuc-anchor-fixed");
+    sel.hidden = i === 0;
+    fixed.hidden = i !== 0;
+  });
+}
+
+function addChainRow() {
+  const host = $("#fu-chain-rows");
+  if (!host) return;
+  host.append(chainRow());
+  syncChainRows();
+  host.lastElementChild.querySelector(".fuc-title").focus();
+}
+
+function clearChainRows() {
+  const host = $("#fu-chain-rows");
+  if (host) host.innerHTML = "";
+}
+
+/** Read the builder into plain objects. A row with no title is not a
+ *  follow-up she meant to make — dropped silently, same as a blank
+ *  estimate means "never said" rather than zero (D100). */
+function readChainRows() {
+  return [...document.querySelectorAll("#fu-chain-rows .fu-chain-row")].map((row, i) => {
+    const title = row.querySelector(".fuc-title").value.trim();
+    const n = Math.max(1, Math.min(999, parseInt(row.querySelector(".fuc-n").value, 10) || 0));
+    const unit = row.querySelector(".fuc-unit").value;
+    const anchor = i === 0 ? "root" : row.querySelector(".fuc-anchor").value;
+    return { title, offsetDays: n * (OFFSET_UNIT_DAYS[unit] || 1), anchor };
+  }).filter(r => r.title);
+}
+
+/** Write the chain, in order, after the root task exists. prevId advances
+ *  to EVERY row created regardless of that row's own anchor — "previous
+ *  step" means the row above in the list, not the last one that happened
+ *  to be sequential. */
+async function createFollowUpChain(rootId, rows, tierId) {
+  let prevId = rootId;
+  for (const r of rows) {
+    const parentTaskId = r.anchor === "root" ? rootId : prevId;
+    const ref = await addFollowUp(parentTaskId, {
+      title: r.title, offsetDays: r.offsetDays, tierId
+    });
+    prevId = ref.id;
+  }
+}
+
+// ---------- D133: ending a repeat ----------
+//
+// §5c filed "repeat until done" as a CHAIN with no fixed count — a bigger
+// sibling of D132. Reading store.js says otherwise: D111's cactus already
+// spawns forever on completion, so "review photos every 2 days until I'm
+// done" has been expressible since D111. The only missing verb was STOP,
+// and she can't know at creation time how many batches there are — the
+// discovery is "oh, that was the last one." So the control belongs on the
+// TASK, at the moment she notices, not in the New Task form as a count.
+//
+// Ending = recurrence:null on this instance. That is the whole mechanism:
+// setTaskDone's spawn is gated on t.recurrence?.every, so a null-ed task
+// completes like any ordinary task and plants nothing. The task itself
+// survives and still wants checking off — ending the series is not the
+// same as finishing today's occurrence, and conflating them would check
+// something off on her behalf. Reversible by ✎ (and by undo, D116).
+
+function endRecurrence(it) {
+  const r = it.raw?.recurrence;
+  if (!r) return;
+  if (!confirm(
+    `Stop "${it.title}" from repeating?\n\n` +
+    `It stays on your list and still needs checking off — but finishing it ` +
+    `won't schedule another one. You can start it up again by editing the task.`
+  )) return;
+  pushUndo("end repeat",
+    () => updateTask(it.id, { recurrence: r }),
+    () => updateTask(it.id, { recurrence: null }));
+  updateTask(it.id, { recurrence: null });
 }
 
 // ---------- Settings ----------
