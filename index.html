@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.39.0 (banner and data-html-version move together, always)
+     Version 0.39.1 (banner and data-html-version move together, always)
+     0.39.1 (D138): no markup change — css ?v= -> 0.45.1 (the phone
+     overflow fix) and data-html-version bumped so D130's hourly check
+     pushes the new stylesheet to installed PWAs, which have no
+     hard-refresh gesture (D77). This is the delivery vehicle for Katie's
+     fix: her phone should self-heal within the hour of deploy.
      0.39.0 (D137): THE ALERTER. #alert-toast (outside #drift-wrap, D37/
      D127 — the wall is often fullscreen, where an OS notification may
      never paint but our own banner always does) + five per-device
@@ -226,9 +231,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.45.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.45.1">
 </head>
-<body data-html-version="0.39.0">
+<body data-html-version="0.39.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
