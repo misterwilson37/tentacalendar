@@ -1,6 +1,15 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 1.19.0 — D137: THE ALERTER. Jake, on the escalation glow: "it
+// Version 1.20.0 — D139: BOUNDED TASK WINDOW (Option A). The task
+// subscription no longer streams the whole archive on every boot — store.js
+// carries active + last-30-days-completed live, and the week view fetches a
+// deep-past week's completed tasks on demand (tasksForWeek + a per-week
+// cache), so nothing is deleted and old reflections still render, but you
+// only pay a read when you actually page back to them. Confirmed reason,
+// not cost panic: writes had already dropped 92% (D135) — this is the
+// bounded-subscription SHAPE we want multi-user to inherit. The D136 census
+// now reports the live window, so it ticks down as intended.
+// (prev) Version 1.19.0 — D137: THE ALERTER. Jake, on the escalation glow: "it
 // getting redder every hour does nothing." D3 built a real escalation
 // engine and then whispered its results in colour. This makes the SAME
 // engine audible: a task speaks on ITS OWN per-task escalation cadence,
@@ -724,8 +733,9 @@ import {
   saveTier, deleteTier, saveConfig, saveStageTemplate,
   subscribeProjectTypes, saveProjectTypes,
   subscribeSessions, clockIn, clockOut, logSession, deleteSession,
-  setSessionEnd, restoreDoc
-} from "./store.js?v=0.16.0";
+  setSessionEnd, restoreDoc,
+  fetchCompletedTasks, liveCompletedCutoff   // D139
+} from "./store.js?v=0.17.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -736,7 +746,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.19.0";
+export const APP_VERSION = "1.20.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -3522,13 +3532,52 @@ function weekAnchor() {
   return weekAnchorFor(S.weekMode, Date.now(), S.weekOffset); // D89
 }
 
+// ---------- D139: on-demand history for the week view ----------
+// The live task subscription (store.js, Option A) only carries active +
+// last-30-days-completed. The week view can page back without limit (D89),
+// and each past day draws reflection victories from completed tasks. So when
+// a visible week begins before the live floor, fetch that week's completed
+// tasks once and cache them by week key; re-paging the same week is then free.
+const historyCache = new Map();   // weekKey -> Task[]  (completed tasks in that week)
+const historyInFlight = new Set();
+
+/** Live tasks PLUS whatever completed history we've fetched for `anchorDay`'s
+ *  week. If the week reaches below the live floor and isn't cached yet, kick
+ *  off a one-shot fetch and re-render when it lands. Live wins on id (it's
+ *  fresher than any historical copy of the same doc). */
+function tasksForWeek(anchorDay) {
+  const weekStart = startOfDayTs(anchorDay);
+  const weekEnd = weekStart + 7 * DAY_MS;
+  const floor = liveCompletedCutoff();
+
+  // Fully inside the live window → nothing to fetch, S.tasks already has it.
+  if (weekStart >= floor) return S.tasks;
+
+  const key = String(weekStart);
+  if (!historyCache.has(key) && !historyInFlight.has(key)) {
+    historyInFlight.add(key);
+    // Only the slice below the floor is missing; the rest is live already.
+    fetchCompletedTasks(weekStart, Math.min(weekEnd, floor))
+      .then(rows => { historyCache.set(key, rows); })
+      .catch(err => { console.warn("[D139] history fetch failed:", err); historyCache.set(key, []); })
+      .finally(() => { historyInFlight.delete(key); if (S.view === "week") renderWeek(); });
+  }
+
+  const hist = historyCache.get(key);
+  if (!hist || !hist.length) return S.tasks;   // not back yet, or genuinely none
+  const byId = new Map();
+  for (const t of hist) byId.set(t.id, t);
+  for (const t of S.tasks) byId.set(t.id, t);  // live overrides history
+  return [...byId.values()];
+}
+
 function renderWeek() {
   fitWeekHeight();          // D91 — measure BEFORE weekBarSize() asks how tall we are
   applyStripShare();        // D94 — ...and before it asks how much of it is ours
   wireWeekSplitter();
   const now = Date.now();
   const w = buildWeek({
-    tasks: S.tasks, events: S.events, tiers: S.tiers, projects: S.projects,
+    tasks: tasksForWeek(weekAnchor()), events: S.events, tiers: S.tiers, projects: S.projects,
     now, anchorDay: weekAnchor(), days: 7, hiddenTierIds: S.hiddenTierIds
   });
 
