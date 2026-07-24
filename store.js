@@ -1,6 +1,11 @@
 // ============================================================
 // Tentacalendar — store.js
-// Version 0.16.0 — D124: the project-type library. subscribeProjectTypes /
+// Version 0.17.0 — D139: BOUNDED TASK WINDOW (Option A). subscribeTasks no
+// longer streams the whole archive: two merged listeners carry active
+// (completedAt == null) + last-30-days-completed (completedAt >= floor), and
+// fetchCompletedTasks() one-shots a deep-past week on demand. Nothing is
+// deleted; history costs a read only when the week view pages back to it.
+// (prev) Version 0.16.0 — D124: the project-type library. subscribeProjectTypes /
 // saveProjectTypes read/write a settings/projectTypes doc ({types:[{id,name,
 // stages}]}); the existing stageTemplate stays the implicit Default, so live
 // projects are untouched. addProjectWithStages already snapshots explicit
@@ -68,7 +73,7 @@ import {
 
 import { FIREBASE_CONFIG, ALLOWED_EMAILS, WORKSPACE_ID } from "./config.js?v=0.4.0";
 
-export const STORE_VERSION = "0.16.0";
+export const STORE_VERSION = "0.17.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -175,10 +180,96 @@ export function subscribeTiers(cb) {
   });
 }
 
+// ---------- D139: BOUNDED TASK WINDOW (Option A) ----------
+// The census (D136) showed tasks as the largest UNBOUNDED collection: every
+// completed task lingered in the live subscription forever, so a boot re-read
+// the whole archive just to draw today. Jake's rule (2026-07-24): delete
+// NOTHING — reflections will look back years — but only READ history when
+// something actually needs it.
+//
+// So the always-on listener carries only what the live surfaces can show
+// without paging into the past:
+//   · every ACTIVE task            (completedAt == null)
+//   · recently COMPLETED tasks      (completedAt >= the window floor)
+// and the deep past is fetched on demand by the week view (fetchCompletedTasks).
+//
+// TWO listeners, not one OR-query: `== null` and `>= floor` on the same field
+// can't be a single Firestore query, and an or()/composite over a null-equality
+// plus a range invites index and null-sort surprises on a file we cannot
+// runtime-test here. Two single-field listeners are trivially indexed and
+// behave predictably. They are mutually exclusive (null is never >= a number),
+// so the union needs no real dedup — but we key by id anyway, defensively.
+export const COMPLETED_WINDOW_DAYS = 30;
+
+// Floor is start-of-local-day minus the window, computed ONCE at subscribe so
+// a long-running wall doesn't re-query as the clock ticks. On any reload
+// (D130 refreshes ~daily) it resets; the practical drift is a few days wider,
+// which is harmless — it only ever means "slightly more already-cached history".
+function completedWindowFloor() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() - COMPLETED_WINDOW_DAYS * 86400000;
+}
+let _liveFloor = null;
+/** The timestamp below which completed tasks are NOT in the live set — the
+ *  week view uses this to decide when a past week needs a history fetch. */
+export function liveCompletedCutoff() {
+  return _liveFloor ?? completedWindowFloor();
+}
+
 export function subscribeTasks(cb) {
-  return onSnapshot(col("tasks"), snap => {
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  });
+  _liveFloor = completedWindowFloor();
+  const active = new Map();   // completedAt == null
+  const recent = new Map();   // completedAt >= floor
+  let activeReady = false, recentReady = false;
+
+  // Emit the union on every snapshot from either listener. Before BOTH have
+  // delivered once we still emit — a half-set for a few ms is no worse than
+  // the old single listener's boot, and render() is a snapshot handler that
+  // expects to run repeatedly (D101).
+  const emit = () => {
+    const byId = new Map(recent);        // recent first…
+    for (const [id, t] of active) byId.set(id, t);  // …active wins on the impossible clash
+    cb([...byId.values()]);
+  };
+
+  const unsubActive = onSnapshot(
+    query(col("tasks"), where("completedAt", "==", null)),
+    snap => {
+      active.clear();
+      snap.docs.forEach(d => active.set(d.id, { id: d.id, ...d.data() }));
+      activeReady = true;
+      emit();
+    }
+  );
+  const unsubRecent = onSnapshot(
+    query(col("tasks"), where("completedAt", ">=", _liveFloor)),
+    snap => {
+      recent.clear();
+      snap.docs.forEach(d => recent.set(d.id, { id: d.id, ...d.data() }));
+      recentReady = true;
+      emit();
+    }
+  );
+
+  // One unsub that tears down both, so app.js's S.unsubs teardown is unchanged.
+  return () => { unsubActive(); unsubRecent(); };
+}
+
+/**
+ * D139 — one-shot fetch of completed tasks whose completion falls in
+ * [startMs, endMs). Used by the week view when it pages to a week that
+ * begins before the live window floor. Billed only when actually called,
+ * and the caller caches by week so re-paging is free.
+ */
+export async function fetchCompletedTasks(startMs, endMs) {
+  const q = query(
+    col("tasks"),
+    where("completedAt", ">=", startMs),
+    where("completedAt", "<", endMs)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 export function subscribeEvents(cb) {
