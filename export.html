@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tentacalendar — Export / Backup</title>
+<!-- ============================================================
+     Tentacalendar — export.html
+     Version 1.0.0 — Wunderpus, 2026-07-25
+
+     WHAT THIS IS: a read-only backup tool. It signs in, reads every
+     document in a workspace, and downloads one JSON file. It is the
+     backup that does not currently exist, and it is step 2 of the 2.0
+     migration runbook (TENTACALENDAR-2.0-DESIGN.md §11).
+
+     ⚠️ IT CANNOT WRITE. Not "is designed not to" — CANNOT. The Firestore
+     SDK's write functions (setDoc, addDoc, updateDoc, deleteDoc,
+     writeBatch) are DELIBERATELY NOT IMPORTED below. A bug in this file
+     cannot modify Katie's data, because the code to do so is not in the
+     module graph. That is the whole point: run it as often as you like.
+
+     SAFE TO RUN REPEATEDLY. Every run is a full snapshot and costs only
+     reads — a few hundred against a 50,000/day free allowance. Running it
+     daily for a year would not approach the free tier.
+
+     WHY FULL SNAPSHOTS AND NOT DELTAS: 1.x documents have no reliable
+     `updatedAt` field (tasks carry createdAt and completedAt; edits update
+     neither). A delta export would therefore SILENTLY MISS EDITS, which is
+     the worst possible failure mode for a backup. Full every time.
+
+     WHERE IT LIVES: the 1.x repo root, served from
+     tentacalendar.misterwilson.org/export.html. It must be on an
+     authorized domain or Google sign-in refuses. It does NOT touch
+     index.html, app.js, or anything Katie loads — and because
+     data-html-version is untouched, D130's update banner will not fire
+     on her open tabs.
+     ============================================================ -->
+<style>
+  body{font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;background:#14161a;color:#e8eaed;
+       margin:0;padding:2rem 1.25rem;max-width:760px;margin-inline:auto}
+  h1{font-size:1.35rem;margin:0 0 .2rem}
+  .sub{color:#9aa0a6;margin:0 0 1.25rem;font-size:.9rem}
+  .safe{background:#173a1f;color:#8ce99a;border-radius:8px;padding:.7rem .9rem;
+        font-size:.87rem;margin-bottom:1.25rem}
+  label{display:block;font-size:.85rem;color:#9aa0a6;margin:.9rem 0 .3rem}
+  input{font:inherit;background:#1d2026;color:#e8eaed;border:1px solid #2c313a;
+        border-radius:7px;padding:.5rem .7rem;width:100%;max-width:320px}
+  button{font:inherit;background:#4dabf7;color:#08121c;border:0;border-radius:8px;
+         padding:.7rem 1.2rem;cursor:pointer;font-weight:600;margin-top:1rem}
+  button:disabled{opacity:.45;cursor:default}
+  button.dl{background:#69db7c}
+  table{border-collapse:collapse;width:100%;margin-top:1rem;font-size:.9rem}
+  th,td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid #262a31}
+  th{color:#9aa0a6;font-weight:600;font-size:.8rem}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  .row{padding:.5rem .75rem;border-radius:7px;margin-bottom:.35rem;background:#1d2026;font-size:.9rem}
+  .fail{border-left:3px solid #ff6b6b}
+  .info{border-left:3px solid #4dabf7}
+  .note{color:#9aa0a6;font-size:.82rem;margin-top:.5rem}
+  code{background:#22262d;padding:.12rem .35rem;border-radius:4px;font-size:.85em}
+</style>
+</head>
+<body>
+<h1>🐙 Tentacalendar — Export / Backup</h1>
+<p class="sub">Reads a workspace and downloads it as JSON. Version 1.0.0</p>
+
+<div class="safe">
+  <b>Read-only by construction.</b> The Firestore write functions are not imported by this
+  page, so it cannot modify anything even if it wanted to. Run it as often as you like —
+  every run is a full snapshot and costs only reads.
+</div>
+
+<label for="ws">Workspace ID</label>
+<input id="ws" value="primary" spellcheck="false">
+<p class="note">1.x has exactly one workspace, <code>primary</code> (D12). Leave it alone unless you know otherwise.</p>
+
+<button id="go">Sign in and export</button>
+<div id="out"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup }
+  from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+// ⚠️ READ-ONLY IMPORT LIST. Do NOT add setDoc / addDoc / updateDoc /
+// deleteDoc / writeBatch here. Their absence is this file's safety guarantee.
+import { getFirestore, doc, collection, getDoc, getDocs }
+  from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// 1.x project config, copied from config.js 0.4.0. This is an IDENTIFIER,
+// not a secret (D79 addendum 2) — every browser that loads the app has it.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAT6GFOGDQxFk-UpNfrAjTLWXNUxFV7LX4",
+  authDomain: "tentacalendar.firebaseapp.com",
+  projectId: "tentacalendar",
+  storageBucket: "tentacalendar.firebasestorage.app",
+  messagingSenderId: "1046548387495",
+  appId: "1:1046548387495:web:823c563e2474f1a757ad82"
+};
+
+// Everything under workspaces/{id}. `settings` is a collection of named
+// docs (config, stageTemplate, projectTypes) and reads the same way.
+const COLLECTIONS = ["tiers", "tasks", "projects", "sessions", "eventsCache", "settings"];
+
+const out = document.getElementById("out");
+const say = (cls, html) => {
+  const d = document.createElement("div");
+  d.className = "row " + cls; d.innerHTML = html; out.appendChild(d); return d;
+};
+
+document.getElementById("go").onclick = async (e) => {
+  e.target.disabled = true;
+  out.innerHTML = "";
+  const wsId = (document.getElementById("ws").value || "primary").trim();
+
+  let db, user;
+  try {
+    db = getFirestore(initializeApp(FIREBASE_CONFIG));
+    const cred = await signInWithPopup(getAuth(), new GoogleAuthProvider());
+    user = cred.user;
+    say("info", `Signed in as <b>${user.email}</b>`);
+  } catch (err) {
+    say("fail", `Sign-in failed: <code>${err.code || err.message}</code>`);
+    e.target.disabled = false; return;
+  }
+
+  const bundle = {
+    exportVersion: "1.0.0",
+    exportedAt: Date.now(),
+    exportedAtISO: new Date().toISOString(),
+    exportedBy: (user.email || "").toLowerCase(),
+    sourceProject: FIREBASE_CONFIG.projectId,
+    workspaceId: wsId,
+    workspace: null,
+    collections: {},
+    counts: {}
+  };
+
+  // The workspace document itself.
+  try {
+    const wsSnap = await getDoc(doc(db, "workspaces", wsId));
+    if (!wsSnap.exists()) {
+      say("fail", `No workspace called <code>${wsId}</code>. Check the ID.`);
+      e.target.disabled = false; return;
+    }
+    bundle.workspace = wsSnap.data();
+  } catch (err) {
+    const denied = (err.code || "").includes("permission-denied");
+    say("fail", denied
+      ? "Permission denied — this Google account is not on the workspace allowlist. Sign in as Jake or Katie."
+      : `Could not read the workspace: <code>${err.message}</code>`);
+    e.target.disabled = false; return;
+  }
+
+  // Every collection, unfiltered. This deliberately includes the FULL task
+  // archive — the live app only subscribes to 30 days of completed tasks
+  // (D139), so the export's task count will be much higher than the app's
+  // census, and that is correct. A backup that only kept what was on screen
+  // would not be a backup.
+  let total = 0;
+  for (const name of COLLECTIONS) {
+    try {
+      const snap = await getDocs(collection(db, "workspaces", wsId, name));
+      bundle.collections[name] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      bundle.counts[name] = snap.size;
+      total += snap.size;
+    } catch (err) {
+      bundle.collections[name] = [];
+      bundle.counts[name] = null;
+      say("fail", `<b>${name}</b> failed: <code>${err.message}</code> — the file will be incomplete.`);
+    }
+  }
+  bundle.counts._total = total;
+
+  // Results table.
+  const rows = COLLECTIONS.map(n => {
+    const c = bundle.counts[n];
+    return `<tr><td>${n}</td><td class="n">${c === null ? "FAILED" : c}</td></tr>`;
+  }).join("");
+  const table = document.createElement("table");
+  table.innerHTML = `<tr><th>Collection</th><th class="n">Documents</th></tr>${rows}
+    <tr><th>Total</th><th class="n">${total}</th></tr>`;
+  out.appendChild(table);
+
+  const note = document.createElement("p");
+  note.className = "note";
+  note.innerHTML = "The <b>tasks</b> count includes the complete archive, so it will be "
+    + "much larger than the app's per-boot census (which bounds completed tasks to 30 days, D139). "
+    + "That difference is the backup doing its job.";
+  out.appendChild(note);
+
+  // Download.
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const btn = document.createElement("button");
+  btn.className = "dl";
+  btn.textContent = `⬇ Download tentacalendar-${wsId}-${stamp}.json`;
+  btn.onclick = () => {
+    const a = document.createElement("a");
+    a.href = url; a.download = `tentacalendar-${wsId}-${stamp}.json`; a.click();
+  };
+  out.appendChild(btn);
+
+  const done = document.createElement("p");
+  done.className = "note";
+  done.innerHTML = "Nothing was written. Katie's data is exactly as it was before you pressed the button.";
+  out.appendChild(done);
+
+  document.getElementById("go").disabled = false;
+};
+</script>
+</body>
+</html>
