@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.39.2 (banner and data-html-version move together, always)
+     Version 0.40.0 (banner and data-html-version move together, always)
+     0.40.0 (D140): #task-date-today inside the Due date label — a "Today"
+     shortcut, because the native date picker is Chrome's and admits no
+     buttons of ours. app -> 1.21.0, css -> 0.46.0.
      0.39.2 (D139): no markup change — app ?v= -> 1.20.0 (bounded task
      window; store.js -> 0.17.0 via app's import) and data-html-version
      bumped so D130 pushes it to installed PWAs. No new ids, no CSS.
@@ -234,9 +237,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.45.1">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.46.0">
 </head>
-<body data-html-version="0.39.2">
+<body data-html-version="0.40.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -345,7 +348,7 @@
             <select id="task-tier"></select>
           </label>
           <div class="form-row">
-            <label>Due date <input id="task-date" type="date" required></label>
+            <label>Due date <input id="task-date" type="date" required><button id="task-date-today" class="mini" type="button" title="Snap the due date back to today (the native calendar has no 'today' button — Chrome draws that picker, not us)">Today</button></label>
             <label>Time <input id="task-time" type="time" value="09:00"></label>
             <label title="How long it takes — NOT when to start. The due time is a deadline, so this is the runway BEFORE it (D93). Leave blank if you don't know; the clock grid draws those dashed at 30 min and doesn't pretend otherwise. You can also just drag a block's top edge in the Clock layout.">Est. min <input id="task-estimate" type="number" min="5" max="720" step="5" placeholder="—"></label>
           </div>
@@ -922,6 +925,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.20.0"></script>
+  <script type="module" src="app.js?v=1.21.0"></script>
 </body>
 </html>
