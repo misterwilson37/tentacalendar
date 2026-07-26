@@ -1,6 +1,9 @@
 // ============================================================
 // Tentacalendar — app.js
-// Version 1.20.0 — D139: BOUNDED TASK WINDOW (Option A). The task
+// Version 1.21.0 — D140: a "Today" shortcut beside the task due-date field.
+// The native date picker is the browser's, not ours — no button can be added
+// inside it — so the shortcut lives next to the input instead.
+// (prev) Version 1.20.0 — D139: BOUNDED TASK WINDOW (Option A). The task
 // subscription no longer streams the whole archive on every boot — store.js
 // carries active + last-30-days-completed live, and the week view fetches a
 // deep-past week's completed tasks on demand (tasksForWeek + a per-week
@@ -746,7 +749,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.20.0";
+export const APP_VERSION = "1.21.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -919,6 +922,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
   wirePipelineManager();   // D124 — the project-type library controls (once)
   $("#settings-save").addEventListener("click", onSaveSettings);  $("#cfg-poll").addEventListener("input", updatePollCostHint);
+  $("#task-date-today").addEventListener("click", onDateToday);       // D140
   $("#alert-test").addEventListener("click", testAlert);              // D137 — a click is also the audio unlock
   $("#cfg-alert-notify").addEventListener("change", onNotifyToggle);  // D137 — permission must be asked from a gesture
   $("#due-save").addEventListener("click", dueSave);
@@ -5878,6 +5882,20 @@ function updatePollCostHint() {
 }
 
 // ---------- Utils ----------
+
+// D140 — "Today" beside the due-date field. The native <input type="date">
+// picker is drawn by the BROWSER, so we cannot add a button inside it (Jake
+// asked; the answer is genuinely no). This is the layer we do own. The
+// handler stops propagation because the button lives INSIDE the <label>:
+// a click that reaches the label gets forwarded to the labelled control,
+// which would pop the very calendar we're trying to skip.
+function onDateToday(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const el = $("#task-date");
+  el.value = toDateInput(new Date());
+  el.dispatchEvent(new Event("change", { bubbles: true }));   // whatever listens to the field still hears it
+}
 
 function toDateInput(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
