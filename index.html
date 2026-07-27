@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.40.0 (banner and data-html-version move together, always)
+     Version 0.40.1 (banner and data-html-version move together, always)
+     0.40.1: css ?v= -> 0.45.2. The deployed stylesheet was DOUBLED (two
+     complete copies concatenated; the second, older :root won, so the
+     version badge has been reporting a css version that never shipped).
+     No markup change. This bump is the delivery vehicle: ?v=0.46.0 has
+     the doubled bytes cached against it and is burned forever, so the
+     new URL is ?v=0.45.2 — matching what the css file now declares,
+     which is the pairing the ship-check never asserted and should.
      0.40.0 (D140): #task-date-today inside the Due date label — a "Today"
      shortcut, because the native date picker is Chrome's and admits no
      buttons of ours. app -> 1.21.0, css -> 0.46.0.
@@ -237,9 +244,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.46.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.45.2">
 </head>
-<body data-html-version="0.40.0">
+<body data-html-version="0.40.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
